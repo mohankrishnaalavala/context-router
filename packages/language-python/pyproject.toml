@@ -1,0 +1,16 @@
+[project]
+name = "context-router-language-python"
+version = "0.1.0"
+requires-python = ">=3.12"
+description = "Python language analyzer plugin for context-router (Phase 1)"
+dependencies = ["context-router-contracts"]
+
+[project.entry-points."context_router.language_analyzers"]
+py = "language_python:PythonAnalyzer"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/language_python"]

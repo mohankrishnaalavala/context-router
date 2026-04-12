@@ -1,0 +1,97 @@
+"""Configuration models and loader for context-router.
+
+Project-level config lives at .context-router/config.yaml.
+Workspace-level config lives at workspace.yaml (optional).
+Both return sensible defaults when absent.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from pydantic import BaseModel, Field
+
+from contracts.models import WorkspaceDescriptor
+
+_CONFIG_DIR = ".context-router"
+_CONFIG_FILE = "config.yaml"
+_WORKSPACE_FILE = "workspace.yaml"
+
+
+class CapabilitiesConfig(BaseModel):
+    """Feature flags for optional capabilities."""
+
+    llm_summarization: bool = False
+
+
+class ContextRouterConfig(BaseModel):
+    """Project-level configuration for context-router."""
+
+    token_budget: int = 8000
+    capabilities: CapabilitiesConfig = Field(default_factory=CapabilitiesConfig)
+    language_analyzers: list[str] = Field(default_factory=list)
+    ignore_patterns: list[str] = Field(
+        default_factory=lambda: [".git", "__pycache__", "*.pyc", "*.egg-info", ".venv"]
+    )
+
+
+def load_config(project_root: Path) -> ContextRouterConfig:
+    """Load config from .context-router/config.yaml, returning defaults if absent.
+
+    Args:
+        project_root: Root directory of the project being analyzed.
+
+    Returns:
+        Validated ContextRouterConfig with any overrides from disk applied.
+    """
+    config_path = project_root / _CONFIG_DIR / _CONFIG_FILE
+    if not config_path.exists():
+        return ContextRouterConfig()
+
+    try:
+        import yaml  # type: ignore[import-untyped]
+
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+        return ContextRouterConfig.model_validate(raw)
+    except Exception:
+        return ContextRouterConfig()
+
+
+def load_workspace_config(workspace_root: Path) -> WorkspaceDescriptor | None:
+    """Load workspace.yaml if present, returning None if absent or invalid.
+
+    Args:
+        workspace_root: Directory containing workspace.yaml.
+
+    Returns:
+        WorkspaceDescriptor or None.
+    """
+    ws_path = workspace_root / _WORKSPACE_FILE
+    if not ws_path.exists():
+        return None
+
+    try:
+        import yaml  # type: ignore[import-untyped]
+
+        raw = yaml.safe_load(ws_path.read_text(encoding="utf-8")) or {}
+        return WorkspaceDescriptor.model_validate(raw)
+    except Exception:
+        return None
+
+
+DEFAULT_CONFIG_YAML = """\
+# context-router project configuration
+# See docs/architecture.md for all options.
+
+token_budget: 8000
+
+capabilities:
+  llm_summarization: false
+
+ignore_patterns:
+  - ".git"
+  - "__pycache__"
+  - "*.pyc"
+  - "*.egg-info"
+  - ".venv"
+"""

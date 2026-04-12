@@ -1,0 +1,73 @@
+[project]
+name = "context-router-root"
+version = "0.0.0"
+requires-python = ">=3.12"
+description = "Workspace root — not a distributable package"
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+]
+
+[tool.uv.sources]
+context-router-contracts = { workspace = true }
+context-router-core = { workspace = true }
+context-router-storage-sqlite = { workspace = true }
+context-router-graph-index = { workspace = true }
+context-router-memory = { workspace = true }
+context-router-runtime = { workspace = true }
+context-router-ranking = { workspace = true }
+context-router-workspace = { workspace = true }
+context-router-benchmark = { workspace = true }
+context-router-language-python = { workspace = true }
+context-router-language-java = { workspace = true }
+context-router-language-dotnet = { workspace = true }
+context-router-language-yaml = { workspace = true }
+context-router-adapters-claude = { workspace = true }
+context-router-adapters-copilot = { workspace = true }
+context-router-adapters-codex = { workspace = true }
+context-router-cli = { workspace = true }
+context-router-mcp-server = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+    "apps/cli",
+    "apps/mcp-server",
+    "packages/contracts",
+    "packages/core",
+    "packages/storage-sqlite",
+    "packages/graph-index",
+    "packages/memory",
+    "packages/runtime",
+    "packages/ranking",
+    "packages/workspace",
+    "packages/benchmark",
+    "packages/language-python",
+    "packages/language-java",
+    "packages/language-dotnet",
+    "packages/language-yaml",
+    "packages/adapters-claude",
+    "packages/adapters-copilot",
+    "packages/adapters-codex",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages", "apps"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "--tb=short -q --import-mode=importlib"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true

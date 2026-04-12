@@ -1,0 +1,19 @@
+[project]
+name = "context-router-mcp-server"
+version = "0.1.0"
+requires-python = ">=3.12"
+description = "MCP server entrypoint for context-router (Phase 5)"
+dependencies = [
+    "context-router-contracts",
+    "context-router-core",
+]
+
+[project.scripts]
+context-router-mcp = "mcp_server.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_server"]
