@@ -10,6 +10,7 @@ dependencies = [
     "context-router-ranking",
     "context-router-runtime",
     "context-router-memory",
+    "context-router-workspace",
 ]
 
 [build-system]

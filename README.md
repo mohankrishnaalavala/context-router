@@ -24,8 +24,8 @@ No API key required. Everything runs locally.
 | 4 — Memory & Decisions | Observation store, ADR retrieval, `memory` + `decisions` commands | ✅ Done |
 | 5 — MCP Server | 8 MCP tools over stdio JSON-RPC 2.0, `mcp` command | ✅ Done |
 | 6 — Adapters | Claude, Copilot, Codex prompt/instructions generators | ✅ Done |
-| 7 — Multi-Repo | Workspace and cross-repo ranking | 🔲 Planned |
-| 8 — Benchmarks | Token reduction benchmarks, demo repos | 🔲 Planned |
+| 7 — Multi-Repo | Workspace registry, cross-repo link detection + ranking, `workspace` commands | ✅ Done |
+| 8 — Benchmarks | 20-task harness, 3 baselines, JSON + Markdown reports, [results](BENCHMARK_RESULTS.md) | ✅ Done |
 
 ## Requirements
 
@@ -221,13 +221,35 @@ print(CodexAdapter().generate(pack))    # Codex subagent task prompt
 
 ---
 
+### `workspace`
+
+Manage multi-repo workspaces with cross-repo context packs.
+
+```
+context-router workspace init [--root PATH] [--name NAME]
+context-router workspace repo add NAME PATH [--root PATH] [--language LANG]
+context-router workspace repo list [--root PATH] [--json]
+context-router workspace link add FROM TO [--root PATH]
+context-router workspace pack --mode MODE [--query TEXT] [--root PATH] [--json]
+```
+
+Creates `workspace.yaml` to track multiple repos. `workspace pack` generates a
+context pack across all repos, labelling items with `[repo-name]` and applying
+a confidence boost to items in linked (dependency) repos.
+
+---
+
 ### `benchmark`
 
-*(Phase 8)* Run token-reduction benchmarks.
+Run the 20-task benchmark suite and report token reduction metrics.
 
 ```
-context-router benchmark run
+context-router benchmark run [--project-root PATH] [--output PATH] [--json]
+context-router benchmark report [--project-root PATH] [--input PATH] [--json]
 ```
+
+See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real measured numbers on
+the context-router codebase (64.7% average token reduction, 131 ms avg latency).
 
 ## Configuration
 
