@@ -32,6 +32,14 @@ def pack(
             help="Project root containing .context-router/. Auto-detected when omitted.",
         ),
     ] = "",
+    error_file: Annotated[
+        str,
+        typer.Option(
+            "--error-file",
+            "-e",
+            help="Path to error file (JUnit XML, stack trace, log). Used in debug mode.",
+        ),
+    ] = "",
 ) -> None:
     """Generate a context pack for the given task MODE.
 
@@ -52,8 +60,9 @@ def pack(
     from core.orchestrator import Orchestrator  # local import — keeps CLI startup fast
 
     root = Path(project_root) if project_root else None
+    err_path = Path(error_file) if error_file else None
     try:
-        result = Orchestrator(project_root=root).build_pack(mode, query)
+        result = Orchestrator(project_root=root).build_pack(mode, query, error_file=err_path)
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1)
