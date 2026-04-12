@@ -3,7 +3,11 @@ name = "context-router-language-python"
 version = "0.1.0"
 requires-python = ">=3.12"
 description = "Python language analyzer plugin for context-router (Phase 1)"
-dependencies = ["context-router-contracts"]
+dependencies = [
+    "context-router-contracts",
+    "tree-sitter>=0.21",
+    "tree-sitter-python>=0.21",
+]
 
 [project.entry-points."context_router.language_analyzers"]
 py = "language_python:PythonAnalyzer"

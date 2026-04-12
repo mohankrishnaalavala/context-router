@@ -3,7 +3,11 @@ name = "context-router-language-java"
 version = "0.1.0"
 requires-python = ">=3.12"
 description = "Java language analyzer plugin for context-router (Phase 1)"
-dependencies = ["context-router-contracts"]
+dependencies = [
+    "context-router-contracts",
+    "tree-sitter>=0.21",
+    "tree-sitter-java>=0.21",
+]
 
 [project.entry-points."context_router.language_analyzers"]
 java = "language_java:JavaAnalyzer"

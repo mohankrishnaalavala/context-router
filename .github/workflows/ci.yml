@@ -22,7 +22,7 @@ jobs:
         run: uv python install 3.12
 
       - name: Install all workspace packages
-        run: uv sync --all-packages
+        run: uv sync --all-packages --extra dev
 
       - name: Run tests
         run: uv run pytest --tb=short -q

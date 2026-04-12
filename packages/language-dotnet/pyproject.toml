@@ -3,7 +3,11 @@ name = "context-router-language-dotnet"
 version = "0.1.0"
 requires-python = ">=3.12"
 description = "C#/.NET language analyzer plugin for context-router (Phase 1)"
-dependencies = ["context-router-contracts"]
+dependencies = [
+    "context-router-contracts",
+    "tree-sitter>=0.21",
+    "tree-sitter-c-sharp>=0.21",
+]
 
 [project.entry-points."context_router.language_analyzers"]
 cs = "language_dotnet:DotnetAnalyzer"
