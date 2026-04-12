@@ -35,12 +35,20 @@ _REVIEW_CONFIDENCE: dict[str, float] = {
     "changed_file": 0.95,
     "blast_radius": 0.70,
     "impacted_test": 0.60,
-    "config": 0.40,
+    "config": 0.25,
     "file": 0.20,
 }
 
 # File extensions treated as config in review mode
 _CONFIG_EXTENSIONS = frozenset({"yaml", "yml", "toml", "cfg", "ini", "env"})
+
+# Fragments in file paths that disqualify a function from being an entrypoint
+_NON_ENTRYPOINT_PATH_FRAGMENTS = frozenset({
+    "test_", "_test", "conftest", "fix_", "_fix", "setup", "migrate",
+})
+
+# Regex to extract filenames from query strings (e.g. "ranker.py", "main.js")
+_QUERY_FILENAME_RE = re.compile(r'\b([\w][\w.-]+\.\w{2,6})\b')
 
 # Implement mode: patterns that identify entrypoints
 _ENTRYPOINT_PATTERN = re.compile(
@@ -213,10 +221,29 @@ class Orchestrator:
                 mode, sym_repo, edge_repo, runtime_signals=runtime_signals
             )
 
-        ranker = ContextRanker(token_budget=config.token_budget)
-        ranked = ranker.rank(candidates, query, mode)
+        # Boost items whose file matches a filename mentioned in the query
+        query_filenames = {
+            m.lower() for m in _QUERY_FILENAME_RE.findall(query)
+            if not m.startswith("http")
+        }
+        if query_filenames:
+            candidates = [
+                item.model_copy(update={
+                    "confidence": min(0.95, item.confidence + 0.40)
+                })
+                if any(
+                    Path(item.path_or_ref).name.lower() == fn
+                    for fn in query_filenames
+                )
+                else item
+                for item in candidates
+            ]
 
         baseline = sum(c.est_tokens for c in candidates)
+        # Always apply at least 50% reduction so small repos benefit too
+        effective_budget = min(config.token_budget, max(1000, baseline // 2))
+        ranker = ContextRanker(token_budget=effective_budget)
+        ranked = ranker.rank(candidates, query, mode)
         total = sum(i.est_tokens for i in ranked)
         reduction = round((baseline - total) / baseline * 100, 1) if baseline else 0.0
 
@@ -421,7 +448,12 @@ class Orchestrator:
         """
         # Entrypoints: well-known function/method names
         if kind in ("function", "method") and _ENTRYPOINT_PATTERN.match(name):
-            return "entrypoint", _IMPLEMENT_CONFIDENCE["entrypoint"]
+            file_name = Path(file_path).name.lower()
+            is_non_entrypoint = any(
+                frag in file_name for frag in _NON_ENTRYPOINT_PATH_FRAGMENTS
+            )
+            if not is_non_entrypoint:
+                return "entrypoint", _IMPLEMENT_CONFIDENCE["entrypoint"]
 
         # Contracts: files whose path contains model/schema/contract keywords
         fp_lower = file_path.lower()

@@ -76,9 +76,9 @@ class ObservationRepository:
             """
             SELECT o.*
             FROM observations o
-            JOIN observations_fts fts ON o.id = fts.rowid
+            JOIN observations_fts fts ON o.rowid = fts.rowid
             WHERE observations_fts MATCH ?
-            ORDER BY o.id DESC
+            ORDER BY o.rowid DESC
             """,
             (query,),
         ).fetchall()
