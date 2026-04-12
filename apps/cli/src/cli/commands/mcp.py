@@ -1,24 +1,30 @@
-"""context-router mcp command — starts the local MCP server.
-
-Phase 5 stub.
-"""
+"""context-router mcp command — starts the local MCP server over stdio."""
 
 from __future__ import annotations
 
 import typer
 
-mcp_app = typer.Typer(help="Start the context-router MCP server.")
+mcp_app = typer.Typer(help="Start the context-router MCP server over stdio transport.")
 
 
 @mcp_app.callback(invoke_without_command=True)
-def mcp(
-    json_output: bool = typer.Option(False, "--json"),
-) -> None:
+def mcp() -> None:
     """Start the context-router MCP server over stdio transport.
 
-    Phase 5 stub — MCP server not yet implemented.
+    Reads JSON-RPC 2.0 requests from stdin and writes responses to stdout.
+    This is the entry point for MCP-compatible AI coding agents (Claude Code,
+    Copilot, Codex) to discover and call context-router tools.
+
+    Example configuration for Claude Code (.mcp.json)::
+
+        {
+          "mcpServers": {
+            "context-router": {
+              "command": "context-router",
+              "args": ["mcp"]
+            }
+          }
+        }
     """
-    typer.echo(
-        "[Phase 5 stub] mcp not yet implemented. "
-        "Implement Phase 5 to enable the MCP server."
-    )
+    from mcp_server.main import main as _mcp_main
+    _mcp_main()

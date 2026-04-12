@@ -20,10 +20,10 @@ No API key required. Everything runs locally.
 | 0 — Foundation | Monorepo, contracts, storage, CLI shell | ✅ Done |
 | 1 — Indexing | File scanner, language analyzers, symbol graph | ✅ Done |
 | 2 — Context Packs v1 | Ranking engine, `pack`, `explain` commands | ✅ Done |
-| 3 — Debug Layer | Runtime signal parsers, debug ranker | 🔲 Planned |
-| 4 — Memory & Decisions | Observation store, ADR retrieval | 🔲 Planned |
-| 5 — MCP Server | MCP tools for agents | 🔲 Planned |
-| 6 — Adapters | Claude, Copilot, Codex prompt generators | 🔲 Planned |
+| 3 — Debug Layer | Runtime signal parsers (JUnit, stack trace, log, dotnet), debug ranker | ✅ Done |
+| 4 — Memory & Decisions | Observation store, ADR retrieval, `memory` + `decisions` commands | ✅ Done |
+| 5 — MCP Server | 8 MCP tools over stdio JSON-RPC 2.0, `mcp` command | ✅ Done |
+| 6 — Adapters | Claude, Copilot, Codex prompt/instructions generators | ✅ Done |
 | 7 — Multi-Repo | Workspace and cross-repo ranking | 🔲 Planned |
 | 8 — Benchmarks | Token reduction benchmarks, demo repos | 🔲 Planned |
 
@@ -112,8 +112,8 @@ context-router pack --mode MODE [--query TEXT] [--project-root PATH] [--json]
 |---|---|
 | `review` | changed files → blast radius → impacted tests → config |
 | `implement` | entrypoints → contracts/interfaces → extension points → functions |
-| `debug` | *(Phase 3)* runtime signal match → failing tests → call chain |
-| `handover` | *(Phase 4)* recent changes → decisions → open TODOs |
+| `debug` | runtime signal match → failing tests → changed files → blast radius |
+| `handover` | recent changes → memory observations → decisions → blast radius |
 
 The pack is saved to `.context-router/last-pack.json` for later inspection.
 
@@ -141,32 +141,82 @@ Prints one line per selected item:
 
 ### `memory`
 
-*(Phase 4)* Add and search session observations.
+Add and search session observations (persisted to the local SQLite DB).
 
 ```
 context-router memory add --from-session SESSION.json
 context-router memory search QUERY
+context-router memory stale
 ```
+
+`stale` lists observations whose referenced files no longer exist in the index.
 
 ---
 
 ### `decisions`
 
-*(Phase 4)* Manage architectural decision records.
+Manage architectural decision records (ADRs).
 
 ```
-context-router decisions add
+context-router decisions add TITLE [--decision TEXT] [--context TEXT] [--consequences TEXT] [--tags TAGS] [--status STATUS]
 context-router decisions search QUERY
+context-router decisions list
 ```
+
+`--status` accepts: `proposed` | `accepted` | `deprecated` | `superseded`
 
 ---
 
 ### `mcp`
 
-*(Phase 5)* Start the MCP server for agent integration.
+Start the MCP server over stdio JSON-RPC 2.0 transport, exposing all 8 context-router tools to any MCP-compatible AI coding agent.
 
 ```
 context-router mcp
+```
+
+**Available MCP tools:**
+
+| Tool | Description |
+|---|---|
+| `build_index` | Full re-index of the repository |
+| `update_index` | Incremental re-index for changed files |
+| `get_context_pack` | Ranked context pack for review/implement/debug/handover |
+| `get_debug_pack` | Debug pack with optional error-file parsing |
+| `explain_selection` | Why each item was selected + token stats |
+| `generate_handover` | Handover pack (changes + memory + decisions) |
+| `search_memory` | Full-text search of session observations |
+| `get_decisions` | Search or list architectural decisions |
+
+**Claude Code configuration** — add to `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "context-router": {
+      "command": "context-router",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+---
+
+### Adapters (Phase 6)
+
+Generate agent-specific output from a ContextPack programmatically:
+
+```python
+from adapters_claude import ClaudeAdapter
+from adapters_copilot import CopilotAdapter
+from adapters_codex import CodexAdapter
+from core.orchestrator import Orchestrator
+
+pack = Orchestrator().build_pack("review", "fix the auth bug")
+print(ClaudeAdapter().generate(pack))   # system-prompt preamble
+print(CopilotAdapter().generate(pack))  # .github/copilot-instructions.md content
+print(CodexAdapter().generate(pack))    # Codex subagent task prompt
 ```
 
 ---

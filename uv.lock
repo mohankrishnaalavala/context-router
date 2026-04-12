@@ -257,12 +257,16 @@ source = { editable = "apps/mcp-server" }
 dependencies = [
     { name = "context-router-contracts" },
     { name = "context-router-core" },
+    { name = "context-router-memory" },
+    { name = "context-router-runtime" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "context-router-contracts", editable = "packages/contracts" },
     { name = "context-router-core", editable = "packages/core" },
+    { name = "context-router-memory", editable = "packages/memory" },
+    { name = "context-router-runtime", editable = "packages/runtime" },
 ]
 
 [[package]]
