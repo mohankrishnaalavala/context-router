@@ -1,3 +1,9 @@
-"""context-router-workspace: workspace module. Stub — see tasks.md for implementation phase."""
+"""context-router-workspace: multi-repo workspace registry and cross-repo link detection."""
 
 from __future__ import annotations
+
+from workspace.link_detector import detect_links
+from workspace.loader import WorkspaceLoader
+from workspace.registry import RepoRegistry
+
+__all__ = ["WorkspaceLoader", "RepoRegistry", "detect_links"]

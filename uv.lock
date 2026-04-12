@@ -103,10 +103,14 @@ version = "0.1.0"
 source = { editable = "packages/benchmark" }
 dependencies = [
     { name = "context-router-contracts" },
+    { name = "context-router-core" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "context-router-contracts", editable = "packages/contracts" }]
+requires-dist = [
+    { name = "context-router-contracts", editable = "packages/contracts" },
+    { name = "context-router-core", editable = "packages/core" },
+]
 
 [[package]]
 name = "context-router-cli"
@@ -155,6 +159,7 @@ dependencies = [
     { name = "context-router-ranking" },
     { name = "context-router-runtime" },
     { name = "context-router-storage-sqlite" },
+    { name = "context-router-workspace" },
 ]
 
 [package.metadata]
@@ -165,6 +170,7 @@ requires-dist = [
     { name = "context-router-ranking", editable = "packages/ranking" },
     { name = "context-router-runtime", editable = "packages/runtime" },
     { name = "context-router-storage-sqlite", editable = "packages/storage-sqlite" },
+    { name = "context-router-workspace", editable = "packages/workspace" },
 ]
 
 [[package]]
