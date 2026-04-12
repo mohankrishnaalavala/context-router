@@ -125,19 +125,7 @@ class YamlAnalyzer:
                         )
                 return results
 
-        # Generic YAML: extract top-level keys
-        for key in data:
-            key_str = str(key)
-            results.append(
-                Symbol(
-                    name=key_str,
-                    kind="yaml_key",
-                    file=path,
-                    line_start=0,
-                    line_end=0,
-                    language="yaml",
-                    signature=f"{key_str}: ...",
-                )
-            )
-
+        # Generic YAML without a recognised schema (e.g. Helm values.yaml,
+        # plain config files): emit nothing.  Top-level key names are not
+        # meaningful context for code navigation and only add noise.
         return results

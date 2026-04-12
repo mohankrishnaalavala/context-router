@@ -351,6 +351,55 @@ class SymbolRepository:
         ).fetchone()
         return row["id"] if row else None
 
+    def get_id_by_name(self, repo: str, name: str) -> int | None:
+        """Look up the rowid of any symbol by name across all files.
+
+        Used for cross-file edge resolution: finds the first class or function
+        with the given name in the repository.  Prefers classes over other
+        kinds since imports typically reference types.
+
+        Args:
+            repo: Logical repository name.
+            name: Symbol name to search for.
+
+        Returns:
+            Integer rowid or None if not found.
+        """
+        row = self._conn.execute(
+            """
+            SELECT id FROM symbols
+            WHERE repo = ? AND name = ?
+            ORDER BY CASE kind WHEN 'class' THEN 0 WHEN 'function' THEN 1 ELSE 2 END
+            LIMIT 1
+            """,
+            (repo, name),
+        ).fetchone()
+        return row["id"] if row else None
+
+    def get_id_for_file(self, repo: str, file_path: str) -> int | None:
+        """Return the rowid of the first symbol in *file_path*.
+
+        Used to anchor file-path based edge endpoints when no specific symbol
+        name is provided.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Absolute path string as stored in the DB.
+
+        Returns:
+            Integer rowid or None if the file has no indexed symbols.
+        """
+        row = self._conn.execute(
+            """
+            SELECT id FROM symbols
+            WHERE repo = ? AND file_path = ?
+            ORDER BY line_start
+            LIMIT 1
+            """,
+            (repo, file_path),
+        ).fetchone()
+        return row["id"] if row else None
+
     def get_all(self, repo: str, limit: int = 10_000) -> list[Symbol]:
         """Return all symbols for a repository, up to *limit* rows.
 

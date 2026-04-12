@@ -94,37 +94,59 @@ def _walk(node: Node, results: list[Symbol | DependencyEdge], file: Path) -> Non
         return
 
     if node.type == "import_statement":
-        # import os, import pathlib.Path
+        # import os, import pathlib — emit edges to top-level module name
         for child in node.children:
             if child.type in ("dotted_name", "aliased_import"):
                 module = _text(child).split(" as ")[0].strip()
+                # Use only the top-level package name as the target symbol name
+                top_level = module.split(".")[0]
                 results.append(
-                    Symbol(
-                        name=module,
-                        kind="import",
-                        file=file,
-                        line_start=node.start_point[0] + 1,
-                        line_end=node.end_point[0] + 1,
-                        language="python",
-                        signature=_text(node),
+                    DependencyEdge(
+                        from_symbol=str(file),
+                        to_symbol=top_level,
+                        edge_type="imports",
                     )
                 )
         return
 
     if node.type == "import_from_statement":
-        # from pathlib import Path
-        module_node = _first_child_of_type(node, "dotted_name", "relative_import")
-        if module_node:
-            module = _text(module_node)
+        # from contracts.interfaces import DependencyEdge, Symbol
+        # Tree-sitter structure:
+        #   [from] [dotted_name:module] [import] [dotted_name:A] [,] [dotted_name:B] ...
+        # OR wrapped in import_list for parenthesised imports.
+        # Emit one edge per imported name so the writer can resolve cross-file refs.
+        imported_names: list[str] = []
+        past_import_keyword = False
+        for child in node.children:
+            if child.type == "import":
+                past_import_keyword = True
+                continue
+            if not past_import_keyword:
+                continue
+            if child.type == "dotted_name":
+                # Use only the leaf identifier (e.g. "DependencyEdge" not "contracts.interfaces")
+                leaf = _text(child).split(".")[-1]
+                imported_names.append(leaf)
+            elif child.type == "aliased_import":
+                name_child = _first_child_of_type(child, "dotted_name", "identifier")
+                if name_child:
+                    imported_names.append(_text(name_child).split(".")[-1])
+            elif child.type == "import_list":
+                for ic in child.children:
+                    if ic.type == "dotted_name":
+                        imported_names.append(_text(ic).split(".")[-1])
+                    elif ic.type == "aliased_import":
+                        nc = _first_child_of_type(ic, "dotted_name", "identifier")
+                        if nc:
+                            imported_names.append(_text(nc).split(".")[-1])
+            # wildcard_import (*) — skip
+
+        for name in imported_names:
             results.append(
-                Symbol(
-                    name=module,
-                    kind="import",
-                    file=file,
-                    line_start=node.start_point[0] + 1,
-                    line_end=node.end_point[0] + 1,
-                    language="python",
-                    signature=_text(node),
+                DependencyEdge(
+                    from_symbol=str(file),
+                    to_symbol=name,
+                    edge_type="imports",
                 )
             )
         return
