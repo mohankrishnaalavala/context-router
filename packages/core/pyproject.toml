@@ -8,6 +8,8 @@ dependencies = [
     "context-router-storage-sqlite",
     "context-router-graph-index",
     "context-router-ranking",
+    "context-router-runtime",
+    "context-router-memory",
 ]
 
 [build-system]

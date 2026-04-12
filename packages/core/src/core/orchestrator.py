@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 
 from contracts.config import ContextRouterConfig, load_config
-from contracts.models import ContextItem, ContextPack
+from contracts.models import ContextItem, ContextPack, RuntimeSignal
 from graph_index.git_diff import GitDiffParser
 from ranking import ContextRanker, estimate_tokens
 from storage_sqlite.database import Database
@@ -65,6 +65,24 @@ _IMPLEMENT_CONFIDENCE: dict[str, float] = {
     "file_class": 0.40,
     "file_function": 0.30,
     "file": 0.20,
+}
+
+# Debug mode: confidence per source category
+_DEBUG_CONFIDENCE: dict[str, float] = {
+    "runtime_signal": 0.95,
+    "failing_test": 0.85,
+    "changed_file": 0.70,
+    "blast_radius": 0.50,
+    "file": 0.20,
+}
+
+# Handover mode: confidence per source category
+_HANDOVER_CONFIDENCE: dict[str, float] = {
+    "changed_file": 0.90,
+    "memory": 0.80,
+    "decision": 0.75,
+    "blast_radius": 0.50,
+    "file": 0.15,
 }
 
 
@@ -148,7 +166,12 @@ class Orchestrator:
     # Public API
     # ------------------------------------------------------------------
 
-    def build_pack(self, mode: str, query: str) -> ContextPack:
+    def build_pack(
+        self,
+        mode: str,
+        query: str,
+        error_file: Path | None = None,
+    ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
         Persists the result to ``.context-router/last-pack.json`` so that
@@ -157,6 +180,8 @@ class Orchestrator:
         Args:
             mode: One of "review", "debug", "implement", "handover".
             query: Free-text description of the task.
+            error_file: Optional path to an error file (JUnit XML, stack trace,
+                log).  Used by debug mode to parse RuntimeSignals.
 
         Returns:
             A populated and ranked ContextPack.
@@ -175,10 +200,18 @@ class Orchestrator:
                 "Run 'context-router index' first."
             )
 
+        # Parse runtime signals from error file (debug mode)
+        runtime_signals: list[RuntimeSignal] = []
+        if error_file is not None:
+            from runtime import parse_error_file  # local import — optional dep
+            runtime_signals = parse_error_file(error_file)
+
         with Database(db_path) as db:
             sym_repo = SymbolRepository(db.connection)
             edge_repo = EdgeRepository(db.connection)
-            candidates = self._build_candidates(mode, sym_repo, edge_repo)
+            candidates = self._build_candidates(
+                mode, sym_repo, edge_repo, runtime_signals=runtime_signals
+            )
 
         ranker = ContextRanker(token_budget=config.token_budget)
         ranked = ranker.rank(candidates, query, mode)
@@ -224,6 +257,7 @@ class Orchestrator:
         sym_repo: SymbolRepository,
         edge_repo: EdgeRepository,
         repo_name: str = "default",
+        runtime_signals: list[RuntimeSignal] | None = None,
     ) -> list[ContextItem]:
         """Fetch and pre-score candidate ContextItems for *mode*.
 
@@ -232,6 +266,7 @@ class Orchestrator:
             sym_repo: Open SymbolRepository.
             edge_repo: Open EdgeRepository.
             repo_name: Logical repository name used in DB queries.
+            runtime_signals: Parsed RuntimeSignal objects (debug mode).
 
         Returns:
             List of ContextItems with source_type and confidence set.
@@ -241,14 +276,15 @@ class Orchestrator:
         Raises:
             ValueError: If *mode* is unrecognised.
         """
+        signals = runtime_signals or []
         if mode == "review":
             return self._review_candidates(sym_repo, edge_repo, repo_name)
         if mode == "implement":
             return self._implement_candidates(sym_repo, repo_name)
-        if mode in ("debug", "handover"):
-            # Phase 3/4 stubs: fall back to implement-style candidate building
-            # so the command is usable even before those phases are complete.
-            return self._implement_candidates(sym_repo, repo_name)
+        if mode == "debug":
+            return self._debug_candidates(sym_repo, edge_repo, repo_name, signals)
+        if mode == "handover":
+            return self._handover_candidates(sym_repo, edge_repo, repo_name)
         raise ValueError(f"Unknown mode: {mode!r}")
 
     # ------------------------------------------------------------------
@@ -405,3 +441,187 @@ class Orchestrator:
             return "file", _IMPLEMENT_CONFIDENCE["file_function"]
 
         return "file", _IMPLEMENT_CONFIDENCE["file"]
+
+    # ------------------------------------------------------------------
+    # Debug mode
+    # ------------------------------------------------------------------
+
+    def _debug_candidates(
+        self,
+        sym_repo: SymbolRepository,
+        edge_repo: EdgeRepository,
+        repo_name: str,
+        signals: list[RuntimeSignal],
+    ) -> list[ContextItem]:
+        """Build candidates prioritised for a debug task.
+
+        Priority:
+          runtime_signal (0.95) > failing_test (0.85) > changed_file (0.70)
+          > blast_radius (0.50) > file (0.20)
+        """
+        # Collect file paths mentioned in runtime signals
+        signal_paths: set[str] = set()
+        for sig in signals:
+            for p in sig.paths:
+                signal_paths.add(str(p))
+                # Also try matching by filename alone (relative vs absolute)
+                signal_paths.add(p.name)
+
+        changed_files = self._get_changed_files()
+
+        blast_radius_files: set[str] = set()
+        for cf in changed_files:
+            blast_radius_files.update(edge_repo.get_adjacent_files(repo_name, cf))
+        blast_radius_files -= changed_files
+
+        all_symbols = sym_repo.get_all(repo_name)
+        items: list[ContextItem] = []
+
+        # Add RuntimeSignal items first (one item per signal, not per symbol)
+        seen_signal_messages: set[str] = set()
+        for sig in signals:
+            if sig.message in seen_signal_messages:
+                continue
+            seen_signal_messages.add(sig.message)
+            excerpt = "\n".join(sig.stack[:10]) if sig.stack else sig.message
+            items.append(
+                ContextItem(
+                    source_type="runtime_signal",
+                    repo=repo_name,
+                    path_or_ref=str(sig.paths[0]) if sig.paths else "runtime",
+                    title=sig.message[:80],
+                    excerpt=excerpt,
+                    reason="",
+                    confidence=_DEBUG_CONFIDENCE["runtime_signal"],
+                    est_tokens=estimate_tokens(excerpt),
+                )
+            )
+
+        for sym in all_symbols:
+            fp = str(sym.file)
+            fname = sym.file.name
+
+            if fp in signal_paths or fname in signal_paths:
+                source_type = "runtime_signal"
+                confidence = _DEBUG_CONFIDENCE["runtime_signal"]
+            elif self._is_test_file(fp):
+                source_type = "failing_test"
+                confidence = _DEBUG_CONFIDENCE["failing_test"]
+            elif fp in changed_files:
+                source_type = "changed_file"
+                confidence = _DEBUG_CONFIDENCE["changed_file"]
+            elif fp in blast_radius_files:
+                source_type = "blast_radius"
+                confidence = _DEBUG_CONFIDENCE["blast_radius"]
+            else:
+                source_type = "file"
+                confidence = _DEBUG_CONFIDENCE["file"]
+
+            items.append(
+                _make_item(
+                    sym_name=sym.name,
+                    file_path=fp,
+                    signature=sym.signature,
+                    docstring=sym.docstring,
+                    source_type=source_type,
+                    confidence=confidence,
+                    repo=repo_name,
+                )
+            )
+
+        return items
+
+    # ------------------------------------------------------------------
+    # Handover mode
+    # ------------------------------------------------------------------
+
+    def _handover_candidates(
+        self,
+        sym_repo: SymbolRepository,
+        edge_repo: EdgeRepository,
+        repo_name: str,
+    ) -> list[ContextItem]:
+        """Build candidates for a project handover pack.
+
+        Combines changed files, stored observations (memory), and decisions.
+        """
+        changed_files = self._get_changed_files()
+
+        blast_radius_files: set[str] = set()
+        for cf in changed_files:
+            blast_radius_files.update(edge_repo.get_adjacent_files(repo_name, cf))
+        blast_radius_files -= changed_files
+
+        all_symbols = sym_repo.get_all(repo_name)
+        items: list[ContextItem] = []
+
+        # Symbol-based items (changed + blast radius)
+        for sym in all_symbols:
+            fp = str(sym.file)
+            if fp in changed_files:
+                source_type = "changed_file"
+                confidence = _HANDOVER_CONFIDENCE["changed_file"]
+            elif fp in blast_radius_files:
+                source_type = "blast_radius"
+                confidence = _HANDOVER_CONFIDENCE["blast_radius"]
+            else:
+                source_type = "file"
+                confidence = _HANDOVER_CONFIDENCE["file"]
+
+            items.append(
+                _make_item(
+                    sym_name=sym.name,
+                    file_path=fp,
+                    signature=sym.signature,
+                    docstring=sym.docstring,
+                    source_type=source_type,
+                    confidence=confidence,
+                    repo=repo_name,
+                )
+            )
+
+        # Memory items: observations and decisions from the store
+        db_path = self._root / ".context-router" / "context-router.db"
+        try:
+            from memory.store import DecisionStore, ObservationStore
+            with Database(db_path) as db:
+                obs_store = ObservationStore(db)
+                dec_store = DecisionStore(db)
+
+                for obs in obs_store._get_all():
+                    excerpt = obs.summary
+                    if obs.fix_summary:
+                        excerpt = f"{obs.summary}\nFix: {obs.fix_summary}"
+                    items.append(
+                        ContextItem(
+                            source_type="memory",
+                            repo=repo_name,
+                            path_or_ref=obs.commit_sha or "memory",
+                            title=f"Observation: {obs.summary[:60]}",
+                            excerpt=excerpt,
+                            reason="",
+                            confidence=_HANDOVER_CONFIDENCE["memory"],
+                            est_tokens=estimate_tokens(excerpt),
+                        )
+                    )
+
+                for dec in dec_store.get_all():
+                    excerpt = dec.title
+                    if dec.decision:
+                        excerpt = f"{dec.title}\n{dec.decision}"
+                    items.append(
+                        ContextItem(
+                            source_type="decision",
+                            repo=repo_name,
+                            path_or_ref=dec.id,
+                            title=f"Decision: {dec.title[:60]}",
+                            excerpt=excerpt,
+                            reason="",
+                            confidence=_HANDOVER_CONFIDENCE["decision"],
+                            est_tokens=estimate_tokens(excerpt),
+                        )
+                    )
+        except Exception:  # noqa: BLE001
+            pass  # Memory store is optional; handover works without it
+
+        return items

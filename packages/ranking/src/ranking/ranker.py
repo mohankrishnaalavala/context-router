@@ -25,6 +25,12 @@ _REASON: dict[str, str] = {
     "contract": "Data contract or interface definition",
     "extension_point": "Plugin or extension point",
     "file": "Referenced in codebase",
+    # Debug mode
+    "runtime_signal": "Mentioned in runtime error or stack trace",
+    "failing_test": "Test file likely related to the failure",
+    # Handover mode
+    "memory": "Recorded in session memory",
+    "decision": "Architectural decision record",
 }
 
 _DEFAULT_REASON = "Included in context pack"
