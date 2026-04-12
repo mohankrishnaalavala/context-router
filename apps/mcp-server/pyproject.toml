@@ -6,6 +6,8 @@ description = "MCP server entrypoint for context-router (Phase 5)"
 dependencies = [
     "context-router-contracts",
     "context-router-core",
+    "context-router-memory",
+    "context-router-runtime",
 ]
 
 [project.scripts]
