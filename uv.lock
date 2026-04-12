@@ -150,10 +150,18 @@ version = "0.1.0"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "context-router-contracts" },
+    { name = "context-router-graph-index" },
+    { name = "context-router-ranking" },
+    { name = "context-router-storage-sqlite" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "context-router-contracts", editable = "packages/contracts" }]
+requires-dist = [
+    { name = "context-router-contracts", editable = "packages/contracts" },
+    { name = "context-router-graph-index", editable = "packages/graph-index" },
+    { name = "context-router-ranking", editable = "packages/ranking" },
+    { name = "context-router-storage-sqlite", editable = "packages/storage-sqlite" },
+]
 
 [[package]]
 name = "context-router-graph-index"

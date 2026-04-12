@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# pre-push hook — runs the full test suite before any push.
+# Install: git config core.hooksPath .githooks
+set -euo pipefail
+
+echo "▶ pre-push: syncing workspace packages..."
+uv sync --all-packages --extra dev --quiet
+
+echo "▶ pre-push: running tests..."
+if ! uv run pytest --tb=short -q; then
+  echo ""
+  echo "✗ Tests failed — push aborted. Fix the failures and try again."
+  exit 1
+fi
+
+echo "✓ All tests passed — proceeding with push."

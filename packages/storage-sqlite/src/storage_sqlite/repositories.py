@@ -351,6 +351,55 @@ class SymbolRepository:
         ).fetchone()
         return row["id"] if row else None
 
+    def get_all(self, repo: str, limit: int = 10_000) -> list[Symbol]:
+        """Return all symbols for a repository, up to *limit* rows.
+
+        Args:
+            repo: Logical repository name.
+            limit: Maximum number of symbols to return (default 10 000).
+
+        Returns:
+            List of Symbol dataclass instances.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT name, kind, file_path, line_start, line_end,
+                   language, signature, docstring
+            FROM symbols
+            WHERE repo = ?
+            LIMIT ?
+            """,
+            (repo, limit),
+        ).fetchall()
+        return [
+            Symbol(
+                name=r["name"],
+                kind=r["kind"],
+                file=Path(r["file_path"]),
+                line_start=r["line_start"] or 0,
+                line_end=r["line_end"] or 0,
+                language=r["language"] or "",
+                signature=r["signature"] or "",
+                docstring=r["docstring"] or "",
+            )
+            for r in rows
+        ]
+
+    def get_distinct_files(self, repo: str) -> list[str]:
+        """Return the distinct file paths that have at least one symbol.
+
+        Args:
+            repo: Logical repository name.
+
+        Returns:
+            Sorted list of file path strings.
+        """
+        rows = self._conn.execute(
+            "SELECT DISTINCT file_path FROM symbols WHERE repo = ? ORDER BY file_path",
+            (repo,),
+        ).fetchall()
+        return [r["file_path"] for r in rows]
+
     def count(self, repo: str) -> int:
         """Return the total number of symbols for a repository."""
         row = self._conn.execute(
@@ -435,6 +484,42 @@ class EdgeRepository:
             (repo, repo, file_path),
         )
         self._conn.commit()
+
+    def get_adjacent_files(self, repo: str, file_path: str) -> list[str]:
+        """Return file paths that share an edge with symbols in *file_path*.
+
+        Useful for blast-radius calculation: given a changed file, this method
+        returns all files that import from it or are imported by it.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Path string as stored in the DB.
+
+        Returns:
+            Sorted list of distinct adjacent file path strings, excluding
+            *file_path* itself.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT DISTINCT s.file_path
+            FROM edges e
+            JOIN symbols s
+              ON s.id = e.from_symbol_id OR s.id = e.to_symbol_id
+            WHERE e.repo = ?
+              AND s.file_path != ?
+              AND (
+                e.from_symbol_id IN (
+                    SELECT id FROM symbols WHERE repo = ? AND file_path = ?
+                )
+                OR e.to_symbol_id IN (
+                    SELECT id FROM symbols WHERE repo = ? AND file_path = ?
+                )
+              )
+            ORDER BY s.file_path
+            """,
+            (repo, file_path, repo, file_path, repo, file_path),
+        ).fetchall()
+        return [r["file_path"] for r in rows]
 
     def count(self, repo: str) -> int:
         """Return the total number of edges for a repository."""

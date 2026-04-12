@@ -75,18 +75,46 @@ class TestPack:
         result = runner.invoke(app, ["pack", "--mode", "invalid"])
         assert result.exit_code == 2
 
-    def test_valid_mode_review_exits_0(self):
-        result = runner.invoke(app, ["pack", "--mode", "review"])
-        assert result.exit_code == 0
+    def test_valid_mode_review_exits_0(self, tmp_path: Path):
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(
+            app, ["pack", "--mode", "review", "--project-root", str(tmp_path)]
+        )
+        assert result.exit_code == 0, result.output
 
-    def test_valid_mode_debug_exits_0(self):
-        result = runner.invoke(app, ["pack", "--mode", "debug"])
-        assert result.exit_code == 0
+    def test_valid_mode_debug_exits_0(self, tmp_path: Path):
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(
+            app, ["pack", "--mode", "debug", "--project-root", str(tmp_path)]
+        )
+        assert result.exit_code == 0, result.output
 
-    def test_valid_mode_implement_exits_0(self):
-        result = runner.invoke(app, ["pack", "--mode", "implement"])
-        assert result.exit_code == 0
+    def test_valid_mode_implement_exits_0(self, tmp_path: Path):
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(
+            app, ["pack", "--mode", "implement", "--project-root", str(tmp_path)]
+        )
+        assert result.exit_code == 0, result.output
 
-    def test_valid_mode_handover_exits_0(self):
-        result = runner.invoke(app, ["pack", "--mode", "handover"])
-        assert result.exit_code == 0
+    def test_valid_mode_handover_exits_0(self, tmp_path: Path):
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(
+            app, ["pack", "--mode", "handover", "--project-root", str(tmp_path)]
+        )
+        assert result.exit_code == 0, result.output
+
+    def test_no_project_exits_1(self, tmp_path: Path):
+        result = runner.invoke(
+            app, ["pack", "--mode", "review", "--project-root", str(tmp_path)]
+        )
+        assert result.exit_code == 1
+
+    def test_json_output(self, tmp_path: Path):
+        import json
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(
+            app, ["pack", "--mode", "implement", "--project-root", str(tmp_path), "--json"]
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["mode"] == "implement"
