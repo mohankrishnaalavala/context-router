@@ -25,6 +25,13 @@ def pack(
         bool,
         typer.Option("--json", help="Output result as JSON."),
     ] = False,
+    project_root: Annotated[
+        str,
+        typer.Option(
+            "--project-root",
+            help="Project root containing .context-router/. Auto-detected when omitted.",
+        ),
+    ] = "",
 ) -> None:
     """Generate a context pack for the given task MODE.
 
@@ -40,10 +47,13 @@ def pack(
         )
         raise typer.Exit(code=2)
 
+    from pathlib import Path
+
     from core.orchestrator import Orchestrator  # local import — keeps CLI startup fast
 
+    root = Path(project_root) if project_root else None
     try:
-        result = Orchestrator().build_pack(mode, query)
+        result = Orchestrator(project_root=root).build_pack(mode, query)
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1)
