@@ -20,7 +20,7 @@ from contracts.models import ContextItem
 # Minimum characters in a query token to be used for boosting (filters stop words)
 _MIN_TOKEN_LEN = 3
 # Maximum confidence boost from query matching
-_MAX_BOOST = 0.30
+_MAX_BOOST = 0.50
 
 # Map source_type → human-readable reason string.
 _REASON: dict[str, str] = {
@@ -125,8 +125,13 @@ class ContextRanker:
         matched = sum(1 for t in query_tokens if t in item_text)
         if matched == 0:
             return item
-        boost = min(_MAX_BOOST, (matched / len(query_tokens)) * _MAX_BOOST)
-        new_conf = min(0.95, item.confidence + boost)
+        ratio = matched / len(query_tokens)
+        if item.confidence < 0.50:
+            # Multiplicative boost for low-confidence items so they can climb more
+            new_conf = min(0.95, item.confidence * (1.0 + ratio))
+        else:
+            # Additive boost for already-high-confidence items
+            new_conf = min(0.95, item.confidence + ratio * _MAX_BOOST)
         return item.model_copy(update={"confidence": new_conf})
 
     def _annotate(self, item: ContextItem) -> ContextItem:
