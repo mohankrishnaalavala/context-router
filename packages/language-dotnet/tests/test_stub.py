@@ -1,11 +1,46 @@
-"""Smoke test for language-dotnet package."""
+"""Tests for language_dotnet.DotnetAnalyzer."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from contracts.interfaces import LanguageAnalyzer
+from contracts.interfaces import LanguageAnalyzer, Symbol
 from language_dotnet import DotnetAnalyzer
+
+SAMPLE_CS = """\
+using System;
+using System.Collections.Generic;
+
+namespace MyApp.Services
+{
+    public class UserService
+    {
+        private string _name;
+
+        public string GetName()
+        {
+            return _name;
+        }
+
+        public void SetName(string name)
+        {
+            _name = name;
+        }
+    }
+}
+"""
+
+SAMPLE_CS_INTERFACE = """\
+using System;
+
+namespace MyApp.Contracts
+{
+    public interface IUserService
+    {
+        string GetName();
+    }
+}
+"""
 
 
 def test_import():
@@ -13,12 +48,81 @@ def test_import():
 
 
 def test_implements_protocol():
-    instance = DotnetAnalyzer()
-    assert isinstance(instance, LanguageAnalyzer)
+    assert isinstance(DotnetAnalyzer(), LanguageAnalyzer)
 
 
-def test_returns_list():
-    instance = DotnetAnalyzer()
-    path = Path('/tmp/dummy.py')
-    result = instance.analyze(path)
+def test_returns_list(tmp_path: Path):
+    result = DotnetAnalyzer().analyze(tmp_path / "nonexistent.cs")
     assert isinstance(result, list)
+
+
+def test_extracts_namespace(tmp_path: Path):
+    f = tmp_path / "UserService.cs"
+    f.write_text(SAMPLE_CS)
+    results = DotnetAnalyzer().analyze(f)
+
+    namespaces = [s for s in results if isinstance(s, Symbol) and s.kind == "namespace"]
+    names = {s.name for s in namespaces}
+    assert "MyApp.Services" in names
+
+
+def test_extracts_class(tmp_path: Path):
+    f = tmp_path / "UserService.cs"
+    f.write_text(SAMPLE_CS)
+    results = DotnetAnalyzer().analyze(f)
+
+    classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
+    names = {s.name for s in classes}
+    assert "UserService" in names
+
+
+def test_extracts_methods(tmp_path: Path):
+    f = tmp_path / "UserService.cs"
+    f.write_text(SAMPLE_CS)
+    results = DotnetAnalyzer().analyze(f)
+
+    methods = [s for s in results if isinstance(s, Symbol) and s.kind == "method"]
+    names = {s.name for s in methods}
+    assert "GetName" in names
+    assert "SetName" in names
+
+
+def test_extracts_using_directives(tmp_path: Path):
+    f = tmp_path / "UserService.cs"
+    f.write_text(SAMPLE_CS)
+    results = DotnetAnalyzer().analyze(f)
+
+    imports = [s for s in results if isinstance(s, Symbol) and s.kind == "import"]
+    assert len(imports) >= 1
+
+
+def test_extracts_interface(tmp_path: Path):
+    f = tmp_path / "IUserService.cs"
+    f.write_text(SAMPLE_CS_INTERFACE)
+    results = DotnetAnalyzer().analyze(f)
+
+    classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
+    names = {s.name for s in classes}
+    assert "IUserService" in names
+
+
+def test_line_numbers_set(tmp_path: Path):
+    f = tmp_path / "UserService.cs"
+    f.write_text(SAMPLE_CS)
+    results = DotnetAnalyzer().analyze(f)
+
+    for s in results:
+        if isinstance(s, Symbol) and s.kind in ("class", "method", "namespace"):
+            assert s.line_start > 0, f"{s.name} has no line_start"
+
+
+def test_empty_file(tmp_path: Path):
+    f = tmp_path / "Empty.cs"
+    f.write_text("")
+    results = DotnetAnalyzer().analyze(f)
+    assert results == []
+
+
+def test_invalid_path_returns_empty():
+    results = DotnetAnalyzer().analyze(Path("/nonexistent/File.cs"))
+    assert results == []

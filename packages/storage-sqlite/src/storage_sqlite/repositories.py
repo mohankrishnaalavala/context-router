@@ -9,7 +9,9 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
+from contracts.interfaces import DependencyEdge, Symbol
 from contracts.models import Decision, Observation, RuntimeSignal
 
 
@@ -209,3 +211,234 @@ class RuntimeSignalRepository:
         )
         self._conn.commit()
         return cursor.lastrowid  # type: ignore[return-value]
+
+
+class SymbolRepository:
+    """Typed access to the symbols table."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection."""
+        self._conn = conn
+
+    def add(self, sym: Symbol, repo: str) -> int:
+        """Insert a symbol row and return its rowid.
+
+        Args:
+            sym: The Symbol to persist.
+            repo: Logical repository name (e.g. "default").
+
+        Returns:
+            The integer rowid of the inserted row.
+        """
+        cursor = self._conn.execute(
+            """
+            INSERT INTO symbols
+                (repo, file_path, name, kind, line_start, line_end,
+                 language, signature, docstring)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                repo,
+                str(sym.file),
+                sym.name,
+                sym.kind,
+                sym.line_start,
+                sym.line_end,
+                sym.language,
+                sym.signature,
+                sym.docstring,
+            ),
+        )
+        self._conn.commit()
+        return cursor.lastrowid  # type: ignore[return-value]
+
+    def add_bulk(self, syms: list[Symbol], repo: str) -> None:
+        """Insert multiple symbols in a single transaction.
+
+        Args:
+            syms: List of Symbol objects to insert.
+            repo: Logical repository name.
+        """
+        self._conn.executemany(
+            """
+            INSERT INTO symbols
+                (repo, file_path, name, kind, line_start, line_end,
+                 language, signature, docstring)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    repo,
+                    str(s.file),
+                    s.name,
+                    s.kind,
+                    s.line_start,
+                    s.line_end,
+                    s.language,
+                    s.signature,
+                    s.docstring,
+                )
+                for s in syms
+            ],
+        )
+        self._conn.commit()
+
+    def delete_by_file(self, repo: str, file_path: str) -> None:
+        """Delete all symbols for a given file (used before incremental re-index).
+
+        Args:
+            repo: Logical repository name.
+            file_path: Path string as stored in the DB.
+        """
+        self._conn.execute(
+            "DELETE FROM symbols WHERE repo = ? AND file_path = ?",
+            (repo, file_path),
+        )
+        self._conn.commit()
+
+    def get_by_file(self, repo: str, file_path: str) -> list[Symbol]:
+        """Return all symbols for a given file.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Path string as stored in the DB.
+
+        Returns:
+            List of Symbol dataclass instances.
+        """
+        rows = self._conn.execute(
+            """
+            SELECT name, kind, file_path, line_start, line_end,
+                   language, signature, docstring
+            FROM symbols
+            WHERE repo = ? AND file_path = ?
+            """,
+            (repo, file_path),
+        ).fetchall()
+        return [
+            Symbol(
+                name=r["name"],
+                kind=r["kind"],
+                file=Path(r["file_path"]),
+                line_start=r["line_start"] or 0,
+                line_end=r["line_end"] or 0,
+                language=r["language"] or "",
+                signature=r["signature"] or "",
+                docstring=r["docstring"] or "",
+            )
+            for r in rows
+        ]
+
+    def get_id(self, repo: str, file_path: str, name: str, kind: str) -> int | None:
+        """Look up the rowid of a symbol by its identifying fields.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Path string as stored in the DB.
+            name: Symbol name.
+            kind: Symbol kind (e.g. "function", "class").
+
+        Returns:
+            Integer rowid or None if not found.
+        """
+        row = self._conn.execute(
+            """
+            SELECT id FROM symbols
+            WHERE repo = ? AND file_path = ? AND name = ? AND kind = ?
+            LIMIT 1
+            """,
+            (repo, file_path, name, kind),
+        ).fetchone()
+        return row["id"] if row else None
+
+    def count(self, repo: str) -> int:
+        """Return the total number of symbols for a repository."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM symbols WHERE repo = ?", (repo,)
+        ).fetchone()
+        return row[0]
+
+
+class EdgeRepository:
+    """Typed access to the edges table."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection."""
+        self._conn = conn
+
+    def add(
+        self,
+        edge: DependencyEdge,
+        repo: str,
+        from_id: int,
+        to_id: int,
+    ) -> int:
+        """Insert an edge row and return its rowid.
+
+        Args:
+            edge: The DependencyEdge to persist.
+            repo: Logical repository name.
+            from_id: Rowid of the source symbol.
+            to_id: Rowid of the target symbol.
+
+        Returns:
+            The integer rowid of the inserted row.
+        """
+        cursor = self._conn.execute(
+            """
+            INSERT INTO edges (repo, from_symbol_id, to_symbol_id, edge_type, weight)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (repo, from_id, to_id, edge.edge_type, edge.weight),
+        )
+        self._conn.commit()
+        return cursor.lastrowid  # type: ignore[return-value]
+
+    def add_bulk(
+        self,
+        edges_with_ids: list[tuple[DependencyEdge, int, int]],
+        repo: str,
+    ) -> None:
+        """Insert multiple edges in a single transaction.
+
+        Args:
+            edges_with_ids: List of (DependencyEdge, from_id, to_id) tuples.
+            repo: Logical repository name.
+        """
+        self._conn.executemany(
+            """
+            INSERT INTO edges (repo, from_symbol_id, to_symbol_id, edge_type, weight)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                (repo, from_id, to_id, edge.edge_type, edge.weight)
+                for edge, from_id, to_id in edges_with_ids
+            ],
+        )
+        self._conn.commit()
+
+    def delete_by_file(self, repo: str, file_path: str) -> None:
+        """Delete all edges originating from symbols in a given file.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Path string matching the symbols.file_path column.
+        """
+        self._conn.execute(
+            """
+            DELETE FROM edges
+            WHERE repo = ?
+              AND from_symbol_id IN (
+                  SELECT id FROM symbols WHERE repo = ? AND file_path = ?
+              )
+            """,
+            (repo, repo, file_path),
+        )
+        self._conn.commit()
+
+    def count(self, repo: str) -> int:
+        """Return the total number of edges for a repository."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM edges WHERE repo = ?", (repo,)
+        ).fetchone()
+        return row[0]
