@@ -13,7 +13,14 @@ only for:
 
 from __future__ import annotations
 
+import re
+
 from contracts.models import ContextItem
+
+# Minimum characters in a query token to be used for boosting (filters stop words)
+_MIN_TOKEN_LEN = 3
+# Maximum confidence boost from query matching
+_MAX_BOOST = 0.30
 
 # Map source_type → human-readable reason string.
 _REASON: dict[str, str] = {
@@ -34,6 +41,11 @@ _REASON: dict[str, str] = {
 }
 
 _DEFAULT_REASON = "Included in context pack"
+
+
+def _tokenize(text: str) -> set[str]:
+    """Return lowercase tokens from *text* that are at least _MIN_TOKEN_LEN chars."""
+    return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) >= _MIN_TOKEN_LEN}
 
 
 class ContextRanker:
@@ -58,20 +70,21 @@ class ContextRanker:
     def rank(
         self,
         items: list[ContextItem],
-        query: str,  # noqa: ARG002 — reserved for future query-match boosting
+        query: str,
         mode: str,  # noqa: ARG002 — reserved for mode-specific post-processing
     ) -> list[ContextItem]:
         """Rank *items* and enforce the token budget.
 
         Steps:
         1. Annotate each item's ``reason`` from its ``source_type``.
-        2. Sort by ``confidence`` descending.
-        3. Trim to token budget while keeping at least one item per
+        2. Apply query-relevance confidence boost (keyword overlap).
+        3. Sort by ``confidence`` descending.
+        4. Trim to token budget while keeping at least one item per
            ``source_type`` (so every category of evidence is represented).
 
         Args:
             items: Pre-scored ContextItem candidates.
-            query: Free-text task description (reserved for future use).
+            query: Free-text task description used for relevance boosting.
             mode: Task mode (reserved for future use).
 
         Returns:
@@ -80,8 +93,10 @@ class ContextRanker:
         if not items:
             return []
 
+        query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
-        sorted_items = sorted(annotated, key=lambda i: i.confidence, reverse=True)
+        boosted = [self._apply_query_boost(item, query_tokens) for item in annotated]
+        sorted_items = sorted(boosted, key=lambda i: i.confidence, reverse=True)
 
         if self._budget <= 0:
             return sorted_items
@@ -91,6 +106,28 @@ class ContextRanker:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _apply_query_boost(self, item: ContextItem, query_tokens: set[str]) -> ContextItem:
+        """Boost *item* confidence if query tokens appear in its text fields.
+
+        Checks title, excerpt, and signature (from ``path_or_ref`` label).
+        Boost is proportional to the fraction of query tokens matched,
+        capped at ``_MAX_BOOST`` (0.30), and never exceeds 0.95.
+        """
+        if not query_tokens:
+            return item
+        # Use title + excerpt only — path_or_ref causes false positives when the
+        # repository name happens to contain a query term (e.g. "fraud" in
+        # "fraudguard-workspace" matching every file regardless of relevance).
+        item_text = " ".join(
+            filter(None, [item.title, item.excerpt])
+        ).lower()
+        matched = sum(1 for t in query_tokens if t in item_text)
+        if matched == 0:
+            return item
+        boost = min(_MAX_BOOST, (matched / len(query_tokens)) * _MAX_BOOST)
+        new_conf = min(0.95, item.confidence + boost)
+        return item.model_copy(update={"confidence": new_conf})
 
     def _annotate(self, item: ContextItem) -> ContextItem:
         """Return a copy of *item* with the reason field populated."""

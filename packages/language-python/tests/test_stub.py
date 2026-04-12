@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from contracts.interfaces import LanguageAnalyzer, Symbol
+from contracts.interfaces import DependencyEdge, LanguageAnalyzer, Symbol
 from language_python import PythonAnalyzer
 
 SAMPLE_PY = '''\
@@ -66,15 +66,22 @@ def test_extracts_method(tmp_path: Path):
     assert "greet" in names
 
 
-def test_extracts_imports(tmp_path: Path):
+def test_extracts_imports_as_edges(tmp_path: Path):
+    """Imports are now emitted as DependencyEdge, not as Symbol(kind='import')."""
     f = tmp_path / "sample.py"
     f.write_text(SAMPLE_PY)
     results = PythonAnalyzer().analyze(f)
 
-    imports = [s for s in results if isinstance(s, Symbol) and s.kind == "import"]
-    names = {s.name for s in imports}
-    assert "os" in names
-    assert "pathlib" in names
+    # No import symbols should exist
+    import_syms = [s for s in results if isinstance(s, Symbol) and s.kind == "import"]
+    assert import_syms == [], "import symbols should no longer be emitted"
+
+    # Edges for the imports should be present
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "imports"]
+    to_symbols = {e.to_symbol for e in edges}
+    assert "os" in to_symbols
+    # from pathlib import Path → imported name is "Path"
+    assert "Path" in to_symbols
 
 
 def test_extracts_docstring(tmp_path: Path):

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contracts.models import ContextItem
-from ranking.ranker import ContextRanker, _REASON
+from ranking.ranker import ContextRanker, _REASON, _tokenize
 
 
 def _item(
@@ -98,6 +98,59 @@ def test_all_items_fit_within_budget() -> None:
     items = [_item(est_tokens=10) for _ in range(5)]
     result = ContextRanker(token_budget=50).rank(items, "", "review")
     assert len(result) == 5
+
+
+def test_query_boost_raises_confidence_for_matching_item() -> None:
+    """Items whose title/excerpt contain query tokens get a confidence boost."""
+    low_relevance = _item(confidence=0.5, title="unrelated_thing", est_tokens=10)
+    high_relevance = ContextItem(
+        source_type="file",
+        repo="test",
+        path_or_ref="ranker.py",
+        title="ContextRanker (ranker.py)",
+        excerpt="class ContextRanker:\nSorts and trims ContextItems to fit token budget.",
+        reason="",
+        confidence=0.5,
+        est_tokens=20,
+    )
+    result = ContextRanker(token_budget=0).rank(
+        [low_relevance, high_relevance],
+        "add token budget to the ranker",
+        "implement",
+    )
+    # high_relevance matches "ranker", "token", "budget" → boosted above low_relevance
+    assert result[0].title == "ContextRanker (ranker.py)"
+    assert result[0].confidence > 0.5
+
+
+def test_query_boost_capped_at_0_95() -> None:
+    """Confidence is never boosted above 0.95."""
+    item = ContextItem(
+        source_type="file",
+        repo="test",
+        path_or_ref="transactions.py",
+        title="process_transaction (transactions.py)",
+        excerpt="def process_transaction():\nProcess high value transaction fraud detection rule.",
+        reason="",
+        confidence=0.90,
+        est_tokens=20,
+    )
+    result = ContextRanker(token_budget=0).rank(
+        [item],
+        "add fraud detection rule for high value transactions",
+        "implement",
+    )
+    assert result[0].confidence <= 0.95
+
+
+def test_tokenize_filters_short_tokens() -> None:
+    tokens = _tokenize("add fraud detection rule for high value transactions")
+    # All tokens >= 3 chars
+    assert all(len(t) >= 3 for t in tokens)
+    # Contains expected terms
+    assert "fraud" in tokens
+    assert "detection" in tokens
+    assert "transactions" in tokens
 
 
 def test_original_items_not_mutated() -> None:

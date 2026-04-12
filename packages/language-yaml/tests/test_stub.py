@@ -107,15 +107,16 @@ def test_helm_chart_detection(tmp_path: Path):
     assert helm[0].name == "my-chart"
 
 
-def test_generic_yaml_top_level_keys(tmp_path: Path):
+def test_generic_yaml_returns_no_symbols(tmp_path: Path):
+    """Generic YAML files (not k8s/helm/GHA) no longer emit yaml_key noise."""
     f = tmp_path / "config.yaml"
     f.write_text(GENERIC_YAML)
     results = YamlAnalyzer().analyze(f)
 
+    # yaml_key symbols removed — generic config YAML is noise for code context
     keys = [s for s in results if isinstance(s, Symbol) and s.kind == "yaml_key"]
-    names = {k.name for k in keys}
-    assert "database" in names
-    assert "server" in names
+    assert keys == [], "generic YAML should not emit yaml_key symbols"
+    assert results == [], "generic YAML should return an empty list"
 
 
 def test_non_dict_yaml_returns_empty(tmp_path: Path):

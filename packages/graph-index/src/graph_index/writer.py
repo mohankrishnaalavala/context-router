@@ -76,11 +76,22 @@ class SymbolWriter:
             if sym_id is not None:
                 id_map[sym.name] = sym_id
 
-        # Pass 2: resolve edges and bulk-insert those we can resolve
+        # Pass 2: resolve edges and bulk-insert those we can resolve.
+        # Supports cross-file edges where from_symbol is a file path and
+        # to_symbol is a symbol name in another file.
         resolved: list[tuple[DependencyEdge, int, int]] = []
         for edge in edges:
             from_id = id_map.get(edge.from_symbol)
             to_id = id_map.get(edge.to_symbol)
+
+            # Cross-file resolution: from_symbol may be an absolute file path
+            if from_id is None and ("/" in edge.from_symbol or "\\" in edge.from_symbol):
+                from_id = self._sym_repo.get_id_for_file(repo, edge.from_symbol)
+
+            # Cross-file resolution: to_symbol may be a name in another file
+            if to_id is None:
+                to_id = self._sym_repo.get_id_by_name(repo, edge.to_symbol)
+
             if from_id is not None and to_id is not None:
                 resolved.append((edge, from_id, to_id))
 
