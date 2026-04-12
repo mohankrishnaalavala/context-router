@@ -153,6 +153,36 @@ def test_tokenize_filters_short_tokens() -> None:
     assert "transactions" in tokens
 
 
+def test_multiplicative_boost_for_low_confidence() -> None:
+    """Low-confidence items (<0.50) use multiplicative boost."""
+    item = ContextItem(
+        source_type="file", repo="test", path_or_ref="ranker.py",
+        title="ContextRanker (ranker.py)",
+        excerpt="class ContextRanker:\nSorts ContextItems to fit token budget.",
+        reason="", confidence=0.20, est_tokens=20,
+    )
+    result = ContextRanker(token_budget=0).rank(
+        [item], "token budget ranker", "implement"
+    )
+    # 3/3 tokens matched → multiplier = 1 + 1.0 = 2.0 → 0.20 * 2.0 = 0.40
+    assert result[0].confidence > 0.20
+
+
+def test_additive_boost_for_high_confidence() -> None:
+    """High-confidence items (≥0.50) use additive boost."""
+    item = ContextItem(
+        source_type="contract", repo="test", path_or_ref="ranker.py",
+        title="Ranker (interfaces.py)",
+        excerpt="class Ranker token budget",
+        reason="", confidence=0.80, est_tokens=20,
+    )
+    result = ContextRanker(token_budget=0).rank(
+        [item], "token budget ranker", "implement"
+    )
+    # Uses additive: 0.80 + ratio * 0.50
+    assert 0.80 < result[0].confidence <= 0.95
+
+
 def test_original_items_not_mutated() -> None:
     # Build item directly so we can set a non-empty reason
     item = ContextItem(
