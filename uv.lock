@@ -137,25 +137,18 @@ requires-dist = [
 
 [[package]]
 name = "context-router-cli"
-version = "0.2.0"
+version = "0.2.2"
 source = { editable = "apps/cli" }
 dependencies = [
-    { name = "context-router-adapters-claude" },
-    { name = "context-router-adapters-codex" },
-    { name = "context-router-adapters-copilot" },
-    { name = "context-router-benchmark" },
-    { name = "context-router-contracts" },
-    { name = "context-router-core" },
-    { name = "context-router-graph-index" },
-    { name = "context-router-language-python" },
-    { name = "context-router-language-typescript" },
-    { name = "context-router-language-yaml" },
-    { name = "context-router-memory" },
-    { name = "context-router-ranking" },
-    { name = "context-router-runtime" },
-    { name = "context-router-storage-sqlite" },
-    { name = "context-router-workspace" },
+    { name = "pydantic" },
+    { name = "pyyaml" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-c-sharp" },
+    { name = "tree-sitter-java" },
+    { name = "tree-sitter-python" },
+    { name = "tree-sitter-typescript" },
     { name = "typer" },
+    { name = "watchdog" },
 ]
 
 [package.optional-dependencies]
@@ -165,23 +158,16 @@ semantic = [
 
 [package.metadata]
 requires-dist = [
-    { name = "context-router-adapters-claude", editable = "packages/adapters-claude" },
-    { name = "context-router-adapters-codex", editable = "packages/adapters-codex" },
-    { name = "context-router-adapters-copilot", editable = "packages/adapters-copilot" },
-    { name = "context-router-benchmark", editable = "packages/benchmark" },
-    { name = "context-router-contracts", editable = "packages/contracts" },
-    { name = "context-router-core", editable = "packages/core" },
-    { name = "context-router-graph-index", editable = "packages/graph-index" },
-    { name = "context-router-language-python", editable = "packages/language-python" },
-    { name = "context-router-language-typescript", editable = "packages/language-typescript" },
-    { name = "context-router-language-yaml", editable = "packages/language-yaml" },
-    { name = "context-router-memory", editable = "packages/memory" },
-    { name = "context-router-ranking", editable = "packages/ranking" },
-    { name = "context-router-runtime", editable = "packages/runtime" },
-    { name = "context-router-storage-sqlite", editable = "packages/storage-sqlite" },
-    { name = "context-router-workspace", editable = "packages/workspace" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=2.2" },
+    { name = "tree-sitter", specifier = ">=0.21" },
+    { name = "tree-sitter-c-sharp", specifier = ">=0.21" },
+    { name = "tree-sitter-java", specifier = ">=0.21" },
+    { name = "tree-sitter-python", specifier = ">=0.21" },
+    { name = "tree-sitter-typescript", specifier = ">=0.21" },
     { name = "typer", specifier = ">=0.12" },
+    { name = "watchdog", specifier = ">=4.0" },
 ]
 provides-extras = ["semantic"]
 

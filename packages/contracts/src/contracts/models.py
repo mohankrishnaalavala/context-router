@@ -69,6 +69,11 @@ class Observation(BaseModel):
     fix_summary: str = ""
     commit_sha: str = ""
     repo_scope: str = ""
+    task_hash: str = ""
+    # Freshness fields (migration 0004)
+    confidence_score: Annotated[float, Field(ge=0.0, le=1.0)] = 0.5
+    access_count: int = 0
+    last_accessed_at: datetime | None = None
 
 
 class RuntimeSignal(BaseModel):
@@ -94,6 +99,10 @@ class Decision(BaseModel):
     consequences: str = ""
     tags: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=_utcnow)
+    # Freshness + supersession fields (migration 0004)
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.8
+    last_reviewed_at: datetime | None = None
+    superseded_by: str = ""
 
 
 class RepoDescriptor(BaseModel):

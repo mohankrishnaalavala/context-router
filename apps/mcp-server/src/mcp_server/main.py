@@ -202,6 +202,154 @@ _TOOLS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "save_observation": {
+        "fn": tools.save_observation,
+        "description": (
+            "Persist a coding-session observation to durable memory. "
+            "Duplicate observations (same task_type + summary) are silently skipped. "
+            "Secret values in commands_run are redacted automatically."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["summary"],
+            "properties": {
+                "summary": {
+                    "type": "string",
+                    "description": "One-line description of the task or event.",
+                },
+                "task_type": {
+                    "type": "string",
+                    "description": "Category: debug, implement, commit, handover, general.",
+                    "default": "general",
+                },
+                "files_touched": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "File paths modified during the task.",
+                },
+                "commands_run": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Shell commands executed (secrets will be redacted).",
+                },
+                "failures_seen": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Error or failure messages encountered.",
+                },
+                "fix_summary": {
+                    "type": "string",
+                    "description": "Short description of the fix or resolution.",
+                },
+                "commit_sha": {
+                    "type": "string",
+                    "description": "Git commit SHA if available.",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
+    "save_decision": {
+        "fn": tools.save_decision,
+        "description": (
+            "Persist an architectural decision record (ADR) to project memory. "
+            "Use this to record why a technology, pattern, or approach was chosen."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["title", "decision"],
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Short title for the decision.",
+                },
+                "decision": {
+                    "type": "string",
+                    "description": "The decision itself — what was chosen and why.",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Background context that motivated the decision.",
+                },
+                "consequences": {
+                    "type": "string",
+                    "description": "Trade-offs, risks, or follow-up actions.",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Tags for categorisation.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["proposed", "accepted", "deprecated", "superseded"],
+                    "description": "Decision status.",
+                    "default": "accepted",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
+    "list_memory": {
+        "fn": tools.list_memory,
+        "description": (
+            "List stored coding-session observations ordered by freshness "
+            "(default), raw confidence, or recency. Returns effective_confidence "
+            "for each observation so callers can see the time-decay-adjusted score."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sort": {
+                    "type": "string",
+                    "enum": ["freshness", "confidence", "recent"],
+                    "description": "Sort order. Defaults to freshness (time-decay × confidence).",
+                    "default": "freshness",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of observations to return.",
+                    "default": 20,
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
+    "mark_decision_superseded": {
+        "fn": tools.mark_decision_superseded,
+        "description": (
+            "Mark an existing architectural decision as superseded by a newer one. "
+            "Sets the old decision's status to 'superseded' and records the "
+            "UUID of the replacement for audit purposes."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["old_id", "new_id"],
+            "properties": {
+                "old_id": {
+                    "type": "string",
+                    "description": "UUID of the decision being replaced.",
+                },
+                "new_id": {
+                    "type": "string",
+                    "description": "UUID of the new decision that supersedes it.",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
 }
 
 

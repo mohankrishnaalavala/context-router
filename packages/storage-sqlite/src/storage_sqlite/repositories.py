@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from contracts.interfaces import DependencyEdge, Symbol
@@ -39,8 +39,9 @@ class ObservationRepository:
             """
             INSERT INTO observations
                 (timestamp, task_type, summary, files_touched, commands_run,
-                 failures_seen, fix_summary, commit_sha, repo_scope)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 failures_seen, fix_summary, commit_sha, repo_scope, task_hash,
+                 confidence_score, access_count, last_accessed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 obs.timestamp.isoformat(),
@@ -52,6 +53,10 @@ class ObservationRepository:
                 obs.fix_summary,
                 obs.commit_sha,
                 obs.repo_scope,
+                obs.task_hash,
+                obs.confidence_score,
+                obs.access_count,
+                obs.last_accessed_at.isoformat() if obs.last_accessed_at else None,
             ),
         )
         rowid = cursor.lastrowid
@@ -84,8 +89,49 @@ class ObservationRepository:
         ).fetchall()
         return [self._row_to_observation(r) for r in rows]
 
+    def record_access(self, rowid: int) -> None:
+        """Increment access_count and update last_accessed_at for an observation.
+
+        Called by the orchestrator each time an observation is included in a pack.
+
+        Args:
+            rowid: The SQLite rowid of the observation.
+        """
+        self._conn.execute(
+            "UPDATE observations SET access_count = access_count + 1, "
+            "last_accessed_at = ? WHERE rowid = ?",
+            (datetime.now(UTC).isoformat(), rowid),
+        )
+        self._conn.commit()
+
+    def get_all(self) -> list[Observation]:
+        """Return all observations ordered by creation time descending."""
+        rows = self._conn.execute(
+            "SELECT * FROM observations ORDER BY id DESC"
+        ).fetchall()
+        return [self._row_to_observation(r) for r in rows]
+
+    def find_by_task_hash(self, task_hash: str) -> "Observation | None":
+        """Return the first observation with the given task_hash, or None.
+
+        Args:
+            task_hash: Short SHA256 hash computed by the capture guardrail.
+
+        Returns:
+            Matching Observation or None if not found.
+        """
+        if not task_hash:
+            return None
+        row = self._conn.execute(
+            "SELECT * FROM observations WHERE task_hash = ? LIMIT 1",
+            (task_hash,),
+        ).fetchone()
+        return self._row_to_observation(row) if row else None
+
     def _row_to_observation(self, row: sqlite3.Row) -> Observation:
         """Convert a sqlite3.Row to an Observation model."""
+        keys = row.keys() if hasattr(row, "keys") else []
+        last_acc = row["last_accessed_at"] if "last_accessed_at" in keys else None
         return Observation(
             timestamp=datetime.fromisoformat(row["timestamp"]),
             task_type=row["task_type"] or "",
@@ -96,6 +142,10 @@ class ObservationRepository:
             fix_summary=row["fix_summary"] or "",
             commit_sha=row["commit_sha"] or "",
             repo_scope=row["repo_scope"] or "",
+            task_hash=row["task_hash"] if "task_hash" in keys else "",
+            confidence_score=float(row["confidence_score"]) if "confidence_score" in keys else 0.5,
+            access_count=int(row["access_count"]) if "access_count" in keys else 0,
+            last_accessed_at=datetime.fromisoformat(last_acc) if last_acc else None,
         )
 
 
@@ -143,6 +193,19 @@ class DecisionRepository:
         self._conn.commit()
         return dec.id
 
+    def mark_superseded(self, old_id: str, new_id: str) -> None:
+        """Set old decision status=superseded and link it to new_id.
+
+        Args:
+            old_id: UUID of the decision being replaced.
+            new_id: UUID of the new decision that supersedes it.
+        """
+        self._conn.execute(
+            "UPDATE decisions SET status = 'superseded', superseded_by = ? WHERE id = ?",
+            (new_id, old_id),
+        )
+        self._conn.commit()
+
     def search_fts(self, query: str) -> list[Decision]:
         """Full-text search across title, context, and decision fields.
 
@@ -166,6 +229,8 @@ class DecisionRepository:
 
     def _row_to_decision(self, row: sqlite3.Row) -> Decision:
         """Convert a sqlite3.Row to a Decision model."""
+        keys = row.keys() if hasattr(row, "keys") else []
+        last_rev = row["last_reviewed_at"] if "last_reviewed_at" in keys else None
         return Decision(
             id=row["id"],
             title=row["title"],
@@ -175,6 +240,9 @@ class DecisionRepository:
             consequences=row["consequences"] or "",
             tags=json.loads(row["tags"] or "[]"),
             created_at=datetime.fromisoformat(row["created_at"]),
+            confidence=float(row["confidence"]) if "confidence" in keys else 0.8,
+            last_reviewed_at=datetime.fromisoformat(last_rev) if last_rev else None,
+            superseded_by=row["superseded_by"] or "" if "superseded_by" in keys else "",
         )
 
 

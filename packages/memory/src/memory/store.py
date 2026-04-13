@@ -77,6 +77,42 @@ class ObservationStore:
             ids.append(self._repo.add(obs))
         return ids
 
+    def list_by_freshness(self, half_life_days: int = 30) -> list[Observation]:
+        """Return all observations sorted by effective_confidence (fresh first).
+
+        Args:
+            half_life_days: Days until an observation's base confidence halves.
+
+        Returns:
+            All observations, highest effective confidence first.
+        """
+        from memory.freshness import effective_confidence
+        all_obs = self._get_all()
+        return sorted(
+            all_obs,
+            key=lambda o: effective_confidence(o, half_life_days),
+            reverse=True,
+        )
+
+    def record_access(self, rowid: int) -> None:
+        """Increment access_count and update last_accessed_at for an observation.
+
+        Args:
+            rowid: SQLite rowid of the observation.
+        """
+        self._repo.record_access(rowid)
+
+    def find_by_task_hash(self, task_hash: str) -> "Observation | None":
+        """Return the first observation with the given task_hash, or None.
+
+        Args:
+            task_hash: Short SHA256 hash from the capture guardrail.
+
+        Returns:
+            Matching Observation or None.
+        """
+        return self._repo.find_by_task_hash(task_hash)
+
     def search(self, query: str) -> list[Observation]:
         """Full-text search observations.
 
@@ -116,26 +152,7 @@ class ObservationStore:
     def _get_all(self) -> list[Observation]:
         """Return all stored observations (used internally)."""
         # Use a broad FTS query that matches everything
-        # FTS5: empty query is an error; use a wildcard approach via raw SQL
-        rows = self._repo._conn.execute(  # noqa: SLF001
-            "SELECT * FROM observations ORDER BY id DESC"
-        ).fetchall()
-        import json as _json
-        from datetime import datetime
-        return [
-            Observation(
-                timestamp=datetime.fromisoformat(r["timestamp"]),
-                task_type=r["task_type"] or "",
-                summary=r["summary"] or "",
-                files_touched=_json.loads(r["files_touched"] or "[]"),
-                commands_run=_json.loads(r["commands_run"] or "[]"),
-                failures_seen=_json.loads(r["failures_seen"] or "[]"),
-                fix_summary=r["fix_summary"] or "",
-                commit_sha=r["commit_sha"] or "",
-                repo_scope=r["repo_scope"] or "",
-            )
-            for r in rows
-        ]
+        return self._repo.get_all()
 
 
 class DecisionStore:
@@ -180,21 +197,16 @@ class DecisionStore:
         rows = self._repo._conn.execute(  # noqa: SLF001
             "SELECT * FROM decisions ORDER BY created_at DESC"
         ).fetchall()
-        import json as _json
-        from datetime import datetime
-        return [
-            Decision(
-                id=r["id"],
-                title=r["title"],
-                status=r["status"],
-                context=r["context"] or "",
-                decision=r["decision"] or "",
-                consequences=r["consequences"] or "",
-                tags=_json.loads(r["tags"] or "[]"),
-                created_at=datetime.fromisoformat(r["created_at"]),
-            )
-            for r in rows
-        ]
+        return [self._repo._row_to_decision(r) for r in rows]  # noqa: SLF001
+
+    def mark_superseded(self, old_id: str, new_id: str) -> None:
+        """Mark an old decision as superseded by a newer one.
+
+        Args:
+            old_id: UUID of the decision being replaced.
+            new_id: UUID of the new decision that supersedes it.
+        """
+        self._repo.mark_superseded(old_id, new_id)
 
     def by_tags(self, tags: list[str]) -> list[Decision]:
         """Return decisions that have at least one of the given tags.

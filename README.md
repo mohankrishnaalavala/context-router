@@ -42,7 +42,7 @@ cd context-router
 uv sync --all-packages
 ```
 
-> **PyPI install (coming soon):** `pip install context-router`
+> **PyPI install (coming soon):** `pip install context-router-cli`
 
 ---
 
@@ -198,16 +198,32 @@ context-router explain last-pack [--json]
 Persist and search session observations. Stored in the local SQLite DB with FTS5 full-text search.
 
 ```
-context-router memory add --from-session SESSION.json
+context-router memory add --from-session SESSION.json   # import from JSON file
+context-router memory add --stdin                        # import from stdin pipe
+context-router memory capture SUMMARY [OPTIONS]          # capture inline from args
 context-router memory search QUERY
 context-router memory stale
 ```
 
 `stale` lists observations whose referenced files no longer exist in the index.
 
+`capture` applies guardrails automatically: duplicates (same task type + summary) are silently
+skipped, and secret values in `--commands` are redacted before storage.
+
 **Examples:**
 
 ```bash
+# Capture an observation inline — no JSON file needed
+uv run context-router memory capture "fixed auth token expiry bug" \
+  --task-type debug \
+  --files "auth.py tests/test_auth.py" \
+  --commit abc1234 \
+  --fix "added 60-second clock-skew tolerance"
+
+# Pipe JSON from another tool
+echo '{"summary": "deployed to staging", "task_type": "deploy"}' \
+  | uv run context-router memory add --stdin
+
 # Search for past observations about authentication
 uv run context-router memory search "auth token"
 
@@ -335,6 +351,8 @@ context-router mcp
 | `generate_handover` | Handover pack combining changes + memory + decisions |
 | `search_memory` | Full-text search of session observations |
 | `get_decisions` | Search or list architectural decision records |
+| `save_observation` | Persist a coding-session observation (dedup + secret redaction applied) |
+| `save_decision` | Persist an architectural decision record (ADR) |
 
 ---
 

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# context-router post-commit hook
+# Auto-saves a lightweight memory observation after each commit.
+#
+# Guardrails:
+#   - Skips if the commit message is empty.
+#   - Skips if no files changed (e.g. empty-tree commits).
+#   - Delegates to 'context-router memory capture' which applies dedup + redaction.
+#   - Never fails the commit (errors are swallowed with '|| true').
+
+set -euo pipefail
+
+COMMIT_SHA=$(git rev-parse HEAD)
+COMMIT_MSG=$(git log -1 --format="%s" HEAD 2>/dev/null || true)
+FILES_CHANGED=$(git diff-tree --no-commit-id -r --name-only HEAD 2>/dev/null | wc -l | tr -d ' ')
+
+# Only capture if we have a non-empty message and at least one changed file
+[ -z "$COMMIT_MSG" ] && exit 0
+[ "${FILES_CHANGED}" -lt 1 ] && exit 0
+
+FILES_LIST=$(git diff-tree --no-commit-id -r --name-only HEAD 2>/dev/null | tr '\n' ' ')
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+
+uv run context-router memory capture \
+  "${COMMIT_MSG}" \
+  --task-type "commit" \
+  --files "${FILES_LIST}" \
+  --commit "${COMMIT_SHA}" \
+  --project-root "${PROJECT_ROOT}" \
+  2>/dev/null || true

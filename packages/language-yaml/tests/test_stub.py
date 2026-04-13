@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from contracts.interfaces import LanguageAnalyzer, Symbol
+from contracts.interfaces import DependencyEdge, LanguageAnalyzer, Symbol
 from language_yaml import YamlAnalyzer
 
 K8S_DEPLOYMENT = """\
@@ -136,3 +136,93 @@ def test_invalid_yaml_returns_empty(tmp_path: Path):
 def test_invalid_path_returns_empty():
     results = YamlAnalyzer().analyze(Path("/nonexistent/file.yaml"))
     assert results == []
+
+
+DOCKER_COMPOSE = """\
+version: "3.9"
+services:
+  web:
+    image: nginx:latest
+    ports:
+      - "80:80"
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: app
+  redis:
+    image: redis:7
+"""
+
+GITHUB_ACTIONS_WITH_NEEDS = """\
+name: Deploy
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    steps:
+      - uses: actions/checkout@v3
+"""
+
+
+def test_docker_compose_detection(tmp_path: Path):
+    f = tmp_path / "docker-compose.yaml"
+    f.write_text(DOCKER_COMPOSE)
+    results = YamlAnalyzer().analyze(f)
+
+    compose_files = [s for s in results if isinstance(s, Symbol) and s.kind == "compose_file"]
+    assert len(compose_files) == 1
+
+    services = [s for s in results if isinstance(s, Symbol) and s.kind == "compose_service"]
+    names = {s.name for s in services}
+    assert "web" in names
+    assert "db" in names
+    assert "redis" in names
+
+
+def test_github_actions_needs_edges(tmp_path: Path):
+    f = tmp_path / "deploy.yaml"
+    f.write_text(GITHUB_ACTIONS_WITH_NEEDS)
+    results = YamlAnalyzer().analyze(f)
+
+    dep_edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "depends_on"]
+    assert len(dep_edges) >= 1
+
+    from_to = {(e.from_symbol, e.to_symbol) for e in dep_edges}
+    # test depends on build
+    assert ("test", "build") in from_to
+    # deploy depends on both
+    assert ("deploy", "build") in from_to
+    assert ("deploy", "test") in from_to
+
+
+def test_line_numbers_nonzero_for_k8s(tmp_path: Path):
+    f = tmp_path / "deployment.yaml"
+    f.write_text(K8S_DEPLOYMENT)
+    results = YamlAnalyzer().analyze(f)
+
+    k8s = [s for s in results if isinstance(s, Symbol) and s.kind == "k8s_resource"]
+    assert k8s[0].line_start > 0
+
+
+def test_line_numbers_nonzero_for_workflow(tmp_path: Path):
+    f = tmp_path / "ci.yaml"
+    f.write_text(GITHUB_ACTIONS)
+    results = YamlAnalyzer().analyze(f)
+
+    workflows = [s for s in results if isinstance(s, Symbol) and s.kind == "github_actions_workflow"]
+    assert workflows[0].line_start > 0

@@ -620,10 +620,16 @@ class Orchestrator:
                 obs_store = ObservationStore(db)
                 dec_store = DecisionStore(db)
 
-                for obs in obs_store._get_all():
+                from memory.freshness import score_for_pack
+                for obs in obs_store.list_by_freshness():
                     excerpt = obs.summary
                     if obs.fix_summary:
                         excerpt = f"{obs.summary}\nFix: {obs.fix_summary}"
+                    # Use freshness-weighted score, capped at the handover base
+                    fresh_conf = min(
+                        _HANDOVER_CONFIDENCE["memory"],
+                        max(0.10, score_for_pack(obs)),
+                    )
                     items.append(
                         ContextItem(
                             source_type="memory",
@@ -632,15 +638,26 @@ class Orchestrator:
                             title=f"Observation: {obs.summary[:60]}",
                             excerpt=excerpt,
                             reason="",
-                            confidence=_HANDOVER_CONFIDENCE["memory"],
+                            confidence=fresh_conf,
                             est_tokens=estimate_tokens(excerpt),
                         )
                     )
 
                 for dec in dec_store.get_all():
+                    if dec.status == "superseded":
+                        continue  # skip superseded decisions
                     excerpt = dec.title
                     if dec.decision:
                         excerpt = f"{dec.title}\n{dec.decision}"
+                    # Fresh decisions get full confidence; older ones decay slightly
+                    from memory.freshness import compute_freshness as _cf
+                    from contracts.models import Observation as _Obs
+                    _dummy = _Obs(summary="", timestamp=dec.created_at)
+                    _dummy = _dummy.model_copy(update={"confidence_score": dec.confidence})
+                    dec_fresh = min(
+                        _HANDOVER_CONFIDENCE["decision"],
+                        max(0.10, _cf(_dummy) * dec.confidence),
+                    )
                     items.append(
                         ContextItem(
                             source_type="decision",
@@ -649,7 +666,7 @@ class Orchestrator:
                             title=f"Decision: {dec.title[:60]}",
                             excerpt=excerpt,
                             reason="",
-                            confidence=_HANDOVER_CONFIDENCE["decision"],
+                            confidence=dec_fresh,
                             est_tokens=estimate_tokens(excerpt),
                         )
                     )
