@@ -13,25 +13,24 @@ build:
 	rm -rf dist/
 	mkdir -p dist/
 	@for pkg in \
-		apps/cli \
-		packages/contracts \
-		packages/core \
-		packages/storage-sqlite \
-		packages/graph-index \
-		packages/ranking \
-		packages/memory \
-		packages/runtime \
-		packages/workspace \
-		packages/benchmark \
-		packages/language-python \
-		packages/language-typescript \
-		packages/language-yaml \
-		packages/adapters-claude \
-		packages/adapters-copilot \
-		packages/adapters-codex; do \
+		context-router-cli \
+		context-router-contracts \
+		context-router-core \
+		context-router-storage-sqlite \
+		context-router-graph-index \
+		context-router-ranking \
+		context-router-memory \
+		context-router-runtime \
+		context-router-workspace \
+		context-router-benchmark \
+		context-router-language-python \
+		context-router-language-typescript \
+		context-router-language-yaml \
+		context-router-adapters-claude \
+		context-router-adapters-copilot \
+		context-router-adapters-codex; do \
 		echo "Building $$pkg..."; \
-		PKG_NAME=$$(grep '^name' $$pkg/pyproject.toml | head -1 | cut -d'"' -f2); \
-		uv build --package $$PKG_NAME --out-dir dist/ 2>&1; \
+		uv build --package "$$pkg" --out-dir dist/; \
 	done
 	@echo "Built $$(ls dist/ | wc -l | tr -d ' ') artifacts in dist/"
 
@@ -50,7 +49,7 @@ release: bump-version test build
 	@echo "Ready to publish $(VERSION). Artifacts in dist/:"
 	@ls dist/
 	@echo ""
-	@echo "To publish: UV_PUBLISH_TOKEN=<your-token> uv publish --directory dist/"
+	@echo "To publish: UV_PUBLISH_TOKEN=<your-token> uv publish --directory dist/ --index-url https://upload.pypi.org/legacy/"
 	@echo "Or set PYPI_TOKEN env var and run: make publish"
 
 # Publish to PyPI (requires PYPI_TOKEN env var)

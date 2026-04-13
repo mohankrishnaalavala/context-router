@@ -38,7 +38,7 @@ context-router-language-typescript = { workspace = true }
 context-router-adapters-claude = { workspace = true }
 context-router-adapters-copilot = { workspace = true }
 context-router-adapters-codex = { workspace = true }
-context-router = { workspace = true }
+context-router-cli = { workspace = true }
 context-router-mcp-server = { workspace = true }
 
 [tool.uv.workspace]
