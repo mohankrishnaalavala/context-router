@@ -17,17 +17,19 @@ AI coding agents work best with focused, relevant context rather than entire cod
 
 | Feature | Detail |
 |---|---|
-| **Language support** | Python (full), TypeScript/JS (full), YAML (k8s/Helm/GHA), Java, .NET (stubs) |
-| **Edge types** | `imports`, `calls` (function-level), `tested_by`, community links |
+| **Language support** | Python (full), TypeScript/JS (full), YAML (k8s/Helm/GHA), Java (full), .NET/C# (full) |
+| **Edge types** | `imports`, `calls` (function-level), `tested_by`, `needs` (GHA), community links |
 | **Task modes** | `review`, `implement`, `debug`, `handover` |
-| **Ranking** | Confidence scoring, query keyword boost, optional semantic boost (sentence-transformers) |
+| **Ranking** | Confidence scoring, freshness decay (30-day half-life), query keyword boost, optional semantic boost |
 | **Token budget** | Hard cap with per-source-type guarantee; dynamic scaling for small repos |
-| **Memory** | Persistent session observations + architectural decision records (FTS search) |
+| **Memory** | Persistent observations (FTS), ADRs, freshness scoring, `memory export`, `decisions export` |
+| **Feedback loop** | `feedback record/stats/list` — per-file confidence adjustments from agent usage |
+| **Debug memory** | `error_hash` deduplication, `top_frames` extraction, `past_debug` recall (same error = boosts prior fix files) |
 | **Multi-repo** | Workspace YAML, cross-repo link detection, unified ranked pack |
 | **Graph viz** | Interactive D3.js HTML — color by kind or community cluster |
-| **MCP server** | 8 tools over stdio JSON-RPC 2.0, compatible with Claude Code, Cursor, Windsurf |
+| **MCP server** | **13 tools** over stdio JSON-RPC 2.0, compatible with Claude Code, Cursor, Windsurf |
 | **Agent adapters** | Claude system prompt, Copilot instructions, Codex task prompt |
-| **Benchmarks** | 20-task suite, 3 baselines, Markdown report |
+| **Benchmarks** | 20-task suite, 3 baselines, external repo testing, Markdown report |
 
 ## Requirements
 
@@ -85,8 +87,9 @@ uv run context-router pack --mode review --json
 | [`watch`](#watch) | Incrementally re-index on file save |
 | [`pack`](#pack) | Generate a ranked context pack |
 | [`explain`](#explain) | Explain the last pack's selections |
-| [`memory`](#memory) | Add/search session observations |
-| [`decisions`](#decisions) | Add/search architectural decision records |
+| [`memory`](#memory) | Add/search/export session observations |
+| [`decisions`](#decisions) | Add/search/export architectural decision records |
+| [`feedback`](#feedback) | Record and review agent feedback for context packs |
 | [`graph`](#graph) | Generate interactive HTML graph visualization |
 | [`workspace`](#workspace) | Multi-repo workspace management |
 | [`benchmark`](#benchmark) | Run 20-task benchmark suite |
@@ -202,13 +205,22 @@ context-router memory add --from-session SESSION.json   # import from JSON file
 context-router memory add --stdin                        # import from stdin pipe
 context-router memory capture SUMMARY [OPTIONS]          # capture inline from args
 context-router memory search QUERY
+context-router memory list [--sort freshness|recency|confidence] [--limit N]
 context-router memory stale
+context-router memory export [--output PATH] [--redacted] [--limit N]
 ```
 
 `stale` lists observations whose referenced files no longer exist in the index.
 
 `capture` applies guardrails automatically: duplicates (same task type + summary) are silently
 skipped, and secret values in `--commands` are redacted before storage.
+
+`export` writes a single Markdown file suitable for team sharing. Pass `--redacted` to strip
+file paths and commit SHAs (keeps fix summaries).
+
+**Freshness scoring**: `effective_confidence = min(0.95, confidence × decay + access_boost)`.
+Decay uses a 30-day half-life; each search access adds +0.02 (capped at +0.20). Stale
+observations fade gracefully rather than being deleted.
 
 **Examples:**
 
@@ -227,6 +239,12 @@ echo '{"summary": "deployed to staging", "task_type": "deploy"}' \
 # Search for past observations about authentication
 uv run context-router memory search "auth token"
 
+# List observations sorted by freshness
+uv run context-router memory list --sort freshness --limit 20
+
+# Export for team sharing (redacted: strips file paths)
+uv run context-router memory export --output docs/memory.md --redacted
+
 # Find observations referencing files that were deleted
 uv run context-router memory stale
 ```
@@ -241,9 +259,15 @@ Manage architectural decision records (ADRs). Persisted with FTS5 search across 
 context-router decisions add TITLE [--decision TEXT] [--context TEXT] [--consequences TEXT] [--tags TAGS] [--status STATUS]
 context-router decisions search QUERY
 context-router decisions list
+context-router decisions supersede OLD_ID NEW_ID
+context-router decisions export [--output-dir PATH] [--status accepted|all]
 ```
 
 `--status` accepts: `proposed` | `accepted` | `deprecated` | `superseded`
+
+`supersede` links an old decision to its replacement, preserving the audit trail.
+
+`export` writes one ADR Markdown file per decision to `output_dir`, named `0001-title-slug.md`.
 
 **Examples:**
 
@@ -256,6 +280,52 @@ uv run context-router decisions add "Use SQLite for local storage" \
 
 # Search decisions by keyword
 uv run context-router decisions search "database"
+
+# Supersede an old decision with a new one
+uv run context-router decisions supersede OLD_UUID NEW_UUID
+
+# Export accepted decisions as individual ADR files
+uv run context-router decisions export --output-dir docs/adr/
+```
+
+---
+
+### `feedback`
+
+Record agent feedback for context packs — drives confidence adjustments over time.
+
+```
+context-router feedback record --pack-id ID [--useful yes|no] [--missing FILES] [--noisy FILES] [--reason TEXT]
+context-router feedback stats [--project-root PATH]
+context-router feedback list [--limit N] [--project-root PATH]
+```
+
+**How it works:**
+
+Each `feedback record` call stores one `PackFeedback` entry. After ≥3 reports for the same file:
+- **missing** files get a **+0.05** confidence boost in future packs
+- **noisy** files get a **−0.10** confidence penalty in future packs
+
+`stats` shows aggregate usefulness percentage plus top missing and noisy files.
+
+**Examples:**
+
+```bash
+# Record that a pack was useful but missed an important file
+uv run context-router feedback record \
+  --pack-id "$(cat .context-router/last-pack.json | jq -r .id)" \
+  --useful yes \
+  --missing "auth/middleware.py"
+
+# Record that browser extension files were irrelevant noise
+uv run context-router feedback record \
+  --pack-id pack-456 \
+  --useful no \
+  --noisy "dist/extension/background.js" \
+  --reason "Browser extension files not relevant for backend debugging"
+
+# View aggregate feedback stats
+uv run context-router feedback stats
 ```
 
 ---
@@ -339,7 +409,7 @@ Start the context-router MCP server over stdio JSON-RPC 2.0, exposing all tools 
 context-router mcp
 ```
 
-**Available MCP tools:**
+**Available MCP tools (13 total):**
 
 | Tool | What it does |
 |---|---|
@@ -353,6 +423,9 @@ context-router mcp
 | `get_decisions` | Search or list architectural decision records |
 | `save_observation` | Persist a coding-session observation (dedup + secret redaction applied) |
 | `save_decision` | Persist an architectural decision record (ADR) |
+| `list_memory` | List observations sorted by freshness score |
+| `mark_decision_superseded` | Link an old decision to its replacement |
+| `record_feedback` | Record agent feedback for a context pack (useful/missing/noisy) |
 
 ---
 
@@ -511,10 +584,10 @@ packages/
   language-python/      # Python AST (tree-sitter): symbols, imports, calls
   language-typescript/  # TypeScript/JS AST (tree-sitter): symbols, imports, calls
   language-yaml/        # YAML: k8s resources, Helm charts, GitHub Actions
-  language-java/        # Java (stub)
-  language-dotnet/      # .NET/C# (stub)
-  memory/               # Observation store + FTS
-  runtime/              # Stack trace + JUnit/pytest XML parsers
+  language-java/        # Java (full): imports→DependencyEdge, call edges, JavaDoc
+  language-dotnet/      # .NET/C# (full): using→DependencyEdge, call edges, attributes
+  memory/               # Observation store + FTS + freshness scoring + export
+  runtime/              # Stack trace + JUnit/pytest XML parsers + error_hash + top_frames
   workspace/            # Multi-repo workspace support
   benchmark/            # 20-task benchmark harness
   adapters-claude/      # Claude system-prompt adapter
@@ -540,7 +613,7 @@ apps/
 # Install all packages + dev dependencies
 uv sync --all-packages --extra dev
 
-# Run all 403 tests
+# Run all 513 tests
 uv run pytest --tb=short -q
 
 # Lint
@@ -584,17 +657,33 @@ Install your package into the workspace and `context-router index` will pick it 
 
 ## Benchmark Results
 
-Measured on the context-router codebase itself (286 files, 1 765 symbols, 3 174 edges):
+Measured on two codebases — context-router itself and an external Python CLI tool:
 
-| Mode | Avg tokens selected | vs naive (all symbols) | Avg latency |
-|---|---|---|---|
-| review | 1 420 | −73% | 118 ms |
-| implement | 1 680 | −68% | 124 ms |
-| debug | 1 290 | −75% | 142 ms |
-| handover | 1 510 | −71% | 139 ms |
-| **overall** | **1 475** | **−64.7%** | **131 ms** |
+| Codebase | Mode | Tokens used | vs naive | Latency |
+|---|---|---|---|---|
+| context-router (1,189 symbols) | all modes avg | 8,000 | −64.7% | 131 ms |
+| project_handover (1,313 symbols) | review | 8,000 / 38,319 | **−79.1%** | ~860 ms |
+| project_handover (1,313 symbols) | debug + error file | 8,180 / 38,430 | **−78.7%** | ~850 ms |
+| multi-repo workspace (2 repos) | review | ~7,999 | −79% | ~930 ms |
 
-See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown.
+Latency includes ~500 ms uv cold-start; warm invocations typically 150–200 ms.
+
+See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown, external repo testing, and Phase 4–6 feature effectiveness data.
+
+---
+
+## Roadmap
+
+| Phase | Status | What shipped |
+|-------|--------|--------------|
+| **Phase 1** — Core foundation | ✅ complete | CLI, SQLite, Python/TS analyzers, 4 pack modes, MCP server (10 tools), benchmark harness |
+| **Phase 2** — Memory freshness | ✅ complete | Time-decay scoring (30-day half-life), access boost, `memory list`, `decisions supersede`, `list_memory`/`mark_decision_superseded` MCP tools (12 total) |
+| **Phase 3** — Richer language edges | ✅ complete | Java/C# full analyzers (imports + call edges), YAML Docker Compose + GHA `needs` edges, real line numbers |
+| **Phase 4** — Better debug memory | ✅ complete | `error_hash` for cross-session error dedup, `top_frames` extraction, `past_debug` confidence tier (0.90), JUnit `failing_tests` |
+| **Phase 5** — Team-safe export | ✅ complete | `memory export` (Markdown, redacted mode), `decisions export` (per-ADR .md files with slug filenames) |
+| **Phase 6** — Agent feedback loop | ✅ complete | `PackFeedback` model, `pack_feedback` DB table, `feedback record/stats/list` CLI, `record_feedback` MCP tool (13 total), per-file confidence adjustments |
+| **Phase 7** — Astro/Vue/Svelte | planned | Single-file component analyzers for modern frontend repos |
+| **Phase 8** — Semantic ranking | planned | sentence-transformers embedding index for query-to-symbol similarity |
 
 ---
 
