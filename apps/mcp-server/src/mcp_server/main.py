@@ -296,6 +296,60 @@ _TOOLS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "list_memory": {
+        "fn": tools.list_memory,
+        "description": (
+            "List stored coding-session observations ordered by freshness "
+            "(default), raw confidence, or recency. Returns effective_confidence "
+            "for each observation so callers can see the time-decay-adjusted score."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "sort": {
+                    "type": "string",
+                    "enum": ["freshness", "confidence", "recent"],
+                    "description": "Sort order. Defaults to freshness (time-decay × confidence).",
+                    "default": "freshness",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of observations to return.",
+                    "default": 20,
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
+    "mark_decision_superseded": {
+        "fn": tools.mark_decision_superseded,
+        "description": (
+            "Mark an existing architectural decision as superseded by a newer one. "
+            "Sets the old decision's status to 'superseded' and records the "
+            "UUID of the replacement for audit purposes."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["old_id", "new_id"],
+            "properties": {
+                "old_id": {
+                    "type": "string",
+                    "description": "UUID of the decision being replaced.",
+                },
+                "new_id": {
+                    "type": "string",
+                    "description": "UUID of the new decision that supersedes it.",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
 }
 
 

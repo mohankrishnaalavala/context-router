@@ -158,6 +158,76 @@ def stale(
         typer.echo(f"  {obs.summary[:80]}")
 
 
+@memory_app.command("list")
+def list_memory(
+    sort: Annotated[
+        str,
+        typer.Option("--sort", help="Sort order: freshness (default), confidence, or recent."),
+    ] = "freshness",
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Maximum number of observations to show."),
+    ] = 20,
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List stored observations sorted by freshness, confidence, or recency.
+
+    freshness — effective_confidence (time-decay × quality × access boost)
+    confidence — raw stored confidence_score
+    recent     — most recently created first
+
+    Exit codes:
+      0 — success
+      1 — database not initialised
+    """
+    from memory.freshness import effective_confidence
+
+    store, db = _open_store(project_root)
+    try:
+        if sort == "freshness":
+            observations = store.list_by_freshness()[:limit]
+        elif sort == "confidence":
+            observations = sorted(
+                store._get_all(), key=lambda o: o.confidence_score, reverse=True
+            )[:limit]
+        else:  # "recent" or any other value
+            observations = store._get_all()[:limit]
+    finally:
+        db.close()
+
+    if json_output:
+        import json
+        typer.echo(json.dumps(
+            [
+                {**r.model_dump(mode="json"), "effective_confidence": round(effective_confidence(r), 4)}
+                for r in observations
+            ],
+            indent=2,
+        ))
+        return
+
+    if not observations:
+        typer.echo("No observations found.")
+        return
+
+    for obs in observations:
+        eff = round(effective_confidence(obs), 3)
+        age_days = (import_datetime() - obs.timestamp).days
+        typer.echo(
+            f"  [{obs.task_type or 'general'}] {obs.summary[:70]}"
+            f"  (eff={eff}, age={age_days}d)"
+        )
+
+
+def import_datetime() -> "datetime":
+    from datetime import UTC, datetime
+    return datetime.now(UTC)
+
+
 @memory_app.command("capture")
 def capture(
     summary: Annotated[str, typer.Argument(help="One-line task summary.")],

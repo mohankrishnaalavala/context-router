@@ -40,7 +40,7 @@ class TestPing:
 # ---------------------------------------------------------------------------
 
 class TestToolsList:
-    def test_returns_all_ten_tools(self):
+    def test_returns_all_twelve_tools(self):
         resp = _handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = {t["name"] for t in resp["result"]["tools"]}
         assert names == {
@@ -54,6 +54,8 @@ class TestToolsList:
             "get_decisions",
             "save_observation",
             "save_decision",
+            "list_memory",
+            "mark_decision_superseded",
         }
 
     def test_each_tool_has_schema(self):

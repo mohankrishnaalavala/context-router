@@ -72,3 +72,40 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 2. Use `detect_changes` for code review.
 3. Use `get_affected_flows` to understand impact.
 4. Use `query_graph` pattern="tests_for" to check coverage.
+
+---
+
+## MCP Tools: context-router (this project)
+
+**Use context-router MCP tools for task-specific context selection.**
+Start every implement/debug/review/handover task with `get_context_pack` to
+get a pre-ranked, token-budgeted set of the most relevant files — faster than
+Grep or code-review-graph for task-scoped work.
+
+### When to use context-router FIRST
+
+- **Starting any coding task**: `get_context_pack(mode="implement", query="your task")`
+- **Debugging a failure**: `get_debug_pack(query="...", error_file="...")`
+- **Resuming a session**: `get_context_pack(mode="handover")` + `search_memory(query="...")`
+- **Looking up past decisions**: `get_decisions(query="...")`
+- **Saving learning after a task**: `save_observation(summary="...", task_type="...", files_touched=[...])`
+
+### Workflow: context-router + code-review-graph together
+
+1. `get_context_pack` → ranked files for the task (token-efficient starting point)
+2. `code-review-graph: query_graph` → trace callers/callees of specific symbols found in step 1
+3. `code-review-graph: get_impact_radius` → blast radius before modifying a file
+4. `save_observation` after task completes → persists learning for next session
+
+### Key tools
+
+| Tool | Use when |
+|------|----------|
+| `get_context_pack` | Starting review / implement / handover task |
+| `get_debug_pack` | Debugging a failure (optional: pass error_file) |
+| `search_memory` | Finding past observations about a topic |
+| `get_decisions` | Looking up architectural decisions |
+| `save_observation` | Persisting a task observation after completion |
+| `save_decision` | Recording an architectural decision |
+| `list_memory` | Browsing observations sorted by freshness |
+| `mark_decision_superseded` | Linking an old decision to its replacement |

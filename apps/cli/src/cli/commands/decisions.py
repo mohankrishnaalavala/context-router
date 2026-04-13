@@ -167,3 +167,35 @@ def list_decisions(
 
     for dec in all_decs:
         typer.echo(f"  [{dec.status}] {dec.title}")
+
+
+@decisions_app.command("supersede")
+def supersede(
+    old_id: Annotated[str, typer.Argument(help="UUID of the decision being replaced.")],
+    new_id: Annotated[str, typer.Argument(help="UUID of the new decision that supersedes it.")],
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Mark an old decision as superseded by a newer one.
+
+    Sets the old decision's status to 'superseded' and records the link
+    to the new decision UUID.
+
+    Exit codes:
+      0 — success
+      1 — database not initialised
+    """
+    store, db = _open_store(project_root)
+    try:
+        store.mark_superseded(old_id, new_id)
+    finally:
+        db.close()
+
+    if json_output:
+        import json
+        typer.echo(json.dumps({"superseded": old_id, "superseded_by": new_id}))
+    else:
+        typer.echo(f"Decision {old_id[:8]} marked as superseded by {new_id[:8]}.")

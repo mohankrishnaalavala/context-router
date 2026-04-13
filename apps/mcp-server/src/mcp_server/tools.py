@@ -406,6 +406,84 @@ def search_memory(query: str, project_root: str = "") -> dict:
     return {"results": [r.model_dump(mode="json") for r in results]}
 
 
+def list_memory(
+    sort: str = "freshness",
+    limit: int = 20,
+    project_root: str = "",
+) -> dict:
+    """List stored observations ordered by freshness, confidence, or recency.
+
+    Args:
+        sort: Sort order — ``freshness`` (default), ``confidence``, or ``recent``.
+        limit: Maximum number of observations to return (default 20).
+        project_root: Project root. Auto-detected if omitted.
+
+    Returns:
+        Dict with a list of observation dicts, each including
+        ``effective_confidence`` for freshness-sorted results.
+    """
+    from core.orchestrator import _find_project_root
+    from memory.freshness import effective_confidence
+    from memory.store import ObservationStore
+    from storage_sqlite.database import Database
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    db_path = root / ".context-router" / "context-router.db"
+    if not db_path.exists():
+        return {"error": "Database not found. Run init first.", "observations": []}
+
+    with Database(db_path) as db:
+        store = ObservationStore(db)
+        if sort == "freshness":
+            observations = store.list_by_freshness()[:limit]
+        elif sort == "confidence":
+            observations = sorted(
+                store._get_all(), key=lambda o: o.confidence_score, reverse=True
+            )[:limit]
+        else:  # "recent" or any other value
+            observations = store._get_all()[:limit]
+
+    return {
+        "observations": [
+            {**o.model_dump(mode="json"), "effective_confidence": round(effective_confidence(o), 4)}
+            for o in observations
+        ]
+    }
+
+
+def mark_decision_superseded(
+    old_id: str,
+    new_id: str,
+    project_root: str = "",
+) -> dict:
+    """Mark an architectural decision as superseded by another.
+
+    Sets the old decision's status to ``superseded`` and records the UUID of
+    the replacement so the link is preserved for audit purposes.
+
+    Args:
+        old_id: UUID of the decision being replaced.
+        new_id: UUID of the new decision that supersedes it.
+        project_root: Project root. Auto-detected if omitted.
+
+    Returns:
+        Dict with ``updated`` bool and the two UUIDs on success.
+    """
+    from core.orchestrator import _find_project_root
+    from memory.store import DecisionStore
+    from storage_sqlite.database import Database
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    db_path = root / ".context-router" / "context-router.db"
+    if not db_path.exists():
+        return {"error": "Database not found. Run init first.", "updated": False}
+
+    with Database(db_path) as db:
+        DecisionStore(db).mark_superseded(old_id, new_id)
+
+    return {"updated": True, "superseded": old_id, "superseded_by": new_id}
+
+
 def get_decisions(query: str = "", project_root: str = "") -> dict:
     """Search or list stored architectural decisions.
 
