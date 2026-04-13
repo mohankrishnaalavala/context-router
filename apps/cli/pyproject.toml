@@ -1,6 +1,6 @@
 [project]
 name = "context-router-cli"
-version = "0.2.0"
+version = "0.2.2"
 requires-python = ">=3.12"
 description = "Local-first CLI and MCP server for AI coding context — minimum useful context, maximum agent performance"
 readme = "README.md"
@@ -16,21 +16,14 @@ classifiers = [
 ]
 dependencies = [
     "typer>=0.12",
-    "context-router-contracts",
-    "context-router-core",
-    "context-router-graph-index",
-    "context-router-storage-sqlite",
-    "context-router-ranking",
-    "context-router-memory",
-    "context-router-runtime",
-    "context-router-workspace",
-    "context-router-benchmark",
-    "context-router-language-python",
-    "context-router-language-yaml",
-    "context-router-language-typescript",
-    "context-router-adapters-claude",
-    "context-router-adapters-copilot",
-    "context-router-adapters-codex",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "tree-sitter>=0.21",
+    "tree-sitter-python>=0.21",
+    "tree-sitter-typescript>=0.21",
+    "tree-sitter-java>=0.21",
+    "tree-sitter-c-sharp>=0.21",
+    "watchdog>=4.0",
 ]
 
 [project.urls]
@@ -50,3 +43,25 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cli"]
+
+# Bundle all workspace-internal sub-packages so the wheel is self-contained.
+# These paths are relative to apps/cli/ (this file's directory).
+[tool.hatch.build.targets.wheel.force-include]
+"../../packages/contracts/src/contracts"       = "contracts"
+"../../packages/core/src/core"                 = "core"
+"../../packages/storage-sqlite/src/storage_sqlite" = "storage_sqlite"
+"../../packages/graph-index/src/graph_index"   = "graph_index"
+"../../packages/memory/src/memory"             = "memory"
+"../../packages/runtime/src/runtime"           = "runtime"
+"../../packages/ranking/src/ranking"           = "ranking"
+"../../packages/workspace/src/workspace"       = "workspace"
+"../../packages/benchmark/src/benchmark"       = "benchmark"
+"../../packages/language-python/src/language_python" = "language_python"
+"../../packages/language-yaml/src/language_yaml"     = "language_yaml"
+"../../packages/language-typescript/src/language_typescript" = "language_typescript"
+"../../packages/language-java/src/language_java"     = "language_java"
+"../../packages/language-dotnet/src/language_dotnet" = "language_dotnet"
+"../../packages/adapters-claude/src/adapters_claude" = "adapters_claude"
+"../../packages/adapters-copilot/src/adapters_copilot" = "adapters_copilot"
+"../../packages/adapters-codex/src/adapters_codex"   = "adapters_codex"
+"../../apps/mcp-server/src/mcp_server"         = "mcp_server"
