@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.2.2] — 2026-04-13
+
+### Fixed
+- **Missing `watchdog` dependency**: `graph_index.watcher` uses `watchdog>=4.0` which was not declared in the bundled wheel; added to `context-router-cli` dependencies
+
+---
+
 ## [0.2.1] — 2026-04-13
 
 ### Fixed
