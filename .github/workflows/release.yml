@@ -52,11 +52,12 @@ jobs:
 
       - name: Build context-router-cli
         run: |
-          # Only publish the user-facing CLI package.
-          # Sub-packages (contracts, core, etc.) are workspace-internal
-          # and not distributed on PyPI independently.
+          # Build wheel only (no sdist).
+          # The wheel bundles all workspace-internal sub-packages via
+          # force-include in pyproject.toml; hatchling resolves ../../ paths
+          # correctly when building a wheel directly, but not from an sdist.
           mkdir -p dist
-          uv build --package context-router-cli --out-dir dist/
+          uv build --package context-router-cli --out-dir dist/ --wheel
           echo "Artifacts:"
           ls -lh dist/
 

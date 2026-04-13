@@ -9,6 +9,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.2.1] — 2026-04-13
+
+### Fixed
+- **PyPI install**: `pip install context-router-cli` now works — all workspace-internal sub-packages are bundled into the wheel via hatchling `force-include`; previously they were listed as dependencies that didn't exist on PyPI
+- **Wheel-only build**: Release pipeline now uses `--wheel` flag (no sdist) to correctly resolve bundled source paths
+- **Python version clarity**: Package requires Python ≥ 3.12; install via `uv tool install context-router-cli` to use uv's managed Python automatically
+
+---
+
 ## [0.2.0] — 2026-04-13
 
 ### Added
