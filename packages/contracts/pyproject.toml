@@ -1,6 +1,6 @@
 [project]
 name = "context-router-contracts"
-version = "0.1.0"
+version = "0.3.0"
 requires-python = ">=3.12"
 description = "Shared Pydantic contracts and plugin interfaces for context-router"
 dependencies = [
