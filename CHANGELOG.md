@@ -7,6 +7,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+---
+
+## [0.2.0] — 2026-04-13
+
 ### Added
 - **CALLS edges**: Python analyzer now emits `DependencyEdge(edge_type="calls")` for function-level call sites (tracked via `current_func` AST walk parameter)
 - **TESTED_BY edges**: Post-indexing pass links `test_foo()` → `foo()` via name-stripping heuristic; stored with `edge_type="tested_by"`

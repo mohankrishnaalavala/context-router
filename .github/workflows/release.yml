@@ -50,30 +50,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages --extra dev
 
-      - name: Build all packages
+      - name: Build context-router-cli
         run: |
+          # Only publish the user-facing CLI package.
+          # Sub-packages (contracts, core, etc.) are workspace-internal
+          # and not distributed on PyPI independently.
           mkdir -p dist
-          for pkg in \
-            context-router-cli \
-            context-router-contracts \
-            context-router-core \
-            context-router-storage-sqlite \
-            context-router-graph-index \
-            context-router-ranking \
-            context-router-memory \
-            context-router-runtime \
-            context-router-workspace \
-            context-router-benchmark \
-            context-router-language-python \
-            context-router-language-typescript \
-            context-router-language-yaml \
-            context-router-adapters-claude \
-            context-router-adapters-copilot \
-            context-router-adapters-codex; do
-            echo "Building $pkg..."
-            uv build --package "$pkg" --out-dir dist/
-          done
-          echo "Built $(ls dist/ | wc -l | tr -d ' ') artifacts"
+          uv build --package context-router-cli --out-dir dist/
+          echo "Artifacts:"
+          ls -lh dist/
 
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -94,7 +79,6 @@ jobs:
       - name: Extract changelog section
         id: changelog
         run: |
-          # Extract the section matching the tag version
           VERSION="${GITHUB_REF_NAME#v}"
           NOTES=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
           echo "notes<<EOF" >> $GITHUB_OUTPUT
@@ -104,7 +88,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "v${{ github.ref_name }}"
+          name: "${{ github.ref_name }}"
           body: ${{ steps.changelog.outputs.notes }}
           draft: false
           prerelease: false
