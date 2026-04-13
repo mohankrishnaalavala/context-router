@@ -45,7 +45,22 @@ def _extract_docstring(body_node: Node) -> str:
     return ""
 
 
-def _walk(node: Node, results: list[Symbol | DependencyEdge], file: Path) -> None:
+_BUILTIN_NAMES: frozenset[str] = frozenset({
+    "print", "len", "str", "int", "float", "bool", "list", "dict", "set",
+    "tuple", "range", "type", "isinstance", "hasattr", "getattr", "setattr",
+    "super", "property", "staticmethod", "classmethod", "enumerate", "zip",
+    "map", "filter", "sorted", "reversed", "min", "max", "sum", "any", "all",
+    "next", "iter", "open", "vars", "repr", "id", "abs", "round", "format",
+    "input", "exit", "quit", "breakpoint", "dir", "help",
+})
+
+
+def _walk(
+    node: Node,
+    results: list[Symbol | DependencyEdge],
+    file: Path,
+    current_func: str | None = None,
+) -> None:
     """Recursively walk the AST and collect symbols and edges."""
     if node.type == "function_definition":
         name_node = _first_child_of_type(node, "identifier")
@@ -66,9 +81,9 @@ def _walk(node: Node, results: list[Symbol | DependencyEdge], file: Path) -> Non
                 docstring=docstring,
             )
         )
-        # Recurse into body (to catch nested/method defs)
+        # Recurse into body with this function as the enclosing scope
         if block_node:
-            _walk(block_node, results, file)
+            _walk(block_node, results, file, current_func=name)
         return  # Don't double-process function children
 
     if node.type == "class_definition":
@@ -90,7 +105,30 @@ def _walk(node: Node, results: list[Symbol | DependencyEdge], file: Path) -> Non
             )
         )
         if block_node:
-            _walk(block_node, results, file)
+            _walk(block_node, results, file, current_func=current_func)
+        return
+
+    if node.type == "call" and current_func is not None:
+        # Emit a CALLS edge from the enclosing function to the called symbol.
+        func_node = node.children[0] if node.children else None
+        called = ""
+        if func_node is not None:
+            if func_node.type == "identifier":
+                called = _text(func_node)
+            elif func_node.type == "attribute":
+                attr_child = _first_child_of_type(func_node, "identifier")
+                called = _text(attr_child) if attr_child else ""
+        if called and called not in _BUILTIN_NAMES:
+            results.append(
+                DependencyEdge(
+                    from_symbol=current_func,
+                    to_symbol=called,
+                    edge_type="calls",
+                )
+            )
+        # Recurse for nested calls
+        for child in node.children:
+            _walk(child, results, file, current_func)
         return
 
     if node.type == "import_statement":
@@ -153,7 +191,7 @@ def _walk(node: Node, results: list[Symbol | DependencyEdge], file: Path) -> Non
 
     # Recurse for all other node types
     for child in node.children:
-        _walk(child, results, file)
+        _walk(child, results, file, current_func)
 
 
 class PythonAnalyzer:

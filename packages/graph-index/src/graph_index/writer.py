@@ -10,6 +10,8 @@ from pathlib import Path
 
 from contracts.interfaces import DependencyEdge, Symbol
 from storage_sqlite.repositories import EdgeRepository, SymbolRepository
+from graph_index.community import compute_communities
+from graph_index.test_linker import link_tests
 
 
 class SymbolWriter:
@@ -99,3 +101,18 @@ class SymbolWriter:
             self._edge_repo.add_bulk(resolved, repo)
 
         return len(symbols), len(resolved)
+
+    def finalize(self, repo: str) -> tuple[int, int]:
+        """Run post-indexing passes: TESTED_BY link detection and community detection.
+
+        Call once after all files have been indexed for a repository.
+
+        Args:
+            repo: Logical repository name.
+
+        Returns:
+            (tested_by_edges, communities) counts.
+        """
+        tested_by = link_tests(repo, self._sym_repo, self._edge_repo)
+        communities = compute_communities(repo, self._sym_repo, self._edge_repo)
+        return tested_by, communities

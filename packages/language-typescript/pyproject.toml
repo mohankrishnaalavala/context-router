@@ -1,0 +1,22 @@
+[project]
+name = "context-router-language-typescript"
+version = "0.1.0"
+requires-python = ">=3.12"
+description = "TypeScript/JavaScript language analyzer plugin for context-router"
+dependencies = [
+    "context-router-contracts",
+    "tree-sitter>=0.21",
+    "tree-sitter-typescript>=0.21",
+]
+
+[project.entry-points."context_router.language_analyzers"]
+ts = "language_typescript:TypeScriptAnalyzer"
+tsx = "language_typescript:TypeScriptAnalyzer"
+js = "language_typescript:TypeScriptAnalyzer"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/language_typescript"]

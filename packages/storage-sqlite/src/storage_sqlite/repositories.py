@@ -412,8 +412,8 @@ class SymbolRepository:
         """
         rows = self._conn.execute(
             """
-            SELECT name, kind, file_path, line_start, line_end,
-                   language, signature, docstring
+            SELECT id, name, kind, file_path, line_start, line_end,
+                   language, signature, docstring, community_id
             FROM symbols
             WHERE repo = ?
             LIMIT ?
@@ -430,6 +430,7 @@ class SymbolRepository:
                 language=r["language"] or "",
                 signature=r["signature"] or "",
                 docstring=r["docstring"] or "",
+                community_id=r["community_id"],
             )
             for r in rows
         ]
@@ -455,6 +456,26 @@ class SymbolRepository:
             "SELECT COUNT(*) FROM symbols WHERE repo = ?", (repo,)
         ).fetchone()
         return row[0]
+
+    def update_community(self, repo: str, symbol_id: int, community_id: int) -> None:
+        """Set the community_id for a given symbol."""
+        self._conn.execute(
+            "UPDATE symbols SET community_id=? WHERE repo=? AND id=?",
+            (community_id, repo, symbol_id),
+        )
+        self._conn.commit()
+
+    def get_communities(self, repo: str) -> dict[int, list[int]]:
+        """Return a mapping of community_id -> list of symbol ids."""
+        rows = self._conn.execute(
+            "SELECT id, community_id FROM symbols WHERE repo=? AND community_id IS NOT NULL",
+            (repo,),
+        ).fetchall()
+        result: dict[int, list[int]] = {}
+        for row in rows:
+            cid = row["community_id"]
+            result.setdefault(cid, []).append(row["id"])
+        return result
 
 
 class EdgeRepository:
@@ -569,6 +590,22 @@ class EdgeRepository:
             (repo, file_path, repo, file_path, repo, file_path),
         ).fetchall()
         return [r["file_path"] for r in rows]
+
+    def add_raw(self, repo: str, from_id: int, to_id: int, edge_type: str) -> None:
+        """Insert an edge directly by integer symbol ids without name resolution."""
+        self._conn.execute(
+            "INSERT OR IGNORE INTO edges(repo, from_symbol_id, to_symbol_id, edge_type, weight) "
+            "VALUES (?, ?, ?, ?, 1.0)",
+            (repo, from_id, to_id, edge_type),
+        )
+        self._conn.commit()
+
+    def get_all_edges(self, repo: str) -> list[tuple[int, int]]:
+        """Return all (from_symbol_id, to_symbol_id) pairs for a repository."""
+        rows = self._conn.execute(
+            "SELECT from_symbol_id, to_symbol_id FROM edges WHERE repo=?", (repo,)
+        ).fetchall()
+        return [(r[0], r[1]) for r in rows]
 
     def count(self, repo: str) -> int:
         """Return the total number of edges for a repository."""

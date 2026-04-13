@@ -25,6 +25,7 @@ context-router-language-python = { workspace = true }
 context-router-language-java = { workspace = true }
 context-router-language-dotnet = { workspace = true }
 context-router-language-yaml = { workspace = true }
+context-router-language-typescript = { workspace = true }
 context-router-adapters-claude = { workspace = true }
 context-router-adapters-copilot = { workspace = true }
 context-router-adapters-codex = { workspace = true }
@@ -48,6 +49,7 @@ members = [
     "packages/language-java",
     "packages/language-dotnet",
     "packages/language-yaml",
+    "packages/language-typescript",
     "packages/adapters-claude",
     "packages/adapters-copilot",
     "packages/adapters-codex",
