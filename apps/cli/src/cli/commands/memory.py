@@ -300,3 +300,72 @@ def capture(
             typer.echo("Skipped: duplicate observation (same task type + summary).")
         else:
             typer.echo(f"Captured observation #{row_id}.")
+
+
+@memory_app.command("export")
+def export_memory(
+    output: Annotated[
+        str,
+        typer.Option("--output", help="Output file path. Defaults to .context-router/export/memory.md."),
+    ] = "",
+    sort: Annotated[
+        str,
+        typer.Option("--sort", help="Sort order: freshness (default), confidence, or recent."),
+    ] = "freshness",
+    limit: Annotated[
+        int,
+        typer.Option("--limit", help="Maximum number of observations to export."),
+    ] = 100,
+    redacted: Annotated[
+        bool,
+        typer.Option("--redacted", help="Strip file paths, commands, and commit SHAs for safe sharing."),
+    ] = False,
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Export observations to a Markdown file for team sharing.
+
+    Without --redacted, the export includes file paths, commands, and commit SHAs.
+    With --redacted, only the summary and fix_summary are exported — safe for
+    sharing in public repositories or team wikis.
+
+    Exit codes:
+      0 — success
+      1 — database not initialised
+    """
+    from core.orchestrator import _find_project_root
+    from memory.export import export_observations
+    from memory.freshness import effective_confidence
+
+    store, db = _open_store(project_root)
+    try:
+        if sort == "freshness":
+            observations = store.list_by_freshness()[:limit]
+        elif sort == "confidence":
+            observations = sorted(
+                store._get_all(), key=lambda o: o.confidence_score, reverse=True
+            )[:limit]
+        else:
+            observations = store._get_all()[:limit]
+    finally:
+        db.close()
+
+    # Determine output path
+    if output:
+        out_path = Path(output)
+    else:
+        from core.orchestrator import _find_project_root
+        root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+        out_path = root / ".context-router" / "export" / "memory.md"
+
+    count = export_observations(observations, out_path, redact=redacted)
+
+    if json_output:
+        import json
+        typer.echo(json.dumps({"exported": count, "path": str(out_path)}))
+    else:
+        tag = " (redacted)" if redacted else ""
+        typer.echo(f"Exported {count} observation(s) to {out_path}{tag}")

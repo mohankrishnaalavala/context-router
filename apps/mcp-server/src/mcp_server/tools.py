@@ -406,6 +406,58 @@ def search_memory(query: str, project_root: str = "") -> dict:
     return {"results": [r.model_dump(mode="json") for r in results]}
 
 
+def record_feedback(
+    pack_id: str,
+    useful: "bool | None" = None,
+    missing: "list[str] | None" = None,
+    noisy: "list[str] | None" = None,
+    too_much_context: bool = False,
+    reason: str = "",
+    project_root: str = "",
+) -> dict:
+    """Record agent feedback for a context pack to improve future rankings.
+
+    Files reported as missing get a +0.05 confidence boost in future packs.
+    Files reported as noisy get a -0.10 penalty. Both adjustments apply
+    only after a file accumulates ≥ 3 feedback reports.
+
+    Args:
+        pack_id: UUID of the ContextPack this feedback applies to.
+        useful: True if the pack was helpful, False if not, None if not rated.
+        missing: File or symbol paths that should have been included.
+        noisy: File or symbol paths that were irrelevant.
+        too_much_context: True if the pack contained too many items.
+        reason: Free-text explanation.
+        project_root: Project root. Auto-detected if omitted.
+
+    Returns:
+        Dict with ``recorded`` bool and ``id`` (UUID string).
+    """
+    from core.orchestrator import _find_project_root
+    from contracts.models import PackFeedback
+    from memory.store import FeedbackStore
+    from storage_sqlite.database import Database
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    db_path = root / ".context-router" / "context-router.db"
+    if not db_path.exists():
+        return {"error": "Database not found. Run init first.", "recorded": False}
+
+    fb = PackFeedback(
+        pack_id=pack_id,
+        useful=useful,
+        missing=missing or [],
+        noisy=noisy or [],
+        too_much_context=too_much_context,
+        reason=reason,
+    )
+
+    with Database(db_path) as db:
+        fb_id = FeedbackStore(db).add(fb)
+
+    return {"recorded": True, "id": fb_id}
+
+
 def list_memory(
     sort: str = "freshness",
     limit: int = 20,

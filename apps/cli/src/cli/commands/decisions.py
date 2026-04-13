@@ -199,3 +199,57 @@ def supersede(
         typer.echo(json.dumps({"superseded": old_id, "superseded_by": new_id}))
     else:
         typer.echo(f"Decision {old_id[:8]} marked as superseded by {new_id[:8]}.")
+
+
+@decisions_app.command("export")
+def export_decisions(
+    output_dir: Annotated[
+        str,
+        typer.Option("--output-dir", help="Directory for ADR files. Defaults to docs/adr/."),
+    ] = "",
+    status: Annotated[
+        str,
+        typer.Option("--status", help="Filter by status: accepted (default) or all."),
+    ] = "accepted",
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Export decisions as individual ADR Markdown files.
+
+    Creates one .md file per decision named {sequence}-{slug}.md.
+    By default only accepted decisions are exported; use --status all
+    to include proposed, deprecated, and superseded decisions too.
+
+    Exit codes:
+      0 — success
+      1 — database not initialised
+    """
+    from pathlib import Path
+
+    from core.orchestrator import _find_project_root
+    from memory.export import export_decisions_adr
+
+    store, db = _open_store(project_root)
+    try:
+        all_decs = store.get_all()
+    finally:
+        db.close()
+
+    # Determine output directory
+    if output_dir:
+        out_dir = Path(output_dir)
+    else:
+        root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+        out_dir = root / "docs" / "adr"
+
+    statuses = None if status == "all" else [status]
+    count = export_decisions_adr(all_decs, out_dir, statuses=statuses)
+
+    if json_output:
+        import json
+        typer.echo(json.dumps({"exported": count, "output_dir": str(out_dir)}))
+    else:
+        typer.echo(f"Exported {count} decision(s) to {out_dir}/")

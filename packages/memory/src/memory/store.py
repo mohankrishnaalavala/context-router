@@ -13,9 +13,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from contracts.models import Decision, Observation
+from contracts.models import Decision, Observation, PackFeedback
 from storage_sqlite.database import Database
-from storage_sqlite.repositories import DecisionRepository, ObservationRepository, SymbolRepository
+from storage_sqlite.repositories import DecisionRepository, ObservationRepository, PackFeedbackRepository, SymbolRepository
 
 
 class ObservationStore:
@@ -220,3 +220,72 @@ class DecisionStore:
         all_decisions = self.get_all()
         tag_set = set(t.lower() for t in tags)
         return [d for d in all_decisions if tag_set & {t.lower() for t in d.tags}]
+
+
+class FeedbackStore:
+    """High-level wrapper around PackFeedbackRepository.
+
+    Args:
+        db: An open and initialised Database instance.
+    """
+
+    def __init__(self, db: Database) -> None:
+        """Initialise the store with an open database.
+
+        Args:
+            db: Open Database (caller owns lifetime).
+        """
+        self._repo = PackFeedbackRepository(db.connection)
+
+    def add(self, fb: PackFeedback) -> str:
+        """Persist a feedback record.
+
+        Args:
+            fb: PackFeedback to store.
+
+        Returns:
+            UUID string of the inserted record.
+        """
+        return self._repo.add(fb)
+
+    def get_for_pack(self, pack_id: str) -> list[PackFeedback]:
+        """Return all feedback for a specific pack.
+
+        Args:
+            pack_id: UUID of the ContextPack.
+
+        Returns:
+            List of PackFeedback objects.
+        """
+        return self._repo.get_for_pack(pack_id)
+
+    def get_all(self, limit: int = 100) -> list[PackFeedback]:
+        """Return recent feedback records.
+
+        Args:
+            limit: Maximum records to return.
+
+        Returns:
+            PackFeedback objects, newest first.
+        """
+        return self._repo.get_all(limit)
+
+    def aggregate_stats(self) -> dict:
+        """Return aggregate usefulness statistics.
+
+        Returns:
+            Dict with total, useful_count, not_useful_count, useful_pct,
+            top_missing, top_noisy.
+        """
+        return self._repo.aggregate_stats()
+
+    def get_file_adjustments(self, min_count: int = 3) -> dict[str, float]:
+        """Return per-file confidence adjustments derived from feedback.
+
+        Args:
+            min_count: Minimum occurrences threshold.
+
+        Returns:
+            Dict mapping file path → confidence delta.
+        """
+        return self._repo.get_file_adjustments(min_count)

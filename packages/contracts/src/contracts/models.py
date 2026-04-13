@@ -86,6 +86,10 @@ class RuntimeSignal(BaseModel):
     stack: list[str] = Field(default_factory=list)
     paths: list[Path] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=_utcnow)
+    # Debug memory fields (migration 0005)
+    error_hash: str = ""                                          # SHA256[:16] of normalized exception+message
+    top_frames: list[dict] = Field(default_factory=list)          # [{"file": ..., "function": ..., "line": N}]
+    failing_tests: list[str] = Field(default_factory=list)        # test names from JUnit/pytest
 
 
 class Decision(BaseModel):
@@ -103,6 +107,23 @@ class Decision(BaseModel):
     confidence: Annotated[float, Field(ge=0.0, le=1.0)] = 0.8
     last_reviewed_at: datetime | None = None
     superseded_by: str = ""
+
+
+class PackFeedback(BaseModel):
+    """Agent feedback for a generated context pack.
+
+    Stored to improve pack ranking over time — frequently-missing files
+    get a confidence boost; frequently-noisy files get a penalty.
+    """
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    pack_id: str
+    useful: bool | None = None              # True=yes, False=no, None=not rated
+    missing: list[str] = Field(default_factory=list)   # files/symbols needed but absent
+    noisy: list[str] = Field(default_factory=list)     # files/symbols irrelevant
+    too_much_context: bool = False
+    reason: str = ""
+    timestamp: datetime = Field(default_factory=_utcnow)
 
 
 class RepoDescriptor(BaseModel):
