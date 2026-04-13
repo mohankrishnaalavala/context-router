@@ -26,20 +26,20 @@ def db(tmp_path: Path) -> Database:
 class TestDatabase:
     def test_schema_version_is_1_after_init(self, db: Database):
         row = db.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 2
+        assert row[0] == 3
 
     def test_initialize_is_idempotent(self, tmp_path: Path):
         database = Database(tmp_path / "idempotent.db")
         database.initialize()
         database.initialize()
         row = database.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 2
+        assert row[0] == 3
         database.close()
 
     def test_context_manager(self, tmp_path: Path):
         with Database(tmp_path / "ctx.db") as db:
             row = db.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-            assert row[0] == 2
+            assert row[0] == 3
 
     def test_connection_raises_before_initialize(self, tmp_path: Path):
         database = Database(tmp_path / "uninitialized.db")

@@ -69,6 +69,7 @@ class Observation(BaseModel):
     fix_summary: str = ""
     commit_sha: str = ""
     repo_scope: str = ""
+    task_hash: str = ""
 
 
 class RuntimeSignal(BaseModel):

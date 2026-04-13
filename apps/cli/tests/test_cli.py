@@ -118,3 +118,119 @@ class TestPack:
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert data["mode"] == "implement"
+
+
+class TestMemoryAdd:
+    def test_add_no_source_exits_1(self, tmp_path: Path):
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(app, ["memory", "add", "--project-root", str(tmp_path)])
+        assert result.exit_code == 1
+        assert "stdin" in result.output
+
+    def test_add_from_stdin_single_observation(self, tmp_path: Path):
+        import json
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        payload = json.dumps({"summary": "test obs from stdin"})
+        result = runner.invoke(
+            app,
+            ["memory", "add", "--stdin", "--project-root", str(tmp_path)],
+            input=payload,
+        )
+        assert result.exit_code == 0, result.output
+        assert "1 observation" in result.output
+
+    def test_add_from_stdin_json_output(self, tmp_path: Path):
+        import json
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        payload = json.dumps({"summary": "json output test"})
+        result = runner.invoke(
+            app,
+            ["memory", "add", "--stdin", "--project-root", str(tmp_path), "--json"],
+            input=payload,
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["added"] == 1
+        assert len(data["ids"]) == 1
+
+    def test_add_from_stdin_invalid_json_exits_2(self, tmp_path: Path):
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(
+            app,
+            ["memory", "add", "--stdin", "--project-root", str(tmp_path)],
+            input="not json at all",
+        )
+        assert result.exit_code == 2
+
+    def test_add_from_stdin_list_of_observations(self, tmp_path: Path):
+        import json
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        payload = json.dumps([
+            {"summary": "first obs"},
+            {"summary": "second obs"},
+        ])
+        result = runner.invoke(
+            app,
+            ["memory", "add", "--stdin", "--project-root", str(tmp_path)],
+            input=payload,
+        )
+        assert result.exit_code == 0, result.output
+        assert "2 observation" in result.output
+
+
+class TestMemoryCapture:
+    def test_capture_basic(self, tmp_path: Path):
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(
+            app,
+            [
+                "memory", "capture", "fixed login bug",
+                "--task-type", "debug",
+                "--project-root", str(tmp_path),
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Captured" in result.output
+
+    def test_capture_with_all_options(self, tmp_path: Path):
+        import json
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        result = runner.invoke(
+            app,
+            [
+                "memory", "capture", "added pagination",
+                "--task-type", "implement",
+                "--files", "api.py tests/test_api.py",
+                "--commit", "abc1234",
+                "--fix", "cursor-based pagination",
+                "--project-root", str(tmp_path),
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert data["captured"] is True
+        assert "id" in data
+
+    def test_capture_duplicate_skipped(self, tmp_path: Path):
+        import json
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        args = [
+            "memory", "capture", "same summary",
+            "--task-type", "general",
+            "--project-root", str(tmp_path),
+            "--json",
+        ]
+        result1 = runner.invoke(app, args)
+        result2 = runner.invoke(app, args)
+        assert result1.exit_code == 0
+        assert result2.exit_code == 0
+        data1 = json.loads(result1.output)
+        data2 = json.loads(result2.output)
+        assert data1["captured"] is True
+        assert data2["captured"] is False
+        assert "duplicate" in data2["reason"]
+
+    def test_capture_help_exits_0(self):
+        result = runner.invoke(app, ["memory", "capture", "--help"])
+        assert result.exit_code == 0

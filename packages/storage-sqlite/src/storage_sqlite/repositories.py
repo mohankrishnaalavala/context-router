@@ -39,8 +39,8 @@ class ObservationRepository:
             """
             INSERT INTO observations
                 (timestamp, task_type, summary, files_touched, commands_run,
-                 failures_seen, fix_summary, commit_sha, repo_scope)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 failures_seen, fix_summary, commit_sha, repo_scope, task_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 obs.timestamp.isoformat(),
@@ -52,6 +52,7 @@ class ObservationRepository:
                 obs.fix_summary,
                 obs.commit_sha,
                 obs.repo_scope,
+                obs.task_hash,
             ),
         )
         rowid = cursor.lastrowid
@@ -84,8 +85,26 @@ class ObservationRepository:
         ).fetchall()
         return [self._row_to_observation(r) for r in rows]
 
+    def find_by_task_hash(self, task_hash: str) -> "Observation | None":
+        """Return the first observation with the given task_hash, or None.
+
+        Args:
+            task_hash: Short SHA256 hash computed by the capture guardrail.
+
+        Returns:
+            Matching Observation or None if not found.
+        """
+        if not task_hash:
+            return None
+        row = self._conn.execute(
+            "SELECT * FROM observations WHERE task_hash = ? LIMIT 1",
+            (task_hash,),
+        ).fetchone()
+        return self._row_to_observation(row) if row else None
+
     def _row_to_observation(self, row: sqlite3.Row) -> Observation:
         """Convert a sqlite3.Row to an Observation model."""
+        keys = row.keys() if hasattr(row, "keys") else []
         return Observation(
             timestamp=datetime.fromisoformat(row["timestamp"]),
             task_type=row["task_type"] or "",
@@ -96,6 +115,7 @@ class ObservationRepository:
             fix_summary=row["fix_summary"] or "",
             commit_sha=row["commit_sha"] or "",
             repo_scope=row["repo_scope"] or "",
+            task_hash=row["task_hash"] if "task_hash" in keys else "",
         )
 
 

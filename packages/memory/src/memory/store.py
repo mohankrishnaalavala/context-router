@@ -77,6 +77,17 @@ class ObservationStore:
             ids.append(self._repo.add(obs))
         return ids
 
+    def find_by_task_hash(self, task_hash: str) -> "Observation | None":
+        """Return the first observation with the given task_hash, or None.
+
+        Args:
+            task_hash: Short SHA256 hash from the capture guardrail.
+
+        Returns:
+            Matching Observation or None.
+        """
+        return self._repo.find_by_task_hash(task_hash)
+
     def search(self, query: str) -> list[Observation]:
         """Full-text search observations.
 
@@ -133,6 +144,7 @@ class ObservationStore:
                 fix_summary=r["fix_summary"] or "",
                 commit_sha=r["commit_sha"] or "",
                 repo_scope=r["repo_scope"] or "",
+                task_hash=r["task_hash"] if "task_hash" in r.keys() else "",
             )
             for r in rows
         ]

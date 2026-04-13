@@ -202,6 +202,100 @@ _TOOLS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "save_observation": {
+        "fn": tools.save_observation,
+        "description": (
+            "Persist a coding-session observation to durable memory. "
+            "Duplicate observations (same task_type + summary) are silently skipped. "
+            "Secret values in commands_run are redacted automatically."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["summary"],
+            "properties": {
+                "summary": {
+                    "type": "string",
+                    "description": "One-line description of the task or event.",
+                },
+                "task_type": {
+                    "type": "string",
+                    "description": "Category: debug, implement, commit, handover, general.",
+                    "default": "general",
+                },
+                "files_touched": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "File paths modified during the task.",
+                },
+                "commands_run": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Shell commands executed (secrets will be redacted).",
+                },
+                "failures_seen": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Error or failure messages encountered.",
+                },
+                "fix_summary": {
+                    "type": "string",
+                    "description": "Short description of the fix or resolution.",
+                },
+                "commit_sha": {
+                    "type": "string",
+                    "description": "Git commit SHA if available.",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
+    "save_decision": {
+        "fn": tools.save_decision,
+        "description": (
+            "Persist an architectural decision record (ADR) to project memory. "
+            "Use this to record why a technology, pattern, or approach was chosen."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["title", "decision"],
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Short title for the decision.",
+                },
+                "decision": {
+                    "type": "string",
+                    "description": "The decision itself — what was chosen and why.",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Background context that motivated the decision.",
+                },
+                "consequences": {
+                    "type": "string",
+                    "description": "Trade-offs, risks, or follow-up actions.",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Tags for categorisation.",
+                },
+                "status": {
+                    "type": "string",
+                    "enum": ["proposed", "accepted", "deprecated", "superseded"],
+                    "description": "Decision status.",
+                    "default": "accepted",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
 }
 
 
