@@ -1,11 +1,37 @@
 name: Release
 
 on:
+  # Trigger automatically when a version tag is pushed
   push:
     tags:
       - "v*"
 
+  # Trigger manually from the GitHub Actions UI (Actions → Release → Run workflow)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 0.3.0 — without the v prefix)"
+        required: true
+        type: string
+      prerelease:
+        description: "Mark as pre-release?"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      dry_run:
+        description: "Dry run — build + test only, skip PyPI publish and GitHub release"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
 jobs:
+  # ── 1. Tests ──────────────────────────────────────────────────────────────
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -26,16 +52,11 @@ jobs:
       - name: Run tests
         run: uv run pytest --tb=short -q
 
-  publish:
-    name: Publish to PyPI
+  # ── 2. Build ──────────────────────────────────────────────────────────────
+  build:
+    name: Build wheel
     needs: test
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/context-router-cli
-    permissions:
-      id-token: write  # Required for trusted publishing (no token needed)
-
     steps:
       - uses: actions/checkout@v4
 
@@ -50,16 +71,68 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-packages --extra dev
 
-      - name: Build context-router-cli
+      - name: Build context-router-cli wheel
         run: |
-          # Build wheel only (no sdist).
-          # The wheel bundles all workspace-internal sub-packages via
-          # force-include in pyproject.toml; hatchling resolves ../../ paths
-          # correctly when building a wheel directly, but not from an sdist.
+          # Wheel only — bundles all workspace-internal sub-packages via
+          # hatchling force-include directives in apps/cli/pyproject.toml.
           mkdir -p dist
           uv build --package context-router-cli --out-dir dist/ --wheel
           echo "Artifacts:"
           ls -lh dist/
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ── 3. Tag (manual dispatch only) ─────────────────────────────────────────
+  tag:
+    name: Create git tag
+    needs: build
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.dry_run != 'true'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create and push tag v${{ inputs.version }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          TAG="v${{ inputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists — skipping tag creation"
+          else
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "Created and pushed tag $TAG"
+          fi
+
+  # ── 4. Publish to PyPI ────────────────────────────────────────────────────
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.dry_run != 'true' }}
+    environment:
+      name: pypi
+      url: https://pypi.org/p/context-router-cli
+    permissions:
+      id-token: write  # Required for OIDC trusted publishing (no token needed)
+
+    steps:
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Publish to PyPI (Trusted Publishing)
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -67,29 +140,54 @@ jobs:
           packages-dir: dist/
           skip-existing: true
 
+  # ── 5. GitHub Release ─────────────────────────────────────────────────────
   github-release:
     name: GitHub Release
-    needs: publish
+    needs: [publish, tag]
     runs-on: ubuntu-latest
+    if: |
+      always() &&
+      needs.publish.result != 'failure' &&
+      (needs.tag.result == 'success' || needs.tag.result == 'skipped') &&
+      github.event.inputs.dry_run != 'true'
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract changelog section
+      - name: Resolve tag and version
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=v${{ inputs.version }}"     >> $GITHUB_OUTPUT
+            echo "version=${{ inputs.version }}"  >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.ref_name }}"                   >> $GITHUB_OUTPUT
+            echo "version=${GITHUB_REF_NAME#v}"                 >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract changelog section for ${{ steps.meta.outputs.version }}
         id: changelog
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ steps.meta.outputs.version }}"
           NOTES=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
           echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES"     >> $GITHUB_OUTPUT
+          echo "EOF"        >> $GITHUB_OUTPUT
+
+      - name: Download wheel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "${{ github.ref_name }}"
-          body: ${{ steps.changelog.outputs.notes }}
-          draft: false
-          prerelease: false
+          tag_name:   ${{ steps.meta.outputs.tag }}
+          name:       "${{ steps.meta.outputs.tag }}"
+          body:       ${{ steps.changelog.outputs.notes }}
+          draft:      false
+          prerelease: ${{ inputs.prerelease == 'true' }}
+          files:      dist/*.whl

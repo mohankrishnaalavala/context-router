@@ -9,6 +9,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.0] — 2026-04-13
+
+### Added
+- **Java analyzer (full)**: `language-java` now emits `DependencyEdge` for `import` statements, function-level call edges, and JavaDoc docstrings — previously a stub
+- **C#/.NET analyzer (full)**: `language-dotnet` now emits `DependencyEdge` for `using` directives, call edges, C# attributes in signatures — previously a stub
+- **YAML GHA `needs` edges**: GitHub Actions workflow files emit `needs` dependency edges between jobs; Docker Compose `depends_on` edges also captured; real line numbers on all YAML symbols
+- **Memory freshness scoring**: `effective_confidence = min(0.95, confidence × decay + access_boost)` — 30-day half-life decay, +0.02 per search access (capped +0.20); stale observations fade naturally
+- **`memory list`**: List observations sorted by `freshness`, `recency`, or `confidence` with `--limit`
+- **`decisions supersede`**: Link an old decision to its replacement; superseded decisions show "Superseded by" in export
+- **`memory export`**: Export all observations to a single Markdown file; `--redacted` strips file paths and commit SHAs
+- **`decisions export`**: Export accepted decisions as individual ADR `.md` files (`0001-title-slug.md`); filterable by status
+- **Debug memory — `error_hash`**: Normalized SHA256[:16] of exception type + message (strips line numbers and memory addresses) stored on `RuntimeSignal`; stable across re-runs of the same error
+- **Debug memory — `top_frames`**: Structured `{"file", "function", "line"}` dicts extracted from Python and Java stack traces (top 5 frames)
+- **Debug memory — `past_debug` tier**: On second occurrence of the same `error_hash`, files from the prior fix's stack trace are surfaced with confidence 0.90 — before generic blast-radius candidates
+- **JUnit XML `failing_tests`**: `parse_junit_xml` now populates `failing_tests` with `classname.testname` format and computes `error_hash` per failure
+- **`PackFeedback` model**: Agents record whether a pack was useful, which files were missing, and which were noisy
+- **`feedback record/stats/list`** CLI: persist feedback, view aggregate usefulness %, top missing/noisy files
+- **`record_feedback` MCP tool**: 13th MCP tool — agents call this after consuming a pack to drive continuous improvement
+- **Feedback-adjusted confidence**: Files reported missing ≥3 times get +0.05 boost; noisy ≥3 times get −0.10 penalty — applied at pack-build time
+- **`list_memory` MCP tool**: Browse observations by freshness score (12th tool)
+- **`mark_decision_superseded` MCP tool**: Link old → new decision from MCP (was already in CLI)
+
+### Changed
+- MCP server now exposes **13 tools** (was 10 in v0.2.x): added `list_memory`, `mark_decision_superseded`, `record_feedback`
+- SQLite schema bumped to **version 6** (migrations 0005 adds `error_hash`/`top_frames`/`failing_tests` columns; 0006 adds `pack_feedback` table)
+- Test suite expanded to **513 tests** (was 372 in v0.1.0)
+
+---
+
 ## [0.2.2] — 2026-04-13
 
 ### Fixed
