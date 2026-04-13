@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from contracts.interfaces import DependencyEdge, Symbol
-from contracts.models import Decision, Observation, RuntimeSignal
+from contracts.models import Decision, Observation, PackFeedback, RuntimeSignal
 
 
 class ObservationRepository:
@@ -265,8 +265,9 @@ class RuntimeSignalRepository:
         cursor = self._conn.execute(
             """
             INSERT INTO runtime_signals
-                (source, severity, message, stack, paths, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (source, severity, message, stack, paths, timestamp,
+                 error_hash, top_frames, failing_tests)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 sig.source,
@@ -275,10 +276,60 @@ class RuntimeSignalRepository:
                 json.dumps(sig.stack),
                 json.dumps([str(p) for p in sig.paths]),
                 sig.timestamp.isoformat(),
+                sig.error_hash,
+                json.dumps(sig.top_frames),
+                json.dumps(sig.failing_tests),
             ),
         )
         self._conn.commit()
         return cursor.lastrowid  # type: ignore[return-value]
+
+    def find_by_error_hash(self, error_hash: str) -> list[RuntimeSignal]:
+        """Return signals matching the given error_hash (most recent first).
+
+        Args:
+            error_hash: 16-char normalized error signature hash.
+
+        Returns:
+            Matching RuntimeSignal objects, newest first.
+        """
+        if not error_hash:
+            return []
+        rows = self._conn.execute(
+            "SELECT * FROM runtime_signals WHERE error_hash = ? ORDER BY timestamp DESC",
+            (error_hash,),
+        ).fetchall()
+        return [self._row_to_signal(r) for r in rows]
+
+    def get_recent(self, limit: int = 50) -> list[RuntimeSignal]:
+        """Return the most recently added runtime signals.
+
+        Args:
+            limit: Maximum number of signals to return.
+
+        Returns:
+            RuntimeSignal objects, newest first.
+        """
+        rows = self._conn.execute(
+            "SELECT * FROM runtime_signals ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [self._row_to_signal(r) for r in rows]
+
+    def _row_to_signal(self, row: sqlite3.Row) -> RuntimeSignal:
+        """Convert a sqlite3.Row to a RuntimeSignal model."""
+        keys = row.keys() if hasattr(row, "keys") else []
+        return RuntimeSignal(
+            source=row["source"] or "",
+            severity=row["severity"],
+            message=row["message"],
+            stack=json.loads(row["stack"] or "[]"),
+            paths=[Path(p) for p in json.loads(row["paths"] or "[]")],
+            timestamp=datetime.fromisoformat(row["timestamp"]),
+            error_hash=row["error_hash"] if "error_hash" in keys else "",
+            top_frames=json.loads(row["top_frames"]) if "top_frames" in keys else [],
+            failing_tests=json.loads(row["failing_tests"]) if "failing_tests" in keys else [],
+        )
 
 
 class SymbolRepository:
@@ -681,3 +732,154 @@ class EdgeRepository:
             "SELECT COUNT(*) FROM edges WHERE repo = ?", (repo,)
         ).fetchone()
         return row[0]
+
+
+class PackFeedbackRepository:
+    """Typed access to the pack_feedback table (Phase 6 — agent feedback loop)."""
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection."""
+        self._conn = conn
+
+    def add(self, fb: PackFeedback) -> str:
+        """Insert a feedback record and return its id.
+
+        Args:
+            fb: PackFeedback to persist.
+
+        Returns:
+            UUID string of the inserted record.
+        """
+        self._conn.execute(
+            """
+            INSERT INTO pack_feedback
+                (id, pack_id, useful, missing, noisy, too_much_ctx, reason, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                fb.id,
+                fb.pack_id,
+                None if fb.useful is None else (1 if fb.useful else 0),
+                json.dumps(fb.missing),
+                json.dumps(fb.noisy),
+                1 if fb.too_much_context else 0,
+                fb.reason,
+                fb.timestamp.isoformat(),
+            ),
+        )
+        self._conn.commit()
+        return fb.id
+
+    def get_for_pack(self, pack_id: str) -> list[PackFeedback]:
+        """Return all feedback records for a specific pack.
+
+        Args:
+            pack_id: UUID of the ContextPack.
+
+        Returns:
+            List of PackFeedback objects.
+        """
+        rows = self._conn.execute(
+            "SELECT * FROM pack_feedback WHERE pack_id = ? ORDER BY timestamp DESC",
+            (pack_id,),
+        ).fetchall()
+        return [self._row_to_feedback(r) for r in rows]
+
+    def get_all(self, limit: int = 100) -> list[PackFeedback]:
+        """Return the most recent feedback records.
+
+        Args:
+            limit: Maximum number of records to return.
+
+        Returns:
+            List of PackFeedback objects, newest first.
+        """
+        rows = self._conn.execute(
+            "SELECT * FROM pack_feedback ORDER BY timestamp DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [self._row_to_feedback(r) for r in rows]
+
+    def aggregate_stats(self) -> dict:
+        """Compute aggregate feedback statistics.
+
+        Returns:
+            Dict with keys: total, useful_count, not_useful_count, useful_pct,
+            top_missing (top 5 paths), top_noisy (top 5 paths).
+        """
+        rows = self._conn.execute(
+            "SELECT useful, missing, noisy FROM pack_feedback"
+        ).fetchall()
+
+        total = len(rows)
+        useful_count = sum(1 for r in rows if r["useful"] == 1)
+        not_useful_count = sum(1 for r in rows if r["useful"] == 0)
+
+        # Count file-level missing/noisy frequencies
+        missing_freq: dict[str, int] = {}
+        noisy_freq: dict[str, int] = {}
+        for r in rows:
+            for path in json.loads(r["missing"] or "[]"):
+                missing_freq[path] = missing_freq.get(path, 0) + 1
+            for path in json.loads(r["noisy"] or "[]"):
+                noisy_freq[path] = noisy_freq.get(path, 0) + 1
+
+        top_missing = sorted(missing_freq, key=lambda k: missing_freq[k], reverse=True)[:5]
+        top_noisy = sorted(noisy_freq, key=lambda k: noisy_freq[k], reverse=True)[:5]
+
+        return {
+            "total": total,
+            "useful_count": useful_count,
+            "not_useful_count": not_useful_count,
+            "useful_pct": round(useful_count / total * 100, 1) if total else 0.0,
+            "top_missing": top_missing,
+            "top_noisy": top_noisy,
+        }
+
+    def get_file_adjustments(self, min_count: int = 3) -> dict[str, float]:
+        """Return per-file confidence adjustments derived from feedback.
+
+        Files frequently in 'missing' get +0.05; frequently in 'noisy' get -0.10.
+        Only applied when a file appears in feedback >= min_count times.
+
+        Args:
+            min_count: Minimum occurrences before an adjustment is applied.
+
+        Returns:
+            Dict mapping file path → confidence delta.
+        """
+        rows = self._conn.execute(
+            "SELECT missing, noisy FROM pack_feedback"
+        ).fetchall()
+
+        missing_freq: dict[str, int] = {}
+        noisy_freq: dict[str, int] = {}
+        for r in rows:
+            for path in json.loads(r["missing"] or "[]"):
+                missing_freq[path] = missing_freq.get(path, 0) + 1
+            for path in json.loads(r["noisy"] or "[]"):
+                noisy_freq[path] = noisy_freq.get(path, 0) + 1
+
+        adjustments: dict[str, float] = {}
+        for path, count in missing_freq.items():
+            if count >= min_count:
+                adjustments[path] = adjustments.get(path, 0.0) + 0.05
+        for path, count in noisy_freq.items():
+            if count >= min_count:
+                adjustments[path] = adjustments.get(path, 0.0) - 0.10
+        return adjustments
+
+    def _row_to_feedback(self, row: sqlite3.Row) -> PackFeedback:
+        """Convert a sqlite3.Row to a PackFeedback model."""
+        useful_raw = row["useful"]
+        useful = None if useful_raw is None else bool(useful_raw)
+        return PackFeedback(
+            id=row["id"],
+            pack_id=row["pack_id"],
+            useful=useful,
+            missing=json.loads(row["missing"] or "[]"),
+            noisy=json.loads(row["noisy"] or "[]"),
+            too_much_context=bool(row["too_much_ctx"]),
+            reason=row["reason"] or "",
+            timestamp=datetime.fromisoformat(row["timestamp"]),
+        )

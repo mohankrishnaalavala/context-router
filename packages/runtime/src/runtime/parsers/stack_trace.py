@@ -7,6 +7,7 @@ lines becomes one signal.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 
@@ -41,6 +42,67 @@ _FRAME_PATTERNS = (_PY_FRAME, _JAVA_FRAME, _DOTNET_FRAME)
 _PATH_PY = re.compile(r'File "([^"]+)"')
 _PATH_JAVA = re.compile(r'\((\w+\.(?:java|kt|scala)):\d+\)')
 _PATH_DOTNET = re.compile(r'in (.+\.cs):line')
+
+# Structured frame extraction patterns
+# Python: File "auth.py", line 42, in validate_token
+_PY_FRAME_DETAIL = re.compile(r'File "([^"]+)", line (\d+), in (\S+)')
+# Java: at com.example.Foo.bar(Foo.java:42)
+_JAVA_FRAME_DETAIL = re.compile(r'at ([\w$.]+)\((\w+\.(?:java|kt|scala)):(\d+)\)')
+# .NET: at Namespace.Class.Method() in /path/Foo.cs:line 42
+_DOTNET_FRAME_DETAIL = re.compile(r'at ([\w.`<>[\]]+\(.*?\))\s+in (.+\.cs):line (\d+)')
+
+# Normalization patterns for error_hash
+_NORMALIZE_LINE_REFS = re.compile(r'\b(at\s+)?line[:\s]+\d+', re.IGNORECASE)
+_NORMALIZE_MEMORY = re.compile(r'0x[0-9a-fA-F]+')
+_NORMALIZE_DIGITS = re.compile(r'\b\d{3,}\b')  # long numbers (addresses, ports)
+
+
+def _normalize_message(exc_name: str, message: str) -> str:
+    """Normalize an exception message for stable hashing.
+
+    Strips volatile parts (line numbers, memory addresses, long numeric IDs)
+    so that the same logical error gets the same hash across runs.
+    """
+    text = f"{exc_name}: {message}"
+    text = _NORMALIZE_LINE_REFS.sub("", text)
+    text = _NORMALIZE_MEMORY.sub("", text)
+    text = _NORMALIZE_DIGITS.sub("", text)
+    # Collapse whitespace
+    return " ".join(text.split()).lower()
+
+
+def _make_error_hash(exc_name: str, message: str) -> str:
+    """Return a 16-char SHA256 prefix of the normalized error signature."""
+    normalized = _normalize_message(exc_name, message)
+    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
+
+
+def _extract_top_frames(lines: list[str], max_frames: int = 5) -> list[dict]:
+    """Extract structured top-N stack frames from trace lines.
+
+    Returns a list of dicts: [{"file": ..., "function": ..., "line": N}]
+    """
+    frames: list[dict] = []
+    for line in lines:
+        if len(frames) >= max_frames:
+            break
+        # Python
+        m = _PY_FRAME_DETAIL.search(line)
+        if m:
+            frames.append({"file": m.group(1), "function": m.group(3), "line": int(m.group(2))})
+            continue
+        # Java
+        m = _JAVA_FRAME_DETAIL.search(line)
+        if m:
+            frames.append({"file": m.group(2), "function": m.group(1).split(".")[-1], "line": int(m.group(3))})
+            continue
+        # .NET
+        m = _DOTNET_FRAME_DETAIL.search(line)
+        if m:
+            fname = Path(m.group(2)).name
+            frames.append({"file": fname, "function": m.group(1).split(".")[-1], "line": int(m.group(3))})
+            continue
+    return frames
 
 
 def parse_stack_trace(text: str) -> list[RuntimeSignal]:
@@ -101,9 +163,11 @@ def _block_to_signal(lines: list[str]) -> RuntimeSignal | None:
     text = "\n".join(lines)
 
     # Detect language and extract exception message
-    message, source = _extract_message(text)
+    message, source, exc_name = _extract_message(text)
     paths = _extract_paths(lines)
     stack = [l.strip() for l in lines if l.strip()]
+    top_frames = _extract_top_frames(stack)
+    error_hash = _make_error_hash(exc_name, message) if exc_name else ""
 
     return RuntimeSignal(
         source=source,
@@ -111,11 +175,13 @@ def _block_to_signal(lines: list[str]) -> RuntimeSignal | None:
         message=message or "Stack trace detected",
         stack=stack,
         paths=paths,
+        top_frames=top_frames,
+        error_hash=error_hash,
     )
 
 
-def _extract_message(text: str) -> tuple[str, str]:
-    """Return (message, source_label) from stack trace text."""
+def _extract_message(text: str) -> tuple[str, str, str]:
+    """Return (message, source_label, exc_name) from stack trace text."""
     # Check Java/dotnet before Python — their exception class names also satisfy
     # the Python pattern (e.g. java.lang.NullPointerException matches (?:\w+\.)*\w+Exception).
     for pattern, label in (
@@ -125,8 +191,10 @@ def _extract_message(text: str) -> tuple[str, str]:
     ):
         m = pattern.search(text)
         if m:
-            return f"{m.group('exc')}: {m.group('msg')}", label
-    return "", "unknown"
+            exc = m.group("exc")
+            msg = m.group("msg")
+            return f"{exc}: {msg}", label, exc
+    return "", "unknown", ""
 
 
 def _extract_paths(lines: list[str]) -> list[Path]:

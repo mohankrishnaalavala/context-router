@@ -296,6 +296,52 @@ _TOOLS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "record_feedback": {
+        "fn": tools.record_feedback,
+        "description": (
+            "Record agent feedback for a context pack. "
+            "Files reported as missing get a confidence boost in future packs; "
+            "files reported as noisy get a confidence penalty. "
+            "Adjustments apply after ≥ 3 feedback reports to avoid single-report noise."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["pack_id"],
+            "properties": {
+                "pack_id": {
+                    "type": "string",
+                    "description": "UUID of the ContextPack this feedback applies to.",
+                },
+                "useful": {
+                    "type": "boolean",
+                    "description": "True if the pack was helpful, false if not.",
+                },
+                "missing": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "File or symbol paths that should have been included.",
+                },
+                "noisy": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "File or symbol paths that were irrelevant.",
+                },
+                "too_much_context": {
+                    "type": "boolean",
+                    "description": "True if the pack contained too many items.",
+                    "default": False,
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Free-text explanation.",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+    },
     "list_memory": {
         "fn": tools.list_memory,
         "description": (

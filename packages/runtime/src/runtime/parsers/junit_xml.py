@@ -12,10 +12,17 @@ Surefire reports.  The XML schema is compatible across all these tools:
 
 from __future__ import annotations
 
+import hashlib
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 from contracts.models import RuntimeSignal
+
+
+def _make_error_hash(test_name: str, message: str) -> str:
+    """Return a 16-char SHA256 prefix of the normalized test failure signature."""
+    normalized = f"{test_name}:{message}".lower().strip()
+    return hashlib.sha256(normalized.encode()).hexdigest()[:16]
 
 
 def parse_junit_xml(xml_text: str) -> list[RuntimeSignal]:
@@ -54,6 +61,7 @@ def parse_junit_xml(xml_text: str) -> list[RuntimeSignal]:
                 stack_text = (child.text or "").strip()
                 stack_lines = [ln.strip() for ln in stack_text.splitlines() if ln.strip()]
                 paths = _extract_paths(stack_lines)
+                error_hash = _make_error_hash(full_name, message)
                 signals.append(
                     RuntimeSignal(
                         source=f"junit:{suite_name}",
@@ -61,6 +69,8 @@ def parse_junit_xml(xml_text: str) -> list[RuntimeSignal]:
                         message=f"{full_name}: {message}",
                         stack=stack_lines,
                         paths=paths,
+                        error_hash=error_hash,
+                        failing_tests=[full_name],
                     )
                 )
     return signals

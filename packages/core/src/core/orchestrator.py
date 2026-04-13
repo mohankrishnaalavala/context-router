@@ -78,6 +78,7 @@ _IMPLEMENT_CONFIDENCE: dict[str, float] = {
 # Debug mode: confidence per source category
 _DEBUG_CONFIDENCE: dict[str, float] = {
     "runtime_signal": 0.95,
+    "past_debug": 0.90,       # same error seen before — files from prior fix
     "failing_test": 0.85,
     "changed_file": 0.70,
     "blast_radius": 0.50,
@@ -217,8 +218,41 @@ class Orchestrator:
         with Database(db_path) as db:
             sym_repo = SymbolRepository(db.connection)
             edge_repo = EdgeRepository(db.connection)
+
+            # Phase 4: persist signals to DB + recall past observations by error_hash
+            past_debug_files: set[str] = set()
+            if runtime_signals:
+                from storage_sqlite.repositories import RuntimeSignalRepository
+                from memory.store import ObservationStore
+                sig_repo = RuntimeSignalRepository(db.connection)
+                obs_store = ObservationStore(db)
+                for sig in runtime_signals:
+                    try:
+                        sig_repo.add(sig)
+                    except Exception:  # noqa: BLE001
+                        pass  # best-effort
+                    # Look up past signals with the same error_hash
+                    if sig.error_hash:
+                        try:
+                            past = sig_repo.find_by_error_hash(sig.error_hash)
+                            for ps in past[1:]:  # skip the one we just inserted
+                                for p in ps.paths:
+                                    past_debug_files.add(str(p))
+                                    past_debug_files.add(p.name)
+                        except Exception:  # noqa: BLE001
+                            pass
+
+            # Phase 6: load feedback-based confidence adjustments
+            try:
+                from storage_sqlite.repositories import PackFeedbackRepository
+                feedback_adjustments = PackFeedbackRepository(db.connection).get_file_adjustments()
+            except Exception:  # noqa: BLE001
+                feedback_adjustments = {}
+
             candidates = self._build_candidates(
-                mode, sym_repo, edge_repo, runtime_signals=runtime_signals
+                mode, sym_repo, edge_repo, runtime_signals=runtime_signals,
+                past_debug_files=past_debug_files,
+                feedback_adjustments=feedback_adjustments,
             )
 
         # Boost items whose file matches a filename mentioned in the query
@@ -285,6 +319,8 @@ class Orchestrator:
         edge_repo: EdgeRepository,
         repo_name: str = "default",
         runtime_signals: list[RuntimeSignal] | None = None,
+        past_debug_files: set[str] | None = None,
+        feedback_adjustments: dict[str, float] | None = None,
     ) -> list[ContextItem]:
         """Fetch and pre-score candidate ContextItems for *mode*.
 
@@ -294,6 +330,8 @@ class Orchestrator:
             edge_repo: Open EdgeRepository.
             repo_name: Logical repository name used in DB queries.
             runtime_signals: Parsed RuntimeSignal objects (debug mode).
+            past_debug_files: File paths from past signals with same error_hash.
+            feedback_adjustments: Per-file confidence deltas from agent feedback.
 
         Returns:
             List of ContextItems with source_type and confidence set.
@@ -304,15 +342,31 @@ class Orchestrator:
             ValueError: If *mode* is unrecognised.
         """
         signals = runtime_signals or []
+        adj = feedback_adjustments or {}
+        past_files = past_debug_files or set()
+
         if mode == "review":
-            return self._review_candidates(sym_repo, edge_repo, repo_name)
-        if mode == "implement":
-            return self._implement_candidates(sym_repo, repo_name)
-        if mode == "debug":
-            return self._debug_candidates(sym_repo, edge_repo, repo_name, signals)
-        if mode == "handover":
-            return self._handover_candidates(sym_repo, edge_repo, repo_name)
-        raise ValueError(f"Unknown mode: {mode!r}")
+            items = self._review_candidates(sym_repo, edge_repo, repo_name)
+        elif mode == "implement":
+            items = self._implement_candidates(sym_repo, repo_name)
+        elif mode == "debug":
+            items = self._debug_candidates(sym_repo, edge_repo, repo_name, signals, past_files)
+        elif mode == "handover":
+            items = self._handover_candidates(sym_repo, edge_repo, repo_name)
+        else:
+            raise ValueError(f"Unknown mode: {mode!r}")
+
+        # Apply feedback-based confidence adjustments (Phase 6)
+        if adj:
+            items = [
+                item.model_copy(update={
+                    "confidence": max(0.0, min(0.95, item.confidence + adj[item.path_or_ref]))
+                })
+                if item.path_or_ref in adj
+                else item
+                for item in items
+            ]
+        return items
 
     # ------------------------------------------------------------------
     # Review mode
@@ -484,13 +538,16 @@ class Orchestrator:
         edge_repo: EdgeRepository,
         repo_name: str,
         signals: list[RuntimeSignal],
+        past_debug_files: set[str] | None = None,
     ) -> list[ContextItem]:
         """Build candidates prioritised for a debug task.
 
         Priority:
-          runtime_signal (0.95) > failing_test (0.85) > changed_file (0.70)
-          > blast_radius (0.50) > file (0.20)
+          runtime_signal (0.95) > past_debug (0.90) > failing_test (0.85)
+          > changed_file (0.70) > blast_radius (0.50) > file (0.20)
         """
+        past_files = past_debug_files or set()
+
         # Collect file paths mentioned in runtime signals
         signal_paths: set[str] = set()
         for sig in signals:
@@ -536,6 +593,9 @@ class Orchestrator:
             if fp in signal_paths or fname in signal_paths:
                 source_type = "runtime_signal"
                 confidence = _DEBUG_CONFIDENCE["runtime_signal"]
+            elif fp in past_files or fname in past_files:
+                source_type = "past_debug"
+                confidence = _DEBUG_CONFIDENCE.get("past_debug", 0.90)
             elif self._is_test_file(fp):
                 source_type = "failing_test"
                 confidence = _DEBUG_CONFIDENCE["failing_test"]
