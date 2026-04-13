@@ -5,11 +5,20 @@ requires-python = ">=3.12"
 description = "Workspace root — not a distributable package"
 readme = "README.md"
 
+# This root package is NOT published to PyPI.
+# To build for PyPI, run: uv build --package context-router-cli
+# or use: make release (see RELEASE.md)
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
 ]
+
+# Prevent accidental `uv build` at repo root from trying to build this workspace root.
+[tool.hatch.build]
+skip-excluded-dirs = true
+exclude = ["apps", "packages", "*.md", "*.toml", ".github", ".handover", ".claude"]
 
 [tool.uv.sources]
 context-router-contracts = { workspace = true }
