@@ -95,6 +95,12 @@ class Indexer:
                 result.errors.append(f"{file_path}: {exc}")
 
         result.duration_seconds = time.monotonic() - start
+        # Post-indexing passes: TESTED_BY links + community detection
+        try:
+            tested_by, communities = self._writer.finalize(self._repo_name)
+            result.edges_written += tested_by
+        except Exception:  # noqa: BLE001
+            pass
         return result
 
     def run_incremental(self, changed_files: list[Path]) -> IndexResult:

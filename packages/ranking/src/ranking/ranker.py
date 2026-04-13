@@ -14,8 +14,27 @@ only for:
 from __future__ import annotations
 
 import re
+import threading
 
 from contracts.models import ContextItem
+
+_EMBED_MODEL: object | None = None
+_EMBED_LOCK = threading.Lock()
+
+
+def _get_embed_model() -> object:
+    """Lazy-load the sentence-transformers model; returns False if unavailable."""
+    global _EMBED_MODEL
+    if _EMBED_MODEL is not None:
+        return _EMBED_MODEL
+    with _EMBED_LOCK:
+        if _EMBED_MODEL is None:
+            try:
+                from sentence_transformers import SentenceTransformer  # type: ignore[import]
+                _EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+            except Exception:
+                _EMBED_MODEL = False  # sentinel: embeddings unavailable
+    return _EMBED_MODEL
 
 # Minimum characters in a query token to be used for boosting (filters stop words)
 _MIN_TOKEN_LEN = 3
@@ -58,14 +77,18 @@ class ContextRanker:
             Pass 0 to disable budget enforcement (return all items sorted).
     """
 
-    def __init__(self, token_budget: int = 8_000) -> None:
+    def __init__(self, token_budget: int = 8_000, use_embeddings: bool = False) -> None:
         """Initialise the ranker with a token budget.
 
         Args:
             token_budget: Hard upper limit on total ``est_tokens`` in the
                 returned item list.  0 means unlimited.
+            use_embeddings: If True, apply semantic similarity boosting via
+                sentence-transformers (requires ``pip install sentence-transformers``).
+                Defaults to False to avoid the model download on first run.
         """
         self._budget = token_budget
+        self._use_embeddings = use_embeddings
 
     def rank(
         self,
@@ -78,8 +101,9 @@ class ContextRanker:
         Steps:
         1. Annotate each item's ``reason`` from its ``source_type``.
         2. Apply query-relevance confidence boost (keyword overlap).
-        3. Sort by ``confidence`` descending.
-        4. Trim to token budget while keeping at least one item per
+        3. Optionally apply semantic similarity boost (if use_embeddings=True).
+        4. Sort by ``confidence`` descending.
+        5. Trim to token budget while keeping at least one item per
            ``source_type`` (so every category of evidence is represented).
 
         Args:
@@ -96,6 +120,8 @@ class ContextRanker:
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
         boosted = [self._apply_query_boost(item, query_tokens) for item in annotated]
+        if self._use_embeddings:
+            boosted = self._apply_semantic_boost(boosted, query)
         sorted_items = sorted(boosted, key=lambda i: i.confidence, reverse=True)
 
         if self._budget <= 0:
@@ -106,6 +132,36 @@ class ContextRanker:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _apply_semantic_boost(self, items: list[ContextItem], query: str) -> list[ContextItem]:
+        """Boost items using cosine similarity from sentence-transformers.
+
+        Only runs when ``use_embeddings=True`` and the model is available.
+        Items with similarity > 0.3 receive up to +0.20 confidence boost.
+        """
+        if not query or not items:
+            return items
+        model = _get_embed_model()
+        if not model:
+            return items
+        try:
+            import numpy as np  # type: ignore[import]
+            texts = [f"{i.title} {i.excerpt}" for i in items]
+            query_emb = model.encode([query], normalize_embeddings=True)
+            item_embs = model.encode(texts, normalize_embeddings=True, batch_size=32)
+            similarities = (item_embs @ query_emb.T).flatten()
+            result = []
+            for item, sim in zip(items, similarities):
+                sim_f = float(sim)
+                if sim_f > 0.3:
+                    boost = min(0.20, sim_f * 0.20)
+                    new_conf = min(0.95, item.confidence + boost)
+                    result.append(item.model_copy(update={"confidence": new_conf}))
+                else:
+                    result.append(item)
+            return result
+        except Exception:
+            return items
 
     def _apply_query_boost(self, item: ContextItem, query_tokens: set[str]) -> ContextItem:
         """Boost *item* confidence if query tokens appear in its text fields.

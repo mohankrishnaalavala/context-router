@@ -115,3 +115,37 @@ def test_empty_file(tmp_path: Path):
 def test_invalid_path_returns_empty():
     results = PythonAnalyzer().analyze(Path("/nonexistent/file.py"))
     assert results == []
+
+
+def test_extracts_calls_edges(tmp_path: Path):
+    code = '''\
+def foo():
+    bar()
+
+def bar():
+    pass
+'''
+    f = tmp_path / "calls.py"
+    f.write_text(code)
+    results = PythonAnalyzer().analyze(f)
+    calls = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "calls"]
+    froms = {e.from_symbol for e in calls}
+    tos = {e.to_symbol for e in calls}
+    assert "foo" in froms
+    assert "bar" in tos
+
+
+def test_calls_edges_exclude_builtins(tmp_path: Path):
+    code = '''\
+def process(items):
+    result = len(items)
+    return str(result)
+'''
+    f = tmp_path / "builtins.py"
+    f.write_text(code)
+    results = PythonAnalyzer().analyze(f)
+    calls = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "calls"]
+    # builtins len/str should NOT appear as call edges
+    tos = {e.to_symbol for e in calls}
+    assert "len" not in tos
+    assert "str" not in tos
