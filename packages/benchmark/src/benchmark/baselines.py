@@ -32,12 +32,16 @@ def naive_tokens(project_root: Path, repo_name: str = "default") -> int:
     if not db_path.exists():
         return 0
 
+    # Use the same overhead as ContextItem estimation in the orchestrator
+    # (40 tokens metadata overhead per item) so the comparison is apples-to-apples.
+    _METADATA_OVERHEAD = 40
     try:
         with Database(db_path) as db:
             sym_repo = SymbolRepository(db.connection)
             symbols = sym_repo.get_all(repo_name)
         return sum(
-            estimate_tokens(f"{s.signature}\n{s.docstring}".strip())
+            estimate_tokens(f"{s.name} ({s.file.name})\n{s.signature}\n{s.docstring}".strip())
+            + _METADATA_OVERHEAD
             for s in symbols
         )
     except Exception:

@@ -211,3 +211,9 @@ handover-chat-*.json
 
 # Local-only roadmap (not for public release)
 docs/roadmap.md
+
+# Internal review (not for public release)
+docs/REVIEW.md
+
+# Real-world benchmark validation reports (local only)
+docs/benchmarks/
