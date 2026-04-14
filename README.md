@@ -40,22 +40,35 @@ AI coding agents work best with focused, relevant context rather than entire cod
 ## Requirements
 
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager
 
 ## Install
 
+**Homebrew (macOS/Linux):**
+```bash
+brew tap mohankrishnaalavala/context-router
+brew install context-router
+```
+
+**uv (recommended — auto-manages Python):**
+```bash
+uv tool install context-router-cli
+```
+
+**pip / pipx:**
+```bash
+pip install context-router-cli
+# or
+pipx install context-router-cli
+```
+
+**From source:**
 ```bash
 git clone https://github.com/mohankrishnaalavala/context-router
 cd context-router
 uv sync --all-packages
 ```
 
-> **PyPI:** `pip install context-router-cli` · [context-router-cli on PyPI](https://pypi.org/project/context-router-cli/)
->
-> Or with uv (recommended — auto-manages Python 3.12+):
-> ```bash
-> uv tool install context-router-cli
-> ```
+> [context-router-cli on PyPI](https://pypi.org/project/context-router-cli/)
 
 ---
 
@@ -63,10 +76,17 @@ uv sync --all-packages
 
 ```bash
 # 1. Initialize a project (creates .context-router/ with config + SQLite DB)
-uv run context-router init
+context-router init
 
-# 2. Index the repository — extracts symbols, call edges, test links, communities
-uv run context-router index
+# 2. Configure your AI coding agent (Claude Code, Copilot, Cursor, Windsurf, or Codex)
+#    Auto-detects which agent you use from existing config files
+context-router setup
+#    Or target a specific agent:
+context-router setup --agent claude   # also registers the MCP server in .mcp.json
+context-router setup --agent all      # configure every agent at once
+
+# 3. Index the repository — extracts symbols, call edges, test links, communities
+context-router index
 
 # 3. Generate a context pack for a code review
 uv run context-router pack --mode review
@@ -94,6 +114,7 @@ uv run context-router pack --mode review --json
 | Command | Purpose |
 |---|---|
 | [`init`](#init) | Initialize `.context-router/` config and database |
+| [`setup`](#setup) | Configure AI coding agents (Claude Code, Copilot, Cursor, Windsurf, Codex) |
 | [`index`](#index) | Scan and index all source files |
 | [`watch`](#watch) | Incrementally re-index on file save |
 | [`pack`](#pack) | Generate a ranked context pack |
@@ -114,6 +135,44 @@ Initialize a project. Creates `.context-router/config.yaml` and `.context-router
 
 ```
 context-router init [--project-root PATH] [--json]
+```
+
+---
+
+### `setup`
+
+Configure AI coding agents to use context-router. Appends context-router instructions to the
+appropriate config files and registers the MCP server in `.mcp.json`.
+
+```
+context-router setup [--agent AGENT] [--project-root PATH] [--dry-run]
+```
+
+**Supported agents:** `claude`, `copilot`, `cursor`, `windsurf`, `codex`, `all`
+
+| Agent | Files written/updated |
+|-------|-----------------------|
+| `claude` | `CLAUDE.md` + `.mcp.json` (MCP server entry) |
+| `copilot` | `.github/copilot-instructions.md` |
+| `cursor` | `.cursorrules` |
+| `windsurf` | `.windsurfrules` |
+| `codex` | `AGENTS.md` |
+
+When `--agent` is omitted, auto-detects from existing config files. Use `--dry-run` to preview
+changes without writing anything. Idempotent — safe to re-run.
+
+```bash
+# Auto-detect and configure
+context-router setup
+
+# Configure for Claude Code (also adds MCP server to .mcp.json)
+context-router setup --agent claude
+
+# Configure all agents at once
+context-router setup --agent all
+
+# Preview what would change
+context-router setup --agent all --dry-run
 ```
 
 ---

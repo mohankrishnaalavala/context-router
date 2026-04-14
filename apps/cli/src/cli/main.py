@@ -18,6 +18,7 @@ from cli.commands.init import init_app
 from cli.commands.mcp import mcp_app
 from cli.commands.memory import memory_app
 from cli.commands.pack import pack_app
+from cli.commands.setup import setup_app
 from cli.commands.watch import watch_app
 from cli.commands.workspace import workspace_app
 
@@ -42,6 +43,7 @@ app.add_typer(decisions_app, name="decisions")
 app.add_typer(feedback_app, name="feedback")
 app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(workspace_app, name="workspace")
+app.add_typer(setup_app, name="setup")
 app.add_typer(mcp_app, name="mcp")
 app.add_typer(graph_app, name="graph")
 
