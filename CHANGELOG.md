@@ -7,6 +7,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **`setup` command**: One-command agent configuration — auto-detects Claude Code, GitHub Copilot, Cursor, Windsurf, and OpenAI Codex from existing config files and appends context-router instructions to the appropriate files (`CLAUDE.md`, `.mcp.json`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`, `AGENTS.md`). Idempotent and `--dry-run` safe.
+- **MCP auto-registration**: `setup --agent claude` adds the context-router MCP server entry to `.mcp.json`, enabling one-step Claude Code integration without manual JSON editing.
+- **Homebrew tap**: `brew tap mohankrishnaalavala/context-router && brew install context-router` — formula in `docs/homebrew-formula.rb`.
+- **Homebrew tap formula** (`docs/homebrew-formula.rb`): ready-to-publish virtualenv formula for `mohankrishnaalavala/homebrew-context-router` tap.
+
 ---
 
 ## [0.3.0] — 2026-04-13
