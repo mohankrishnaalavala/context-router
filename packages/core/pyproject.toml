@@ -1,6 +1,6 @@
 [project]
 name = "context-router-core"
-version = "0.5.0"
+version = "0.6.0"
 requires-python = ">=3.12"
 description = "Orchestration, plugin loader, and use-case coordinators for context-router"
 dependencies = [

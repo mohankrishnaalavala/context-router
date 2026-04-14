@@ -52,6 +52,10 @@ def record(
         str,
         typer.Option("--reason", help="Free-text explanation."),
     ] = "",
+    files_read: Annotated[
+        str,
+        typer.Option("--files-read", help="Space-separated file paths the agent actually consumed."),
+    ] = "",
     project_root: Annotated[
         str,
         typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
@@ -84,6 +88,7 @@ def record(
 
     missing_list = [f for f in missing.split() if f] if missing else []
     noisy_list = [f for f in noisy.split() if f] if noisy else []
+    files_read_list = [f for f in files_read.split() if f] if files_read else []
 
     fb = PackFeedback(
         pack_id=pack_id,
@@ -92,6 +97,7 @@ def record(
         noisy=noisy_list,
         too_much_context=too_much_context,
         reason=reason,
+        files_read=files_read_list,
     )
 
     store, db = _open_store(project_root)
@@ -149,6 +155,12 @@ def stats(
         typer.echo("  Top noisy files:")
         for path in result["top_noisy"]:
             typer.echo(f"    {path}")
+    if "read_overlap_pct" in result:
+        typer.echo(
+            f"  Read coverage ({result['reports_with_files_read']} reports): "
+            f"{result['read_overlap_pct']}% useful reads  |  "
+            f"{result['noise_ratio_pct']}% noise ratio"
+        )
 
 
 @feedback_app.command("list")

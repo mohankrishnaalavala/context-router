@@ -384,6 +384,14 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     "type": "string",
                     "description": "Free-text explanation.",
                 },
+                "files_read": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "File paths the agent actually consumed from the pack. "
+                        "Enables read-coverage analytics after ≥ 5 reports."
+                    ),
+                },
                 "project_root": {
                     "type": "string",
                     "description": "Absolute path to project root. Auto-detected when omitted.",

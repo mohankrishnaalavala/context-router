@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contracts.models import ContextItem
-from ranking.ranker import ContextRanker, _REASON, _tokenize
+from ranking.ranker import ContextRanker, _REASON, _BM25Scorer, _tokenize
 
 
 def _item(
@@ -153,8 +153,8 @@ def test_tokenize_filters_short_tokens() -> None:
     assert "transactions" in tokens
 
 
-def test_additive_boost_for_low_confidence() -> None:
-    """Low-confidence items use additive boost — full match can reach blast_radius level."""
+def test_bm25_boost_for_low_confidence_item() -> None:
+    """BM25 scoring raises low-confidence items that match the query."""
     item = ContextItem(
         source_type="file", repo="test", path_or_ref="ranker.py",
         title="ContextRanker (ranker.py)",
@@ -164,14 +164,13 @@ def test_additive_boost_for_low_confidence() -> None:
     result = ContextRanker(token_budget=0).rank(
         [item], "token budget ranker", "implement"
     )
-    # 3/3 tokens matched → ratio = 1.0 → additive: 0.20 + 1.0 * 0.50 = 0.70
+    # BM25 formula: 0.6 * 0.20 + 0.4 * bm25_score
+    # Single item corpus → normalized bm25 = 1.0 → result = 0.12 + 0.40 = 0.52
     assert result[0].confidence > 0.20
-    # Should be significantly higher than the old multiplicative result (0.40)
-    assert result[0].confidence >= 0.60
 
 
-def test_additive_boost_for_high_confidence() -> None:
-    """High-confidence items (≥0.50) use additive boost."""
+def test_bm25_boost_for_high_confidence_item() -> None:
+    """BM25 scoring does not exceed 0.95 ceiling for high-confidence items."""
     item = ContextItem(
         source_type="contract", repo="test", path_or_ref="ranker.py",
         title="Ranker (interfaces.py)",
@@ -181,8 +180,9 @@ def test_additive_boost_for_high_confidence() -> None:
     result = ContextRanker(token_budget=0).rank(
         [item], "token budget ranker", "implement"
     )
-    # Uses additive: 0.80 + ratio * 0.50
-    assert 0.80 < result[0].confidence <= 0.95
+    # BM25: 0.6 * 0.80 + 0.4 * 1.0 = 0.88
+    assert result[0].confidence <= 0.95
+    assert result[0].confidence >= 0.48  # at minimum 60% of structural
 
 
 def test_original_items_not_mutated() -> None:
@@ -200,3 +200,104 @@ def test_original_items_not_mutated() -> None:
     ContextRanker(token_budget=1000).rank([item], "", "review")
     # The original item should not be modified (model_copy is used internally)
     assert item.reason == "original reason"
+
+
+# -----------------------------------------------------------------------
+# P4 — BM25 scorer unit tests
+# -----------------------------------------------------------------------
+
+class TestBM25Scorer:
+    def test_empty_corpus_returns_empty_scores(self) -> None:
+        scorer = _BM25Scorer([])
+        assert scorer.scores_normalized({"query"}) == []
+
+    def test_empty_query_tokens_returns_zeros(self) -> None:
+        scorer = _BM25Scorer(["hello world", "another doc"])
+        scores = scorer.scores_normalized(set())
+        assert scores == [0.0, 0.0]
+
+    def test_single_doc_corpus_gets_score_one(self) -> None:
+        scorer = _BM25Scorer(["authentication token verify"])
+        scores = scorer.scores_normalized({"authentication"})
+        assert scores == [1.0]
+
+    def test_scores_normalized_range_0_to_1(self) -> None:
+        docs = ["the quick brown fox", "lazy dog", "quick authentication token"]
+        scorer = _BM25Scorer(docs)
+        scores = scorer.scores_normalized({"quick", "authentication"})
+        assert len(scores) == 3
+        assert all(0.0 <= s <= 1.0 for s in scores)
+        assert max(scores) == 1.0  # at least one document equals 1.0
+
+    def test_relevant_doc_ranks_higher(self) -> None:
+        scorer = _BM25Scorer([
+            "completely unrelated document about dogs",
+            "AuthManager verify_token authentication handler class",
+        ])
+        scores = scorer.scores_normalized({"authentication", "verify"})
+        assert scores[1] > scores[0]
+
+    def test_no_doc_matches_query_all_zeros(self) -> None:
+        scorer = _BM25Scorer(["foo bar baz", "qux quux"])
+        scores = scorer.scores_normalized({"nonexistent", "term"})
+        assert scores == [0.0, 0.0]
+
+
+class TestBM25Integration:
+    def test_bm25_ranks_matching_item_first(self) -> None:
+        """Item with query-matching content should rank above unrelated item."""
+        unrelated = _item(confidence=0.5, title="DatabaseMigration schema_v3")
+        relevant = ContextItem(
+            source_type="file", repo="test", path_or_ref="auth.py",
+            title="AuthManager (auth.py)",
+            excerpt="class AuthManager:\n  def verify_token(self, token): ...",
+            reason="", confidence=0.5, est_tokens=30,
+        )
+        result = ContextRanker(token_budget=0).rank(
+            [unrelated, relevant], "authentication verify token", "implement"
+        )
+        assert result[0].title == "AuthManager (auth.py)"
+
+    def test_bm25_no_match_uses_structural_conf(self) -> None:
+        """Items with no query match get 0.6 × structural confidence."""
+        item = _item(confidence=0.80, title="xyz_unrelated abc")
+        result = ContextRanker(token_budget=0).rank(
+            [item], "completely_different_query", "review"
+        )
+        # bm25 = 0.0, so new_conf = 0.6 * 0.80 + 0.4 * 0.0 = 0.48
+        assert abs(result[0].confidence - 0.48) < 0.05
+
+    def test_bm25_scores_capped_at_0_95(self) -> None:
+        """No item exceeds 0.95 confidence."""
+        items = [
+            ContextItem(
+                source_type="changed_file", repo="test", path_or_ref="auth.py",
+                title="AuthManager authenticate verify token",
+                excerpt="authenticate verify token authentication",
+                reason="", confidence=0.95, est_tokens=20,
+            )
+        ]
+        result = ContextRanker(token_budget=0).rank(
+            items, "authenticate verify token", "review"
+        )
+        assert result[0].confidence <= 0.95
+
+
+# -----------------------------------------------------------------------
+# P5 — call_chain source_type in _REASON
+# -----------------------------------------------------------------------
+
+def test_call_chain_reason_in_reason_dict() -> None:
+    """call_chain source_type must have a human-readable reason."""
+    assert "call_chain" in _REASON
+    assert len(_REASON["call_chain"]) > 10  # non-trivial string
+
+
+def test_call_chain_item_gets_annotated_reason() -> None:
+    item = ContextItem(
+        source_type="call_chain", repo="test", path_or_ref="helper.py",
+        title="helper.py (call chain depth 2)",
+        excerpt="", reason="", confidence=0.315, est_tokens=50,
+    )
+    result = ContextRanker(token_budget=0).rank([item], "", "debug")
+    assert result[0].reason == _REASON["call_chain"]

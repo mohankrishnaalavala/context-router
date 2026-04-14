@@ -13,13 +13,67 @@ only for:
 
 from __future__ import annotations
 
+import math
 import re
 import threading
+from collections import Counter as _Counter
 
 from contracts.models import ContextItem
 
 _EMBED_MODEL: object | None = None
 _EMBED_LOCK = threading.Lock()
+
+
+class _BM25Scorer:
+    """In-memory Okapi BM25 scorer built from a document corpus.
+
+    Built once per ``rank()`` call — no state persists between calls.
+    Uses k1=1.5 and b=0.75 (standard Okapi BM25 defaults).
+    """
+
+    _K1 = 1.5
+    _B = 0.75
+
+    def __init__(self, docs: list[str]) -> None:
+        tokenized = [list(_tokenize(d)) for d in docs]
+        self._n = len(tokenized)
+        dl = [len(t) for t in tokenized]
+        self._avgdl = sum(dl) / max(1, self._n)
+        self._tf: list[_Counter] = [_Counter(t) for t in tokenized]
+        df: dict[str, int] = {}
+        for tokens in tokenized:
+            for t in set(tokens):
+                df[t] = df.get(t, 0) + 1
+        # Robertson–Spärck Jones IDF with smoothing
+        self._idf: dict[str, float] = {
+            t: math.log((self._n - n_t + 0.5) / (n_t + 0.5) + 1.0)
+            for t, n_t in df.items()
+        }
+
+    def scores_normalized(self, query_tokens: set[str]) -> list[float]:
+        """Return per-document BM25 scores normalized to [0, 1].
+
+        Returns a list of floats of length ``len(docs)`` where 1.0 is the
+        most relevant document in the corpus.
+        """
+        if not query_tokens or self._n == 0:
+            return [0.0] * self._n
+        raw = [self._score(i, query_tokens) for i in range(self._n)]
+        max_s = max(raw) if any(r > 0 for r in raw) else 1.0
+        return [r / max_s for r in raw]
+
+    def _score(self, doc_idx: int, query_tokens: set[str]) -> float:
+        tf = self._tf[doc_idx]
+        dl = sum(tf.values())
+        total = 0.0
+        for t in query_tokens:
+            freq = tf.get(t, 0)
+            if freq == 0:
+                continue
+            idf = self._idf.get(t, 0.0)
+            denom = freq + self._K1 * (1 - self._B + self._B * dl / max(1, self._avgdl))
+            total += idf * (freq * (self._K1 + 1)) / denom
+        return total
 
 
 def _get_embed_model() -> object:
@@ -38,8 +92,6 @@ def _get_embed_model() -> object:
 
 # Minimum characters in a query token to be used for boosting (filters stop words)
 _MIN_TOKEN_LEN = 3
-# Maximum confidence boost from query matching
-_MAX_BOOST = 0.50
 
 # Map source_type → human-readable reason string.
 _REASON: dict[str, str] = {
@@ -57,6 +109,8 @@ _REASON: dict[str, str] = {
     # Handover mode
     "memory": "Recorded in session memory",
     "decision": "Architectural decision record",
+    # Call flow (P5)
+    "call_chain": "Reachable via function call chain from error site",
 }
 
 _DEFAULT_REASON = "Included in context pack"
@@ -119,7 +173,7 @@ class ContextRanker:
 
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
-        boosted = [self._apply_query_boost(item, query_tokens) for item in annotated]
+        boosted = self._apply_bm25_boost(annotated, query_tokens)
         if self._use_embeddings:
             boosted = self._apply_semantic_boost(boosted, query)
         sorted_items = sorted(boosted, key=lambda i: i.confidence, reverse=True)
@@ -163,32 +217,30 @@ class ContextRanker:
         except Exception:
             return items
 
-    def _apply_query_boost(self, item: ContextItem, query_tokens: set[str]) -> ContextItem:
-        """Boost *item* confidence if query tokens appear in its text fields.
+    def _apply_bm25_boost(self, items: list[ContextItem], query_tokens: set[str]) -> list[ContextItem]:
+        """Re-score items using BM25 relevance combined with structural confidence.
 
-        Checks title and excerpt. Boost is additive, proportional to the
-        fraction of query tokens matched, capped at ``_MAX_BOOST`` (0.50),
-        and never exceeds 0.95.
+        Formula: ``final_conf = min(0.95, 0.6 × structural_conf + 0.4 × bm25_score)``
 
-        Using additive boost for all confidence levels means a low-confidence
-        "file" item (0.20) with a full query match reaches 0.70 — equal to
-        blast_radius — so structurally-adjacent symbols don't crowd out
-        query-relevant symbols in review mode.
+        *bm25_score* is normalized to [0, 1] across all candidates so the most
+        BM25-relevant item gets the full 0.40 bonus.  Items with no query
+        match get a score of 0, so their final confidence is 60% of their
+        structural score — they remain in the pack but yield priority to
+        query-relevant symbols.
+
+        Using title + excerpt only — path_or_ref causes false positives when
+        the repository name happens to contain a query term.
         """
-        if not query_tokens:
-            return item
-        # Use title + excerpt only — path_or_ref causes false positives when the
-        # repository name happens to contain a query term (e.g. "fraud" in
-        # "fraudguard-workspace" matching every file regardless of relevance).
-        item_text = " ".join(
-            filter(None, [item.title, item.excerpt])
-        ).lower()
-        matched = sum(1 for t in query_tokens if t in item_text)
-        if matched == 0:
-            return item
-        ratio = matched / len(query_tokens)
-        new_conf = min(0.95, item.confidence + ratio * _MAX_BOOST)
-        return item.model_copy(update={"confidence": new_conf})
+        if not query_tokens or not items:
+            return items
+        corpus = [f"{i.title} {i.excerpt}" for i in items]
+        scorer = _BM25Scorer(corpus)
+        bm25_scores = scorer.scores_normalized(query_tokens)
+        result = []
+        for item, bm25 in zip(items, bm25_scores):
+            new_conf = min(0.95, 0.6 * item.confidence + 0.4 * bm25)
+            result.append(item.model_copy(update={"confidence": new_conf}))
+        return result
 
     def _annotate(self, item: ContextItem) -> ContextItem:
         """Return a copy of *item* with the reason field populated."""
