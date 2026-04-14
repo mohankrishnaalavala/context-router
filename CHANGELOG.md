@@ -10,8 +10,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - **`setup` command**: One-command agent configuration — auto-detects Claude Code, GitHub Copilot, Cursor, Windsurf, and OpenAI Codex from existing config files and appends context-router instructions to the appropriate files (`CLAUDE.md`, `.mcp.json`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`, `AGENTS.md`). Idempotent and `--dry-run` safe.
 - **MCP auto-registration**: `setup --agent claude` adds the context-router MCP server entry to `.mcp.json`, enabling one-step Claude Code integration without manual JSON editing.
-- **Homebrew tap**: `brew tap mohankrishnaalavala/context-router && brew install context-router` — formula in `docs/homebrew-formula.rb`.
-- **Homebrew tap formula** (`docs/homebrew-formula.rb`): ready-to-publish virtualenv formula for `mohankrishnaalavala/homebrew-context-router` tap.
+- **Homebrew tap**: `brew tap mohankrishnaalavala/context-router && brew install context-router` — live at [mohankrishnaalavala/homebrew-context-router](https://github.com/mohankrishnaalavala/homebrew-context-router).
+- **Benchmark metric definitions**: `BENCHMARK_RESULTS.md` now documents every metric (token reduction, hit rate, random baseline, rank quality, confidence sources) with formulas and a plain-English explanation of the review-mode domain-mismatch effect.
+
+### Fixed
+- **Query boost strength for low-confidence items**: Changed `_apply_query_boost` in `ranker.py` from multiplicative (`conf × (1 + ratio)`) to additive (`conf + ratio × 0.50`) for all confidence levels. A `file`-category symbol (base 0.20) with a full query match now reaches 0.70 — equal to `blast_radius` — so query-relevant symbols can compete with structurally-adjacent ones rather than being buried at 0.40.
 
 ---
 

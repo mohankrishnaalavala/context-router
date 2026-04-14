@@ -153,8 +153,8 @@ def test_tokenize_filters_short_tokens() -> None:
     assert "transactions" in tokens
 
 
-def test_multiplicative_boost_for_low_confidence() -> None:
-    """Low-confidence items (<0.50) use multiplicative boost."""
+def test_additive_boost_for_low_confidence() -> None:
+    """Low-confidence items use additive boost — full match can reach blast_radius level."""
     item = ContextItem(
         source_type="file", repo="test", path_or_ref="ranker.py",
         title="ContextRanker (ranker.py)",
@@ -164,8 +164,10 @@ def test_multiplicative_boost_for_low_confidence() -> None:
     result = ContextRanker(token_budget=0).rank(
         [item], "token budget ranker", "implement"
     )
-    # 3/3 tokens matched → multiplier = 1 + 1.0 = 2.0 → 0.20 * 2.0 = 0.40
+    # 3/3 tokens matched → ratio = 1.0 → additive: 0.20 + 1.0 * 0.50 = 0.70
     assert result[0].confidence > 0.20
+    # Should be significantly higher than the old multiplicative result (0.40)
+    assert result[0].confidence >= 0.60
 
 
 def test_additive_boost_for_high_confidence() -> None:
