@@ -14,7 +14,7 @@ AI coding agents work best with focused, relevant context rather than entire cod
 
 - Indexes your repo's symbols, dependency edges, call graphs, and test coverage into a local SQLite database
 - Ranks candidates by structural relevance, query similarity, and community membership for your task mode
-- Enforces a configurable token budget so your agent prompt stays lean (64.7% average reduction)
+- Enforces a configurable token budget so your agent prompt stays lean (64–80% average reduction)
 - Explains every selection decision in one human-readable sentence
 - Supports multi-repo workspaces with cross-repo confidence boosting
 - Works as a CLI, MCP server, or Python library — no API key required
@@ -467,7 +467,7 @@ context-router benchmark run [--project-root PATH] [--output PATH] [--json]
 context-router benchmark report [--project-root PATH] [--input PATH] [--json]
 ```
 
-See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real numbers on the context-router codebase (**64.7% average token reduction, 131 ms average latency**).
+See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real numbers on external codebases (**49–81% average token reduction**, quality metrics, and per-mode breakdown).
 
 ---
 
@@ -683,7 +683,7 @@ apps/
 # Install all packages + dev dependencies
 uv sync --all-packages --extra dev
 
-# Run all 513 tests
+# Run all 544 tests
 uv run pytest --tb=short -q
 
 # Lint
@@ -727,18 +727,17 @@ Install your package into the workspace and `context-router index` will pick it 
 
 ## Benchmark Results
 
-Measured on two codebases — context-router itself and an external Python CLI tool:
+Measured on two external Python codebases using the built-in 20-task suite (5 tasks × 4 modes):
 
-| Codebase | Mode | Tokens used | vs naive | Latency |
+| Codebase | Symbols | Avg reduction | Hit rate vs random | Latency |
 |---|---|---|---|---|
-| context-router (1,189 symbols) | all modes avg | 8,000 | −64.7% | 131 ms |
-| project_handover (1,313 symbols) | review | 8,000 / 38,319 | **−79.1%** | ~860 ms |
-| project_handover (1,313 symbols) | debug + error file | 8,180 / 38,430 | **−78.7%** | ~850 ms |
-| multi-repo workspace (2 repos) | review | ~7,999 | −79% | ~930 ms |
+| secret-scan-360 (security scanner) | 543 | **49.4%** | **48.1% vs 35.2%** | 105 ms |
+| project_handover (Python CLI) | 1,313 | **79.1%** | — | ~750 ms |
+| context-router (self) | 1,100 | **80.9%** | 37.2% vs 41.2% | 333 ms |
 
-Latency includes ~500 ms uv cold-start; warm invocations typically 150–200 ms.
+**Hit rate** measures whether the right symbols were selected, not just token count. The router outperforms random sampling by +12.9 pp on domain-matched repos.
 
-See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown, external repo testing, and Phase 4–6 feature effectiveness data.
+See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown, metric definitions, and confidence scoring explanation.
 
 ---
 
@@ -752,8 +751,9 @@ See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown
 | **Phase 4** — Better debug memory | ✅ complete | `error_hash` for cross-session error dedup, `top_frames` extraction, `past_debug` confidence tier (0.90), JUnit `failing_tests` |
 | **Phase 5** — Team-safe export | ✅ complete | `memory export` (Markdown, redacted mode), `decisions export` (per-ADR .md files with slug filenames) |
 | **Phase 6** — Agent feedback loop | ✅ complete | `PackFeedback` model, `pack_feedback` DB table, `feedback record/stats/list` CLI, `record_feedback` MCP tool (13 total), per-file confidence adjustments |
-| **Phase 7** — Astro/Vue/Svelte | planned | Single-file component analyzers for modern frontend repos |
-| **Phase 8** — Semantic ranking | planned | sentence-transformers embedding index for query-to-symbol similarity |
+| **Phase 7** — Distribution + DX | ✅ complete | `setup` command (auto-configure Claude/Copilot/Cursor/Windsurf/Codex), Homebrew tap, tiktoken estimation, quality benchmark metrics, additive query boost |
+| **Phase 8** — Astro/Vue/Svelte | planned | Single-file component analyzers for modern frontend repos |
+| **Phase 9** — Semantic ranking | planned | sentence-transformers embedding index for query-to-symbol similarity |
 
 ---
 
