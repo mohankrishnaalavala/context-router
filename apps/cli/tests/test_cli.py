@@ -245,9 +245,11 @@ class TestExplainCommand:
 
     def test_explain_show_call_chains_flag_exists(self):
         """--show-call-chains must be a recognised flag (not an error)."""
+        import re
         result = runner.invoke(app, ["explain", "last-pack", "--help"])
         assert result.exit_code == 0
-        assert "show-call-chains" in result.output
+        clean = re.sub(r'\x1b\[[0-9;]*[mGKHF]', '', result.output)
+        assert "show-call-chains" in clean
 
     def test_explain_no_pack_exits_1(self, tmp_path: Path):
         """Explain with no existing pack must exit code 1."""
@@ -263,9 +265,11 @@ class TestFeedbackFilesReadCLI:
     """Tests for P6 — feedback record --files-read."""
 
     def test_feedback_record_help_includes_files_read(self):
+        import re
         result = runner.invoke(app, ["feedback", "record", "--help"])
         assert result.exit_code == 0
-        assert "files-read" in result.output
+        clean = re.sub(r'\x1b\[[0-9;]*[mGKHF]', '', result.output)
+        assert "files-read" in clean
 
     def test_feedback_record_with_files_read(self, tmp_path: Path):
         import json
