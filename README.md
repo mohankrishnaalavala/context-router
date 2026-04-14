@@ -1,5 +1,11 @@
 # context-router
 
+[![PyPI](https://img.shields.io/pypi/v/context-router-cli)](https://pypi.org/project/context-router-cli/)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![MCP compatible](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
+[![Tests](https://github.com/mohankrishnaalavala/context-router/actions/workflows/ci.yml/badge.svg)](https://github.com/mohankrishnaalavala/context-router/actions)
+
 A local-first CLI and MCP server that selects the **minimum useful context** across code structure, runtime evidence, and project memory for AI coding agents — reducing token consumption on review, debug, implement, and handover tasks.
 
 ## Why
@@ -44,7 +50,12 @@ cd context-router
 uv sync --all-packages
 ```
 
-> **PyPI install (coming soon):** `pip install context-router-cli`
+> **PyPI:** `pip install context-router-cli` · [context-router-cli on PyPI](https://pypi.org/project/context-router-cli/)
+>
+> Or with uv (recommended — auto-manages Python 3.12+):
+> ```bash
+> uv tool install context-router-cli
+> ```
 
 ---
 

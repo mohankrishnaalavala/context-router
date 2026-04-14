@@ -39,6 +39,10 @@ def to_markdown(
     ran_at = report.ran_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     s = report.summary
 
+    hit_pct = round(s.get("avg_hit_rate", 0) * 100, 1)
+    rand_pct = round(s.get("avg_random_hit_rate", 0) * 100, 1)
+    rank_pct = round(s.get("avg_rank_quality", 0) * 100, 1)
+
     lines: list[str] = [
         "# context-router Benchmark Results",
         "",
@@ -57,6 +61,9 @@ def to_markdown(
         f"| Average token reduction | **{s.get('avg_reduction_pct', 0):.1f}%** |",
         f"| Average tokens selected | {s.get('avg_est_tokens', 0):,} |",
         f"| Average latency | {s.get('avg_latency_ms', 0):.0f} ms |",
+        f"| Hit rate (router) | **{hit_pct:.1f}%** |",
+        f"| Hit rate (random baseline) | {rand_pct:.1f}% |",
+        f"| Rank quality (conf ≥ 0.70) | {rank_pct:.1f}% |",
     ]
 
     if naive_tok or keyword_tok:
@@ -97,23 +104,34 @@ def to_markdown(
         )
         avg_lat = round(sum(t.latency_ms for t in tasks) / len(tasks), 0)
 
+        avg_hit = round(
+            sum(t.hit_rate for t in successful if t.hit_rate > 0 or t.random_hit_rate > 0) /
+            max(1, sum(1 for t in successful if t.hit_rate > 0 or t.random_hit_rate > 0)) * 100, 1
+        ) if successful else 0.0
+        avg_rand = round(
+            sum(t.random_hit_rate for t in successful if t.hit_rate > 0 or t.random_hit_rate > 0) /
+            max(1, sum(1 for t in successful if t.hit_rate > 0 or t.random_hit_rate > 0)) * 100, 1
+        ) if successful else 0.0
+
         lines += [
             f"### {mode.capitalize()} ({len(successful)}/{len(tasks)} succeeded)",
             "",
-            f"Average reduction: **{avg_red:.1f}%**  |  "
-            f"Avg tokens: **{avg_tok:,}**  |  "
-            f"Avg latency: **{avg_lat:.0f} ms**",
+            f"Reduction: **{avg_red:.1f}%**  |  "
+            f"Tokens: **{avg_tok:,}**  |  "
+            f"Latency: **{avg_lat:.0f} ms**  |  "
+            f"Hit rate: **{avg_hit:.1f}%** vs {avg_rand:.1f}% random",
             "",
-            "| ID | Query | Tokens | Reduction | Latency |",
-            "|----|-------|--------|-----------|---------|",
+            "| ID | Query | Tokens | Reduction | Hit Rate | Latency |",
+            "|----|-------|--------|-----------|----------|---------|",
         ]
         for task in tasks:
             status = "✅" if task.success else "❌"
-            query_short = task.query[:50] + "…" if len(task.query) > 50 else task.query
+            query_short = task.query[:45] + "…" if len(task.query) > 45 else task.query
+            hit_str = f"{task.hit_rate * 100:.0f}%" if task.hit_rate > 0 or task.random_hit_rate > 0 else "—"
             lines.append(
                 f"| {status} {task.task_id} | {query_short} | "
                 f"{task.est_tokens:,} | {task.reduction_pct:.0f}% | "
-                f"{task.latency_ms:.0f} ms |"
+                f"{hit_str} | {task.latency_ms:.0f} ms |"
             )
         lines.append("")
 
