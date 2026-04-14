@@ -130,3 +130,107 @@ class TestSaveDecision:
         )
         assert "error" in result
         assert result.get("saved") is False
+
+
+# ---------------------------------------------------------------------------
+# P1: get_context_summary
+# ---------------------------------------------------------------------------
+
+class TestGetContextSummary:
+    def test_returns_expected_keys(self, project_root: Path):
+        from mcp_server.tools import get_context_summary
+
+        result = get_context_summary(mode="implement", project_root=str(project_root))
+        assert "mode" in result
+        assert "item_count" in result
+        assert "total_est_tokens" in result
+        assert "reduction_pct" in result
+        assert "top_files" in result
+        assert "source_type_counts" in result
+
+    def test_mode_matches_request(self, project_root: Path):
+        from mcp_server.tools import get_context_summary
+
+        for mode in ("review", "implement", "debug", "handover"):
+            result = get_context_summary(mode=mode, project_root=str(project_root))
+            if "error" not in result:
+                assert result["mode"] == mode
+
+    def test_top_files_at_most_five(self, project_root: Path):
+        from mcp_server.tools import get_context_summary
+
+        result = get_context_summary(mode="implement", project_root=str(project_root))
+        if "error" not in result:
+            assert len(result["top_files"]) <= 5
+
+    def test_top_files_have_path_and_confidence(self, project_root: Path):
+        from mcp_server.tools import get_context_summary
+
+        result = get_context_summary(mode="implement", project_root=str(project_root))
+        if "error" not in result:
+            for f in result["top_files"]:
+                assert "path" in f
+                assert "confidence" in f
+
+    def test_missing_db_returns_error(self, tmp_path: Path):
+        from mcp_server.tools import get_context_summary
+
+        result = get_context_summary(mode="review", project_root=str(tmp_path))
+        assert "error" in result
+
+    def test_invalid_mode_returns_error(self, project_root: Path):
+        from mcp_server.tools import get_context_summary
+
+        result = get_context_summary(mode="invalid_mode", project_root=str(project_root))
+        assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# P0b: get_context_pack compact format
+# ---------------------------------------------------------------------------
+
+class TestGetContextPackCompact:
+    def test_compact_format_returns_text_key(self, project_root: Path):
+        from mcp_server.tools import get_context_pack
+
+        result = get_context_pack(mode="implement", project_root=str(project_root), format="compact")
+        # Either an error (no index) or a text response
+        assert "error" in result or "text" in result
+
+    def test_compact_format_text_contains_pack_header(self, project_root: Path):
+        from mcp_server.tools import get_context_pack
+
+        result = get_context_pack(mode="implement", project_root=str(project_root), format="compact")
+        if "text" in result:
+            assert "implement pack" in result["text"] or "pack" in result["text"]
+
+    def test_json_format_returns_model_fields(self, project_root: Path):
+        from mcp_server.tools import get_context_pack
+
+        result = get_context_pack(mode="implement", project_root=str(project_root), format="json")
+        if "error" not in result:
+            assert "mode" in result
+            assert "selected_items" in result
+
+
+# ---------------------------------------------------------------------------
+# P3: get_context_pack pagination
+# ---------------------------------------------------------------------------
+
+class TestGetContextPackPagination:
+    def test_page_size_limits_items(self, project_root: Path):
+        from mcp_server.tools import get_context_pack
+
+        result = get_context_pack(
+            mode="implement", project_root=str(project_root),
+            page=0, page_size=2,
+        )
+        if "error" not in result:
+            assert len(result.get("selected_items", [])) <= 2
+
+    def test_no_pagination_returns_has_more_false(self, project_root: Path):
+        from mcp_server.tools import get_context_pack
+
+        result = get_context_pack(mode="implement", project_root=str(project_root))
+        if "error" not in result:
+            assert result.get("has_more") is False

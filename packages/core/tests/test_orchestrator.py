@@ -174,3 +174,98 @@ def test_classify_for_implement(
     source_type, confidence = Orchestrator._classify_for_implement(name, kind, file_path)
     assert source_type == expected_source_type
     assert 0.0 < confidence <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# P0a: est_tokens includes metadata overhead
+# ---------------------------------------------------------------------------
+
+def test_est_tokens_includes_metadata_overhead(tmp_path: Path) -> None:
+    """est_tokens must be > just the excerpt tokens (title + overhead added)."""
+    from ranking import estimate_tokens
+
+    root = _make_project(tmp_path)
+    pack = Orchestrator(project_root=root).build_pack("implement", "")
+    for item in pack.selected_items:
+        raw_excerpt_tokens = estimate_tokens(item.excerpt)
+        # est_tokens should include title + overhead (~40) on top of excerpt
+        assert item.est_tokens > raw_excerpt_tokens, (
+            f"Item {item.title!r}: est_tokens={item.est_tokens} "
+            f"not greater than raw excerpt tokens={raw_excerpt_tokens}"
+        )
+
+
+def test_total_est_tokens_accounts_for_overhead(tmp_path: Path) -> None:
+    """total_est_tokens must exceed the sum of excerpt-only estimates."""
+    from ranking import estimate_tokens
+
+    root = _make_project(tmp_path)
+    pack = Orchestrator(project_root=root).build_pack("implement", "")
+    excerpt_only_total = sum(estimate_tokens(i.excerpt) for i in pack.selected_items)
+    assert pack.total_est_tokens > excerpt_only_total
+
+
+# ---------------------------------------------------------------------------
+# P3: Pagination
+# ---------------------------------------------------------------------------
+
+def test_pagination_page_0_returns_first_slice(tmp_path: Path) -> None:
+    root = _make_project(tmp_path)
+    # Seed more symbols so there are items to paginate
+    from storage_sqlite.database import Database
+    from storage_sqlite.repositories import SymbolRepository
+    from contracts.interfaces import Symbol
+
+    with Database(root / ".context-router" / "context-router.db") as db:
+        syms = [
+            Symbol(name=f"func_{i}", kind="function", file=Path(f"src/mod_{i}.py"),
+                   line_start=1, line_end=5, language="python",
+                   signature=f"def func_{i}(): pass", docstring="")
+            for i in range(10)
+        ]
+        SymbolRepository(db.connection).add_bulk(syms, "default")
+
+    pack = Orchestrator(project_root=root).build_pack("implement", "", page=0, page_size=3)
+    assert len(pack.selected_items) <= 3
+
+
+def test_pagination_has_more_when_more_items_exist(tmp_path: Path) -> None:
+    root = _make_project(tmp_path)
+    from storage_sqlite.database import Database
+    from storage_sqlite.repositories import SymbolRepository
+    from contracts.interfaces import Symbol
+
+    with Database(root / ".context-router" / "context-router.db") as db:
+        syms = [
+            Symbol(name=f"fn_{i}", kind="function", file=Path(f"src/m_{i}.py"),
+                   line_start=1, line_end=3, language="python",
+                   signature=f"def fn_{i}(): pass", docstring="")
+            for i in range(20)
+        ]
+        SymbolRepository(db.connection).add_bulk(syms, "default")
+
+    pack = Orchestrator(project_root=root).build_pack("implement", "", page=0, page_size=3)
+    # With 20+ symbols, page 0 of size 3 should signal more pages
+    assert pack.has_more is True
+    assert pack.total_items > 3
+
+
+def test_pagination_last_page_has_no_more(tmp_path: Path) -> None:
+    root = _make_project(tmp_path)
+    pack_all = Orchestrator(project_root=root).build_pack("implement", "")
+    total = len(pack_all.selected_items)
+    if total == 0:
+        return  # nothing to test
+
+    # Request a single huge page — should get everything
+    pack_paged = Orchestrator(project_root=root).build_pack(
+        "implement", "", page=0, page_size=total + 100
+    )
+    assert pack_paged.has_more is False
+
+
+def test_no_pagination_has_more_false(tmp_path: Path) -> None:
+    root = _make_project(tmp_path)
+    pack = Orchestrator(project_root=root).build_pack("implement", "")
+    assert pack.has_more is False
+    assert pack.total_items == 0

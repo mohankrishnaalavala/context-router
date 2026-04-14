@@ -1,6 +1,6 @@
 [project]
 name = "context-router-ranking"
-version = "0.4.0"
+version = "0.5.0"
 requires-python = ">=3.12"
 description = "Mode-specific context rankers and token budget enforcer for context-router (Phase 2)"
 dependencies = ["context-router-contracts", "tiktoken>=0.7"]

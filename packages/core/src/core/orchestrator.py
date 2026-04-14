@@ -27,6 +27,19 @@ from storage_sqlite.database import Database
 from storage_sqlite.repositories import EdgeRepository, SymbolRepository
 
 # ---------------------------------------------------------------------------
+# Token estimation
+# ---------------------------------------------------------------------------
+
+# Fixed overhead per ContextItem in JSON transport: UUID (9), source_type (5),
+# repo (5), path (10), reason (5), freshness ISO datetime (10), tags (5) ≈ 40.
+_METADATA_OVERHEAD_TOKENS: int = 40
+
+
+def _estimate_item_tokens(title: str, excerpt: str) -> int:
+    """Estimate token cost of a ContextItem including JSON metadata overhead."""
+    return estimate_tokens(title + " " + excerpt) + _METADATA_OVERHEAD_TOKENS
+
+# ---------------------------------------------------------------------------
 # Configuration for candidate scoring
 # ---------------------------------------------------------------------------
 
@@ -145,7 +158,7 @@ def _make_item(
         excerpt=excerpt,
         reason="",  # will be filled in by ContextRanker.rank()
         confidence=confidence,
-        est_tokens=estimate_tokens(excerpt),
+        est_tokens=_estimate_item_tokens(title, excerpt),
         tags=[],
     )
 
@@ -180,6 +193,8 @@ class Orchestrator:
         mode: str,
         query: str,
         error_file: Path | None = None,
+        page: int = 0,
+        page_size: int = 0,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -191,6 +206,10 @@ class Orchestrator:
             query: Free-text description of the task.
             error_file: Optional path to an error file (JUnit XML, stack trace,
                 log).  Used by debug mode to parse RuntimeSignals.
+            page: Zero-based page index for paginated responses (default 0).
+                Ignored when *page_size* is 0.
+            page_size: Number of items per page.  0 (default) disables pagination
+                and returns all ranked items.
 
         Returns:
             A populated and ranked ContextPack.
@@ -277,17 +296,30 @@ class Orchestrator:
         # Always apply at least 50% reduction so small repos benefit too
         effective_budget = min(config.token_budget, max(1000, baseline // 2))
         ranker = ContextRanker(token_budget=effective_budget)
-        ranked = ranker.rank(candidates, query, mode)
-        total = sum(i.est_tokens for i in ranked)
-        reduction = round((baseline - total) / baseline * 100, 1) if baseline else 0.0
+        all_ranked = ranker.rank(candidates, query, mode)
+        total_items_count = len(all_ranked)
+
+        # Apply pagination if requested
+        if page_size > 0:
+            start = page * page_size
+            page_items = all_ranked[start : start + page_size]
+            has_more = (page + 1) * page_size < total_items_count
+        else:
+            page_items = all_ranked
+            has_more = False
+
+        total = sum(i.est_tokens for i in page_items)
+        reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
 
         pack = ContextPack(
             mode=mode,
             query=query,
-            selected_items=ranked,
+            selected_items=page_items,
             total_est_tokens=total,
             baseline_est_tokens=baseline,
             reduction_pct=reduction,
+            has_more=has_more,
+            total_items=total_items_count if page_size > 0 else 0,
         )
 
         last_pack_path = self._root / ".context-router" / "last-pack.json"
@@ -573,16 +605,17 @@ class Orchestrator:
                 continue
             seen_signal_messages.add(sig.message)
             excerpt = "\n".join(sig.stack[:10]) if sig.stack else sig.message
+            title = sig.message[:80]
             items.append(
                 ContextItem(
                     source_type="runtime_signal",
                     repo=repo_name,
                     path_or_ref=str(sig.paths[0]) if sig.paths else "runtime",
-                    title=sig.message[:80],
+                    title=title,
                     excerpt=excerpt,
                     reason="",
                     confidence=_DEBUG_CONFIDENCE["runtime_signal"],
-                    est_tokens=estimate_tokens(excerpt),
+                    est_tokens=_estimate_item_tokens(title, excerpt),
                 )
             )
 
@@ -690,16 +723,17 @@ class Orchestrator:
                         _HANDOVER_CONFIDENCE["memory"],
                         max(0.10, score_for_pack(obs)),
                     )
+                    mem_title = f"Observation: {obs.summary[:60]}"
                     items.append(
                         ContextItem(
                             source_type="memory",
                             repo=repo_name,
                             path_or_ref=obs.commit_sha or "memory",
-                            title=f"Observation: {obs.summary[:60]}",
+                            title=mem_title,
                             excerpt=excerpt,
                             reason="",
                             confidence=fresh_conf,
-                            est_tokens=estimate_tokens(excerpt),
+                            est_tokens=_estimate_item_tokens(mem_title, excerpt),
                         )
                     )
 
@@ -718,16 +752,17 @@ class Orchestrator:
                         _HANDOVER_CONFIDENCE["decision"],
                         max(0.10, _cf(_dummy) * dec.confidence),
                     )
+                    dec_title = f"Decision: {dec.title[:60]}"
                     items.append(
                         ContextItem(
                             source_type="decision",
                             repo=repo_name,
                             path_or_ref=dec.id,
-                            title=f"Decision: {dec.title[:60]}",
+                            title=dec_title,
                             excerpt=excerpt,
                             reason="",
                             confidence=dec_fresh,
-                            est_tokens=estimate_tokens(excerpt),
+                            est_tokens=_estimate_item_tokens(dec_title, excerpt),
                         )
                     )
         except Exception:  # noqa: BLE001
