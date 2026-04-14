@@ -166,9 +166,14 @@ class ContextRanker:
     def _apply_query_boost(self, item: ContextItem, query_tokens: set[str]) -> ContextItem:
         """Boost *item* confidence if query tokens appear in its text fields.
 
-        Checks title, excerpt, and signature (from ``path_or_ref`` label).
-        Boost is proportional to the fraction of query tokens matched,
-        capped at ``_MAX_BOOST`` (0.30), and never exceeds 0.95.
+        Checks title and excerpt. Boost is additive, proportional to the
+        fraction of query tokens matched, capped at ``_MAX_BOOST`` (0.50),
+        and never exceeds 0.95.
+
+        Using additive boost for all confidence levels means a low-confidence
+        "file" item (0.20) with a full query match reaches 0.70 — equal to
+        blast_radius — so structurally-adjacent symbols don't crowd out
+        query-relevant symbols in review mode.
         """
         if not query_tokens:
             return item
@@ -182,12 +187,7 @@ class ContextRanker:
         if matched == 0:
             return item
         ratio = matched / len(query_tokens)
-        if item.confidence < 0.50:
-            # Multiplicative boost for low-confidence items so they can climb more
-            new_conf = min(0.95, item.confidence * (1.0 + ratio))
-        else:
-            # Additive boost for already-high-confidence items
-            new_conf = min(0.95, item.confidence + ratio * _MAX_BOOST)
+        new_conf = min(0.95, item.confidence + ratio * _MAX_BOOST)
         return item.model_copy(update={"confidence": new_conf})
 
     def _annotate(self, item: ContextItem) -> ContextItem:
