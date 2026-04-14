@@ -38,6 +38,11 @@ class ContextItem(BaseModel):
     freshness: datetime = Field(default_factory=_utcnow)
     tags: list[str] = Field(default_factory=list)
 
+    def to_compact_line(self) -> str:
+        """Return a compact single-item representation (no JSON metadata overhead)."""
+        excerpt_preview = self.excerpt[:200] if self.excerpt else ""
+        return f"[{self.confidence:.2f}] {self.path_or_ref}\n  {self.title}\n  {excerpt_preview}"
+
 
 class ContextPack(BaseModel):
     """A ranked collection of context items produced for a specific task mode.
@@ -54,6 +59,28 @@ class ContextPack(BaseModel):
     baseline_est_tokens: int = 0
     reduction_pct: float = 0.0
     created_at: datetime = Field(default_factory=_utcnow)
+    # Pagination fields (populated when page_size > 0 is requested)
+    has_more: bool = False
+    total_items: int = 0  # 0 = pagination not used
+
+    def to_compact_text(self) -> str:
+        """Return a compact plain-text representation of the pack.
+
+        Strips JSON metadata (UUID, freshness, tags) so agents receive only
+        confidence, path, title, and excerpt — significantly reducing token cost
+        compared to the full JSON serialisation.
+        """
+        header = (
+            f"# {self.mode} pack — {len(self.selected_items)} items"
+            f" — {self.total_est_tokens:,} tokens"
+            f" — {self.reduction_pct:.1f}% reduction"
+        )
+        if self.has_more:
+            header += f" (page {self.total_items} total items, more available)"
+        lines = [header]
+        for item in self.selected_items:
+            lines.append(item.to_compact_line())
+        return "\n".join(lines)
 
 
 class Observation(BaseModel):

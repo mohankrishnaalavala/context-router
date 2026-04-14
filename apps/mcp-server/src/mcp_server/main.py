@@ -78,7 +78,56 @@ _TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "Generate a ranked context pack for a coding task. "
             "Selects the minimum useful context across code structure, "
-            "runtime evidence, and project memory for the specified mode."
+            "runtime evidence, and project memory for the specified mode. "
+            "Use format='compact' to reduce token overhead. "
+            "Use page/page_size to load items incrementally."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["mode"],
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": ["review", "implement", "debug", "handover"],
+                    "description": "Task mode that controls ranking strategy.",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Free-text task description (used for relevance scoring).",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+                "format": {
+                    "type": "string",
+                    "enum": ["json", "compact"],
+                    "description": (
+                        "Output format. 'json' (default) returns full serialisation. "
+                        "'compact' returns path:title:excerpt lines — lower token cost."
+                    ),
+                    "default": "json",
+                },
+                "page": {
+                    "type": "integer",
+                    "description": "Zero-based page index for paginated results. Requires page_size > 0.",
+                    "default": 0,
+                },
+                "page_size": {
+                    "type": "integer",
+                    "description": "Items per page. 0 (default) returns all ranked items.",
+                    "default": 0,
+                },
+            },
+        },
+    },
+    "get_context_summary": {
+        "fn": tools.get_context_summary,
+        "description": (
+            "Lightweight peek at a context pack — returns item count, token total, "
+            "reduction %, top 5 files by confidence, and source type distribution. "
+            "Use this before get_context_pack to decide if you need the full pack. "
+            "Response is always under 200 tokens."
         ),
         "inputSchema": {
             "type": "object",

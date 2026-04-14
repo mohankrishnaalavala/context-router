@@ -1,6 +1,6 @@
 [project]
 name = "context-router-adapters-claude"
-version = "0.4.0"
+version = "0.5.0"
 requires-python = ">=3.12"
 description = "Claude Code agent adapter for context-router (Phase 6)"
 dependencies = ["context-router-contracts"]

@@ -208,3 +208,6 @@ __marimo__/
 
 # Handover chat sessions
 handover-chat-*.json
+
+# Local-only roadmap (not for public release)
+docs/roadmap.md

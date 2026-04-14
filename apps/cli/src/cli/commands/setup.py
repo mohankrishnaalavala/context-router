@@ -280,6 +280,117 @@ def _detect_agents(root: Path) -> list[str]:
     return detected
 
 
+# ── Hook installation ─────────────────────────────────────────────────────────
+
+# Sentinel used in .claude/settings.json to detect existing hook registration
+_HOOK_SENTINEL = "context-router memory capture"
+
+# Claude Code PostToolUse hook entry
+_CLAUDE_CODE_HOOK_ENTRY = {
+    "matcher": "Edit|Write|MultiEdit",
+    "hooks": [
+        {
+            "type": "command",
+            "command": "python3 -c \"import subprocess,json,sys; p=json.loads(sys.stdin.read()); f=p.get('tool_input',{}).get('file_path',''); subprocess.run(['context-router','memory','capture',f'Agent edited {f}','--task-type','implement','--files',f],check=False,capture_output=True) if f else None\"",
+            "timeout": 5000,
+        }
+    ],
+}
+
+
+def _install_hooks(root: Path, dry_run: bool) -> list[str]:
+    """Install post-commit git hook and Claude Code PostToolUse hook.
+
+    The git hook runs ``context-router memory capture`` after every commit.
+    The Claude Code hook captures file edits during agent sessions.
+
+    Args:
+        root: Project root directory.
+        dry_run: If True, only report what would change.
+
+    Returns:
+        List of paths that were (or would be) modified.
+    """
+    import shutil
+    import stat
+
+    changed: list[str] = []
+
+    # ── Git post-commit hook ──────────────────────────────────────────────
+    git_hooks_dir = root / ".git" / "hooks"
+    if git_hooks_dir.is_dir():
+        post_commit = git_hooks_dir / "post-commit"
+        # Find the bundled hook script
+        hook_source = Path(__file__).parent.parent.parent.parent.parent.parent / \
+            "core" / "src" / "core" / "hooks" / "post_commit.py"
+        # Fallback: try importlib
+        if not hook_source.exists():
+            try:
+                import importlib.resources as _ir
+                hook_source = Path(str(_ir.files("core.hooks"))) / "post_commit.py"
+            except Exception:  # noqa: BLE001
+                hook_source = None
+
+        if dry_run:
+            changed.append(f"[dry-run] would install git post-commit hook to {post_commit}")
+        else:
+            if hook_source and hook_source.exists():
+                shutil.copy2(str(hook_source), str(post_commit))
+            else:
+                # Write a minimal inline hook
+                post_commit.write_text(
+                    "#!/usr/bin/env python3\n"
+                    "import subprocess, sys\n"
+                    "try:\n"
+                    "    msg = subprocess.check_output(['git','log','-1','--pretty=%s'],text=True).strip()\n"
+                    "    files = subprocess.check_output(['git','diff-tree','--no-commit-id','-r','--name-only','HEAD'],text=True).strip().splitlines()\n"
+                    "    cmd = ['context-router','memory','capture',f'Committed: {msg}','--task-type','implement']\n"
+                    "    for f in files[:10]: cmd += ['--files', f]\n"
+                    "    subprocess.run(cmd, check=False, capture_output=True)\n"
+                    "except Exception: pass\n",
+                    encoding="utf-8",
+                )
+            # Make executable
+            post_commit.chmod(post_commit.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            changed.append(str(post_commit))
+    else:
+        if not dry_run:
+            typer.echo("  (skipping git hook — no .git/hooks/ directory found)")
+
+    # ── Claude Code PostToolUse hook ──────────────────────────────────────
+    claude_settings = root / ".claude" / "settings.json"
+    if claude_settings.exists() or (root / ".claude").is_dir():
+        if dry_run:
+            changed.append(f"[dry-run] would add PostToolUse hook to {claude_settings}")
+        else:
+            _merge_claude_code_hook(claude_settings)
+            changed.append(str(claude_settings))
+
+    return changed
+
+
+def _merge_claude_code_hook(settings_path: Path) -> None:
+    """Add context-router PostToolUse hook to .claude/settings.json, idempotent."""
+    if settings_path.exists():
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    else:
+        data = {}
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Check if already installed
+    hooks = data.setdefault("hooks", {})
+    post_tool_use = hooks.setdefault("PostToolUse", [])
+    already_installed = any(
+        _HOOK_SENTINEL in json.dumps(entry) for entry in post_tool_use
+    )
+    if not already_installed:
+        post_tool_use.append(_CLAUDE_CODE_HOOK_ENTRY)
+        settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+
 # ── CLI command ───────────────────────────────────────────────────────────────
 
 @setup_app.callback(invoke_without_command=True)
@@ -307,6 +418,17 @@ def setup(
         bool,
         typer.Option("--dry-run", help="Preview changes without writing any files."),
     ] = False,
+    with_hooks: Annotated[
+        bool,
+        typer.Option(
+            "--with-hooks",
+            help=(
+                "Install auto-capture hooks: git post-commit hook and Claude Code "
+                "PostToolUse hook. Both call 'context-router memory capture' silently "
+                "to build memory without manual intervention."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Configure AI coding agents to use context-router.
 
@@ -320,7 +442,7 @@ def setup(
 
         context-router setup
         context-router setup --agent claude
-        context-router setup --agent all
+        context-router setup --agent all --with-hooks
         context-router setup --project-root /path/to/project --dry-run
 
     Exit codes:
@@ -340,7 +462,7 @@ def setup(
         agents = list(_AGENT_CHOICES[:-1]) if agent == "all" else [agent]
     else:
         agents = _detect_agents(root)
-        if not agents:
+        if not agents and not with_hooks:
             typer.echo(
                 "No agent config files detected. Specify --agent to configure explicitly.\n"
                 f"Available: {', '.join(_AGENT_CHOICES[:-1])}",
@@ -369,6 +491,17 @@ def setup(
             any_changed = True
         else:
             typer.echo(f"  - {name}: already configured, skipped")
+
+    # ── Install hooks (optional) ──────────────────────────────────────────
+    if with_hooks:
+        typer.echo("\nInstalling auto-capture hooks:")
+        hook_changes = _install_hooks(root, dry_run)
+        if hook_changes:
+            for path in hook_changes:
+                typer.echo(f"  ✓ hook: {path}")
+            any_changed = True
+        else:
+            typer.echo("  - hooks: already installed, skipped")
 
     if not dry_run:
         if any_changed:

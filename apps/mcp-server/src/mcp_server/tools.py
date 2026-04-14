@@ -114,6 +114,9 @@ def get_context_pack(
     mode: str,
     query: str = "",
     project_root: str = "",
+    format: str = "json",
+    page: int = 0,
+    page_size: int = 0,
 ) -> dict:
     """Generate a ranked context pack.
 
@@ -121,17 +124,70 @@ def get_context_pack(
         mode: One of review|implement|debug|handover.
         query: Free-text task description.
         project_root: Project root. Auto-detected if omitted.
+        format: Output format — "json" (default, full serialisation) or "compact"
+            (path:title:excerpt lines, lower token overhead for agent consumption).
+        page: Zero-based page index (used with page_size for incremental loading).
+        page_size: Items per page. 0 = no pagination (return all ranked items).
 
     Returns:
-        Serialised ContextPack as a dict.
+        Serialised ContextPack as a dict, or {"text": ...} when format="compact".
     """
     try:
-        pack = _orchestrator(project_root).build_pack(mode, query)
+        pack = _orchestrator(project_root).build_pack(
+            mode, query, page=page, page_size=page_size
+        )
+        if format == "compact":
+            return {"text": pack.to_compact_text(), "has_more": pack.has_more, "total_items": pack.total_items}
         return pack.model_dump(mode="json")
     except FileNotFoundError as exc:
         return {"error": str(exc)}
     except ValueError as exc:
         return {"error": str(exc)}
+
+
+def get_context_summary(
+    mode: str,
+    query: str = "",
+    project_root: str = "",
+) -> dict:
+    """Return a lightweight summary of a context pack (< 200 tokens).
+
+    Use this before get_context_pack to decide whether you need the full pack.
+    Returns item count, token total, reduction %, top 5 files, and source type
+    distribution without sending all item details.
+
+    Args:
+        mode: One of review|implement|debug|handover.
+        query: Free-text task description.
+        project_root: Project root. Auto-detected if omitted.
+
+    Returns:
+        Dict with mode, item_count, total_est_tokens, reduction_pct, top_files,
+        source_type_counts.
+    """
+    from collections import Counter
+    try:
+        pack = _orchestrator(project_root).build_pack(mode, query)
+    except FileNotFoundError as exc:
+        return {"error": str(exc)}
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    source_counts = Counter(i.source_type for i in pack.selected_items)
+    top_files = sorted(pack.selected_items, key=lambda i: i.confidence, reverse=True)[:5]
+    return {
+        "mode": pack.mode,
+        "query": pack.query,
+        "item_count": len(pack.selected_items),
+        "total_est_tokens": pack.total_est_tokens,
+        "baseline_est_tokens": pack.baseline_est_tokens,
+        "reduction_pct": round(pack.reduction_pct, 1),
+        "top_files": [
+            {"path": i.path_or_ref, "title": i.title, "confidence": round(i.confidence, 2)}
+            for i in top_files
+        ],
+        "source_type_counts": dict(source_counts.most_common(5)),
+    }
 
 
 def get_debug_pack(

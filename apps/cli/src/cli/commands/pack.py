@@ -11,6 +11,9 @@ pack_app = typer.Typer(help="Generate a ranked context pack for a task.")
 _VALID_MODES = ("review", "debug", "implement", "handover")
 
 
+_VALID_FORMATS = ("json", "compact", "table")
+
+
 @pack_app.callback(invoke_without_command=True)
 def pack(
     mode: Annotated[
@@ -23,8 +26,16 @@ def pack(
     ] = "",
     json_output: Annotated[
         bool,
-        typer.Option("--json", help="Output result as JSON."),
+        typer.Option("--json", help="Output result as JSON (equivalent to --format json)."),
     ] = False,
+    format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format: table (default human-readable), json, or compact (path:title:excerpt lines).",
+        ),
+    ] = "table",
     project_root: Annotated[
         str,
         typer.Option(
@@ -40,6 +51,14 @@ def pack(
             help="Path to error file (JUnit XML, stack trace, log). Used in debug mode.",
         ),
     ] = "",
+    page: Annotated[
+        int,
+        typer.Option("--page", help="Zero-based page index for paginated output (requires --page-size)."),
+    ] = 0,
+    page_size: Annotated[
+        int,
+        typer.Option("--page-size", help="Items per page. 0 = no pagination (return all items)."),
+    ] = 0,
 ) -> None:
     """Generate a context pack for the given task MODE.
 
@@ -62,13 +81,22 @@ def pack(
     root = Path(project_root) if project_root else None
     err_path = Path(error_file) if error_file else None
     try:
-        result = Orchestrator(project_root=root).build_pack(mode, query, error_file=err_path)
+        result = Orchestrator(project_root=root).build_pack(
+            mode, query, error_file=err_path, page=page, page_size=page_size
+        )
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1)
 
-    if json_output:
+    # --json flag takes precedence for backwards compatibility
+    effective_format = "json" if json_output else format
+
+    if effective_format == "json":
         typer.echo(result.model_dump_json(indent=2))
+        return
+
+    if effective_format == "compact":
+        typer.echo(result.to_compact_text())
         return
 
     _print_pack(result)

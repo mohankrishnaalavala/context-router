@@ -9,6 +9,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.0] — Unreleased
+
+### Added
+- **`format=compact` for context packs**: `get_context_pack` and `context-router pack` now accept `--format compact` / `format="compact"` returning `[conf] path\n  title\n  excerpt` lines — no JSON metadata overhead (UUID, freshness, tags). Agents that consume packs as text benefit from ~40 tokens/item reduction.
+- **`get_context_summary` MCP tool (14th tool)**: Lightweight peek at a pack — returns mode, item count, token total, reduction %, top 5 files by confidence, and source type distribution in < 200 tokens. Use before `get_context_pack` to decide whether the full pack is needed.
+- **Pagination for context packs**: `get_context_pack` and `context-router pack` now accept `page` (0-based) and `page_size` parameters. Response includes `has_more: bool` and `total_items: int` so agents can load 30 items at a time instead of 240+.
+- **Auto-capture hooks**: `packages/core/src/core/hooks/post_commit.py` and `claude_code_hook.py` — installed by `context-router setup --with-hooks`. Post-commit hook captures commit message + changed files as a memory observation; Claude Code `PostToolUse` hook captures file edits. Both run silently and never block the git/agent workflow.
+- **`setup --with-hooks` flag**: Installs git `post-commit` hook and Claude Code `PostToolUse` hook entry in `.claude/settings.json` — idempotent, dry-run safe.
+
+### Fixed
+- **`est_tokens` undercounting**: Previously only counted `excerpt` tokens; now includes `title` + 40-token fixed overhead per item (UUID, source_type, repo, path, reason, freshness, tags in JSON transport). Benchmark reduction percentages are now honest — previously overstated by ~40 tokens × item count.
+
+### Changed
+- MCP server now exposes **14 tools** (was 13 in v0.4.x): added `get_context_summary`
+- Test suite expanded to **586 tests** (was 513 in v0.4.0)
+
+---
+
 ## [0.4.0] — 2026-04-14
 
 ### Added

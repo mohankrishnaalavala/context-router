@@ -40,13 +40,14 @@ class TestPing:
 # ---------------------------------------------------------------------------
 
 class TestToolsList:
-    def test_returns_all_thirteen_tools(self):
+    def test_returns_all_fourteen_tools(self):
         resp = _handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = {t["name"] for t in resp["result"]["tools"]}
         assert names == {
             "build_index",
             "update_index",
             "get_context_pack",
+            "get_context_summary",
             "get_debug_pack",
             "explain_selection",
             "generate_handover",
