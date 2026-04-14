@@ -710,6 +710,64 @@ class EdgeRepository:
         ).fetchall()
         return [r["file_path"] for r in rows]
 
+    def get_call_chain_files(
+        self,
+        repo: str,
+        from_file_path: str,
+        max_depth: int = 3,
+    ) -> list[tuple[str, int]]:
+        """BFS traversal of ``calls`` edges up to *max_depth* hops from all
+        symbols in *from_file_path*.
+
+        Returns ``[(callee_file_path, hop_depth), ...]`` for each reachable
+        callee file, excluding *from_file_path* itself.  Each file appears
+        only once at its minimum hop depth.
+
+        Args:
+            repo: Logical repository name.
+            from_file_path: Starting file path as stored in the DB.
+            max_depth: Maximum number of call-chain hops to traverse (1–N).
+
+        Returns:
+            List of (file_path, depth) tuples, unordered.
+        """
+        seed_rows = self._conn.execute(
+            "SELECT id FROM symbols WHERE repo=? AND file_path=?",
+            (repo, from_file_path),
+        ).fetchall()
+        seed_ids = {r[0] for r in seed_rows}
+        if not seed_ids:
+            return []
+
+        visited_ids: set[int] = set(seed_ids)
+        queue: list[tuple[int, int]] = [(sid, 0) for sid in seed_ids]
+        result_files: dict[str, int] = {}  # file_path -> min hop depth
+
+        while queue:
+            curr_id, depth = queue.pop(0)
+            if depth >= max_depth:
+                continue
+            rows = self._conn.execute(
+                "SELECT to_symbol_id FROM edges "
+                "WHERE repo=? AND from_symbol_id=? AND edge_type='calls'",
+                (repo, curr_id),
+            ).fetchall()
+            for row in rows:
+                callee_id = row[0]
+                if callee_id in visited_ids:
+                    continue
+                visited_ids.add(callee_id)
+                fp_row = self._conn.execute(
+                    "SELECT file_path FROM symbols WHERE id=?", (callee_id,)
+                ).fetchone()
+                if fp_row:
+                    fp = fp_row[0]
+                    if fp != from_file_path and fp not in result_files:
+                        result_files[fp] = depth + 1
+                queue.append((callee_id, depth + 1))
+
+        return list(result_files.items())
+
     def add_raw(self, repo: str, from_id: int, to_id: int, edge_type: str) -> None:
         """Insert an edge directly by integer symbol ids without name resolution."""
         self._conn.execute(
@@ -753,8 +811,8 @@ class PackFeedbackRepository:
         self._conn.execute(
             """
             INSERT INTO pack_feedback
-                (id, pack_id, useful, missing, noisy, too_much_ctx, reason, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, pack_id, useful, missing, noisy, too_much_ctx, reason, files_read, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 fb.id,
@@ -764,6 +822,7 @@ class PackFeedbackRepository:
                 json.dumps(fb.noisy),
                 1 if fb.too_much_context else 0,
                 fb.reason,
+                json.dumps(fb.files_read),
                 fb.timestamp.isoformat(),
             ),
         )
@@ -805,10 +864,12 @@ class PackFeedbackRepository:
 
         Returns:
             Dict with keys: total, useful_count, not_useful_count, useful_pct,
-            top_missing (top 5 paths), top_noisy (top 5 paths).
+            top_missing (top 5 paths), top_noisy (top 5 paths),
+            read_overlap_pct (when ≥5 reports include files_read),
+            noise_ratio_pct (when ≥5 reports include files_read).
         """
         rows = self._conn.execute(
-            "SELECT useful, missing, noisy FROM pack_feedback"
+            "SELECT useful, missing, noisy, files_read FROM pack_feedback"
         ).fetchall()
 
         total = len(rows)
@@ -827,7 +888,7 @@ class PackFeedbackRepository:
         top_missing = sorted(missing_freq, key=lambda k: missing_freq[k], reverse=True)[:5]
         top_noisy = sorted(noisy_freq, key=lambda k: noisy_freq[k], reverse=True)[:5]
 
-        return {
+        result: dict = {
             "total": total,
             "useful_count": useful_count,
             "not_useful_count": not_useful_count,
@@ -835,6 +896,34 @@ class PackFeedbackRepository:
             "top_missing": top_missing,
             "top_noisy": top_noisy,
         }
+
+        # Read coverage — only computed when ≥5 reports include files_read
+        rows_with_reads = [
+            r for r in rows
+            if json.loads(r["files_read"] or "[]")
+        ]
+        if len(rows_with_reads) >= 5:
+            overlap_rates: list[float] = []
+            noise_rates: list[float] = []
+            for r in rows_with_reads:
+                fr = set(json.loads(r["files_read"]))
+                # For now we can only compute noise from noisy list vs files_read
+                noisy_set = set(json.loads(r["noisy"] or "[]"))
+                # overlap: what fraction of files_read was NOT in noisy (i.e. useful)
+                if fr:
+                    useful_reads = fr - noisy_set
+                    overlap_rates.append(len(useful_reads) / len(fr))
+                    noise_rates.append(len(fr & noisy_set) / len(fr))
+            if overlap_rates:
+                result["read_overlap_pct"] = round(
+                    sum(overlap_rates) / len(overlap_rates) * 100, 1
+                )
+                result["noise_ratio_pct"] = round(
+                    sum(noise_rates) / len(noise_rates) * 100, 1
+                )
+                result["reports_with_files_read"] = len(rows_with_reads)
+
+        return result
 
     def get_file_adjustments(self, min_count: int = 3) -> dict[str, float]:
         """Return per-file confidence adjustments derived from feedback.
@@ -873,6 +962,8 @@ class PackFeedbackRepository:
         """Convert a sqlite3.Row to a PackFeedback model."""
         useful_raw = row["useful"]
         useful = None if useful_raw is None else bool(useful_raw)
+        # files_read may be absent on rows created before migration 0007
+        files_read_raw = row["files_read"] if "files_read" in row.keys() else "[]"
         return PackFeedback(
             id=row["id"],
             pack_id=row["pack_id"],
@@ -881,5 +972,6 @@ class PackFeedbackRepository:
             noisy=json.loads(row["noisy"] or "[]"),
             too_much_context=bool(row["too_much_ctx"]),
             reason=row["reason"] or "",
+            files_read=json.loads(files_read_raw or "[]"),
             timestamp=datetime.fromisoformat(row["timestamp"]),
         )

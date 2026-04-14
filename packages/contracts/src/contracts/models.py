@@ -150,6 +150,7 @@ class PackFeedback(BaseModel):
     noisy: list[str] = Field(default_factory=list)     # files/symbols irrelevant
     too_much_context: bool = False
     reason: str = ""
+    files_read: list[str] = Field(default_factory=list)  # files the agent actually consumed
     timestamp: datetime = Field(default_factory=_utcnow)
 
 

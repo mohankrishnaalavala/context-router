@@ -12,6 +12,7 @@ from contracts.models import (
     ContextPack,
     Decision,
     Observation,
+    PackFeedback,
     RepoDescriptor,
     RuntimeSignal,
     WorkspaceDescriptor,
@@ -215,3 +216,31 @@ class TestPaginationFields:
         restored = ContextPack.model_validate_json(pack.model_dump_json())
         assert restored.has_more is True
         assert restored.total_items == 42
+
+
+class TestPackFeedbackFilesRead:
+    """Tests for P6 — files_read field on PackFeedback."""
+
+    def test_files_read_defaults_to_empty(self):
+        fb = PackFeedback(pack_id="abc")
+        assert fb.files_read == []
+
+    def test_files_read_can_be_set(self):
+        fb = PackFeedback(pack_id="abc", files_read=["src/auth.py", "src/token.py"])
+        assert "src/auth.py" in fb.files_read
+        assert "src/token.py" in fb.files_read
+
+    def test_files_read_json_round_trip(self):
+        fb = PackFeedback(pack_id="xyz", files_read=["a.py", "b.py"])
+        restored = PackFeedback.model_validate_json(fb.model_dump_json())
+        assert restored.files_read == ["a.py", "b.py"]
+
+    def test_files_read_independent_of_missing(self):
+        """files_read and missing can contain different paths."""
+        fb = PackFeedback(
+            pack_id="p1",
+            missing=["needed.py"],
+            files_read=["read.py"],
+        )
+        assert fb.missing == ["needed.py"]
+        assert fb.files_read == ["read.py"]

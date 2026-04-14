@@ -234,3 +234,35 @@ class TestGetContextPackPagination:
         result = get_context_pack(mode="implement", project_root=str(project_root))
         if "error" not in result:
             assert result.get("has_more") is False
+
+
+# ---------------------------------------------------------------------------
+# P6: record_feedback with files_read
+# ---------------------------------------------------------------------------
+
+class TestRecordFeedbackFilesRead:
+    def test_record_feedback_accepts_files_read(self, project_root: Path):
+        from mcp_server.tools import record_feedback
+
+        # Save an observation first to get a valid pack_id-like UUID
+        import uuid
+        pack_id = str(uuid.uuid4())
+        result = record_feedback(
+            pack_id=pack_id,
+            useful=True,
+            files_read=["src/auth.py", "src/token.py"],
+            project_root=str(project_root),
+        )
+        assert result.get("recorded") is True
+        assert "id" in result
+
+    def test_record_feedback_without_files_read_still_works(self, project_root: Path):
+        from mcp_server.tools import record_feedback
+        import uuid
+
+        result = record_feedback(
+            pack_id=str(uuid.uuid4()),
+            useful=False,
+            project_root=str(project_root),
+        )
+        assert result.get("recorded") is True

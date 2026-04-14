@@ -654,6 +654,42 @@ class Orchestrator:
                 )
             )
 
+        # P5: Walk 'calls' edges from runtime_signal/changed_file paths to
+        # surface call chains leading to the error site (up to 3 hops).
+        # Confidence decays by _CALL_CHAIN_DECAY per hop.
+        _CALL_CHAIN_BASE_CONF = 0.45
+        _CALL_CHAIN_DECAY = 0.70  # multiplier per hop
+
+        existing_paths = {item.path_or_ref for item in items}
+        call_chain_items: list[ContextItem] = []
+        seen_chain_paths: set[str] = set(existing_paths)
+
+        for item in items:
+            if item.source_type not in ("runtime_signal", "changed_file"):
+                continue
+            chain_files = edge_repo.get_call_chain_files(
+                repo_name, item.path_or_ref, max_depth=3
+            )
+            for chain_file, depth in chain_files:
+                if chain_file in seen_chain_paths:
+                    continue
+                seen_chain_paths.add(chain_file)
+                conf = round(_CALL_CHAIN_BASE_CONF * (_CALL_CHAIN_DECAY ** (depth - 1)), 4)
+                title = f"{Path(chain_file).name} (call chain depth {depth})"
+                call_chain_items.append(
+                    ContextItem(
+                        source_type="call_chain",
+                        repo=repo_name,
+                        path_or_ref=chain_file,
+                        title=title,
+                        excerpt="",
+                        reason="",
+                        confidence=conf,
+                        est_tokens=_estimate_item_tokens(title, ""),
+                    )
+                )
+        items.extend(call_chain_items)
+
         return items
 
     # ------------------------------------------------------------------

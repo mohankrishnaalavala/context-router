@@ -9,6 +9,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.0] — Unreleased
+
+### Added
+- **BM25 query scoring** (`packages/ranking`): Replaced exact substring matching with inline Okapi BM25 scoring. `ContextRanker` now uses the formula `final_conf = min(0.95, 0.6 × structural_conf + 0.4 × bm25_score)`, where BM25 score is normalized across all candidates per-query. "authentication" now matches `AuthManager`, `verify_token`, and similar identifiers that substring matching missed. No new dependency — BM25 is ~50 lines of inline Python.
+- **Call flow analysis** (`packages/core`, `packages/storage-sqlite`): Debug mode now walks `calls` edges up to 3 hops from `runtime_signal`/`changed_file` items. Callee files appear as `source_type=call_chain` with confidence that decays 30% per hop (depth 1 = 0.45, depth 2 ≈ 0.315, depth 3 ≈ 0.22). Surfaces code paths that lead to an error site without manual tracing.
+- **`explain last-pack --show-call-chains`**: New flag on the `explain last-pack` CLI command that groups `call_chain` items under a labelled section, making it easy to distinguish structural candidates from inferred call-chain ones.
+- **`EdgeRepository.get_call_chain_files()`** (`packages/storage-sqlite`): BFS traversal of `calls` edges up to configurable depth. Cycle-safe; returns `[(file_path, hop_depth), ...]`.
+- **`files_read` on `PackFeedback`** (`packages/contracts`, `packages/storage-sqlite`): Agents can now report which files they actually consumed from a pack. Enables read-coverage analytics: after ≥ 5 reports with `files_read`, `feedback stats` shows `read_overlap_pct` (fraction of reads that were useful) and `noise_ratio_pct` (fraction of reads that were noisy).
+- **Migration 0007** (`packages/storage-sqlite`): `ALTER TABLE pack_feedback ADD COLUMN files_read TEXT NOT NULL DEFAULT '[]'`.
+- **`feedback record --files-read`**: New CLI flag (space-separated file paths) on the `feedback record` command.
+- **`record_feedback` MCP tool updated**: Now accepts `files_read` parameter (array of strings).
+
+### Changed
+- `ContextRanker._apply_query_boost()` replaced by `_apply_bm25_boost()` — scoring formula changed from additive exact-match boost to weighted BM25 combination. Items with no query match get 60% of their structural confidence instead of 100%; query-relevant items can reach up to 0.95 regardless of structural tier.
+- Test suite expanded to **~640 tests** (was 586 in v0.5.0).
+
+---
+
 ## [0.5.0] — Unreleased
 
 ### Added

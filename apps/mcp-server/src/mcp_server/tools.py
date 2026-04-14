@@ -469,6 +469,7 @@ def record_feedback(
     noisy: "list[str] | None" = None,
     too_much_context: bool = False,
     reason: str = "",
+    files_read: "list[str] | None" = None,
     project_root: str = "",
 ) -> dict:
     """Record agent feedback for a context pack to improve future rankings.
@@ -484,6 +485,8 @@ def record_feedback(
         noisy: File or symbol paths that were irrelevant.
         too_much_context: True if the pack contained too many items.
         reason: Free-text explanation.
+        files_read: File paths the agent actually consumed from the pack
+            (enables read-coverage analytics after ≥ 5 reports).
         project_root: Project root. Auto-detected if omitted.
 
     Returns:
@@ -506,6 +509,7 @@ def record_feedback(
         noisy=noisy or [],
         too_much_context=too_much_context,
         reason=reason,
+        files_read=files_read or [],
     )
 
     with Database(db_path) as db:

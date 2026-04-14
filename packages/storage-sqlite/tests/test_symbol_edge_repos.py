@@ -121,3 +121,90 @@ class TestEdgeRepository:
         edge_repo = EdgeRepository(db.connection)
         edges = edge_repo.get_all_edges("nonexistent")
         assert edges == []
+
+
+class TestGetCallChainFiles:
+    """Tests for EdgeRepository.get_call_chain_files (P5)."""
+
+    def _seed_chain(self, db: Database) -> dict[str, int]:
+        """Seed symbols and calls edges: a.py → b.py → c.py → d.py."""
+        sym_repo = SymbolRepository(db.connection)
+        edge_repo = EdgeRepository(db.connection)
+        repo = "chain_repo"
+
+        a = sym_repo.add(_sym("func_a", file="/src/a.py"), repo)
+        b = sym_repo.add(_sym("func_b", file="/src/b.py"), repo)
+        c = sym_repo.add(_sym("func_c", file="/src/c.py"), repo)
+        d = sym_repo.add(_sym("func_d", file="/src/d.py"), repo)
+
+        edge_repo.add_raw(repo, a, b, "calls")
+        edge_repo.add_raw(repo, b, c, "calls")
+        edge_repo.add_raw(repo, c, d, "calls")
+
+        return {"a": a, "b": b, "c": c, "d": d}
+
+    def test_returns_direct_callee_at_depth_1(self, db: Database) -> None:
+        self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        result = edge_repo.get_call_chain_files("chain_repo", "/src/a.py", max_depth=1)
+        files = {f for f, _ in result}
+        assert "/src/b.py" in files
+
+    def test_depth_3_reaches_all_hops(self, db: Database) -> None:
+        self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        result = edge_repo.get_call_chain_files("chain_repo", "/src/a.py", max_depth=3)
+        files = {f for f, _ in result}
+        assert "/src/b.py" in files
+        assert "/src/c.py" in files
+        assert "/src/d.py" in files
+
+    def test_max_depth_limits_traversal(self, db: Database) -> None:
+        self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        # depth=1 should NOT reach c.py or d.py
+        result = edge_repo.get_call_chain_files("chain_repo", "/src/a.py", max_depth=1)
+        files = {f for f, _ in result}
+        assert "/src/c.py" not in files
+        assert "/src/d.py" not in files
+
+    def test_hop_depths_are_correct(self, db: Database) -> None:
+        self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        result = dict(edge_repo.get_call_chain_files("chain_repo", "/src/a.py", max_depth=3))
+        assert result.get("/src/b.py") == 1
+        assert result.get("/src/c.py") == 2
+        assert result.get("/src/d.py") == 3
+
+    def test_cycle_does_not_loop_forever(self, db: Database) -> None:
+        """A cycle in calls edges must not cause infinite traversal."""
+        sym_repo = SymbolRepository(db.connection)
+        edge_repo = EdgeRepository(db.connection)
+        repo = "cycle_repo"
+        x = sym_repo.add(_sym("func_x", file="/src/x.py"), repo)
+        y = sym_repo.add(_sym("func_y", file="/src/y.py"), repo)
+        edge_repo.add_raw(repo, x, y, "calls")
+        edge_repo.add_raw(repo, y, x, "calls")  # back-edge → cycle
+
+        result = edge_repo.get_call_chain_files(repo, "/src/x.py", max_depth=10)
+        files = {f for f, _ in result}
+        assert "/src/y.py" in files
+        # Crucially: no duplicate entries and terminates cleanly
+        assert len(result) == len(set(f for f, _ in result))
+
+    def test_empty_file_returns_empty(self, db: Database) -> None:
+        edge_repo = EdgeRepository(db.connection)
+        result = edge_repo.get_call_chain_files("no_repo", "/no/such/file.py")
+        assert result == []
+
+    def test_non_calls_edges_not_traversed(self, db: Database) -> None:
+        """Only 'calls' edges should be walked, not 'imports' or 'tested_by'."""
+        sym_repo = SymbolRepository(db.connection)
+        edge_repo = EdgeRepository(db.connection)
+        repo = "import_repo"
+        p = sym_repo.add(_sym("func_p", file="/src/p.py"), repo)
+        q = sym_repo.add(_sym("func_q", file="/src/q.py"), repo)
+        edge_repo.add_raw(repo, p, q, "imports")  # NOT 'calls'
+
+        result = edge_repo.get_call_chain_files(repo, "/src/p.py", max_depth=3)
+        assert result == []

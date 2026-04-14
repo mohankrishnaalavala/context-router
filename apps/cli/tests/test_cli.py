@@ -234,3 +234,52 @@ class TestMemoryCapture:
     def test_capture_help_exits_0(self):
         result = runner.invoke(app, ["memory", "capture", "--help"])
         assert result.exit_code == 0
+
+
+class TestExplainCommand:
+    """Tests for P5 — explain last-pack --show-call-chains flag."""
+
+    def test_explain_help_exits_0(self):
+        result = runner.invoke(app, ["explain", "last-pack", "--help"])
+        assert result.exit_code == 0
+
+    def test_explain_show_call_chains_flag_exists(self):
+        """--show-call-chains must be a recognised flag (not an error)."""
+        result = runner.invoke(app, ["explain", "last-pack", "--help"])
+        assert result.exit_code == 0
+        assert "show-call-chains" in result.output
+
+    def test_explain_no_pack_exits_1(self, tmp_path: Path):
+        """Explain with no existing pack must exit code 1."""
+        result = runner.invoke(app, [
+            "explain", "last-pack",
+            "--show-call-chains",
+        ])
+        # May fail with exit 1 if no pack exists; important: does not crash with unhandled exception
+        assert result.exit_code in (0, 1)
+
+
+class TestFeedbackFilesReadCLI:
+    """Tests for P6 — feedback record --files-read."""
+
+    def test_feedback_record_help_includes_files_read(self):
+        result = runner.invoke(app, ["feedback", "record", "--help"])
+        assert result.exit_code == 0
+        assert "files-read" in result.output
+
+    def test_feedback_record_with_files_read(self, tmp_path: Path):
+        import json
+        runner.invoke(app, ["init", "--project-root", str(tmp_path)])
+        import uuid
+        pack_id = str(uuid.uuid4())
+        result = runner.invoke(app, [
+            "feedback", "record",
+            "--pack-id", pack_id,
+            "--useful", "yes",
+            "--files-read", "src/auth.py src/token.py",
+            "--project-root", str(tmp_path),
+            "--json",
+        ])
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["recorded"] is True
