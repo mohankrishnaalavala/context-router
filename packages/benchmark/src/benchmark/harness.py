@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import time
 import uuid
 from pathlib import Path
@@ -57,11 +58,51 @@ class BenchmarkRunner:
         t0 = time.perf_counter()
         try:
             from core.orchestrator import Orchestrator
+            from storage_sqlite.database import Database
+            from storage_sqlite.repositories import SymbolRepository
 
             pack = Orchestrator(project_root=self._root).build_pack(
                 task.mode, task.query
             )
             latency_ms = (time.perf_counter() - t0) * 1000
+
+            selected_titles = [item.title.lower() for item in pack.selected_items]
+
+            # ── hit rate ────────────────────────────────────────────────────
+            hit_rate = 0.0
+            random_hit_rate = 0.0
+            if task.expected_symbols:
+                hits = sum(
+                    1 for sym in task.expected_symbols
+                    if any(sym.lower() in title for title in selected_titles)
+                )
+                hit_rate = round(hits / len(task.expected_symbols), 3)
+
+                # Random baseline: sample same number of symbol names from DB
+                try:
+                    db_path = self._root / ".context-router" / "context-router.db"
+                    with Database(db_path) as db:
+                        sym_repo = SymbolRepository(db.connection)
+                        all_names = [s.name.lower() for s in sym_repo.get_all("default")]
+                    if all_names:
+                        sample_size = min(len(pack.selected_items), len(all_names))
+                        random_sample = random.sample(all_names, sample_size)
+                        rand_hits = sum(
+                            1 for sym in task.expected_symbols
+                            if any(sym.lower() in name for name in random_sample)
+                        )
+                        random_hit_rate = round(rand_hits / len(task.expected_symbols), 3)
+                except Exception:  # noqa: BLE001
+                    random_hit_rate = 0.0
+
+            # ── rank quality ────────────────────────────────────────────────
+            rank_quality = 0.0
+            if pack.selected_items:
+                high_conf = sum(
+                    1 for item in pack.selected_items if item.confidence >= 0.70
+                )
+                rank_quality = round(high_conf / len(pack.selected_items), 3)
+
             return TaskMetrics(
                 task_id=task.id,
                 mode=task.mode,
@@ -72,6 +113,9 @@ class BenchmarkRunner:
                 latency_ms=round(latency_ms, 1),
                 items_selected=len(pack.selected_items),
                 success=True,
+                hit_rate=hit_rate,
+                random_hit_rate=random_hit_rate,
+                rank_quality=rank_quality,
             )
         except Exception as exc:
             latency_ms = (time.perf_counter() - t0) * 1000
