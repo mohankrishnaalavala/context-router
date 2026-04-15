@@ -167,6 +167,55 @@ def _walk_ts(
             _walk_ts(child, results, file, current_func)
         return
 
+    if node_type == "type_alias_declaration":
+        name_node = _child_by_field(node, "name")
+        if name_node:
+            name = _text(name_node)
+            start = node.start_point[0] + 1  # type: ignore[index]
+            end = node.end_point[0] + 1  # type: ignore[index]
+            results.append(
+                Symbol(
+                    name=name,
+                    kind="type",
+                    file=file,
+                    line_start=start,
+                    line_end=end,
+                    language="typescript",
+                )
+            )
+        for child in node.children:  # type: ignore[attr-defined]
+            _walk_ts(child, results, file, current_func)
+        return
+
+    if node_type == "variable_declarator":
+        # Capture arrow functions: const Foo = () => {...} / const Foo = async () => {...}
+        name_node = _child_by_field(node, "name")
+        value_node = _child_by_field(node, "value")
+        if name_node and value_node and value_node.type in (  # type: ignore[attr-defined]
+            "arrow_function", "function_expression"
+        ):
+            name = _text(name_node)
+            if name and name[0].isalpha():  # skip destructuring patterns
+                start = node.start_point[0] + 1  # type: ignore[index]
+                end = node.end_point[0] + 1  # type: ignore[index]
+                results.append(
+                    Symbol(
+                        name=name,
+                        kind="function",
+                        file=file,
+                        line_start=start,
+                        line_end=end,
+                        language="typescript",
+                    )
+                )
+                for child in value_node.children:  # type: ignore[attr-defined]
+                    _walk_ts(child, results, file, current_func=name)
+                return
+        # Default: recurse for destructuring / non-arrow declarations
+        for child in node.children:  # type: ignore[attr-defined]
+            _walk_ts(child, results, file, current_func)
+        return
+
     if node_type == "import_statement":
         # import { foo } from 'bar'  /  import foo from 'bar'
         source_node = _child_by_field(node, "source")
