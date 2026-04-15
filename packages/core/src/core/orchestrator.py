@@ -17,6 +17,7 @@ and ranking.  CLI/MCP server must only import from core.
 from __future__ import annotations
 
 import re
+import warnings
 from pathlib import Path
 
 from contracts.config import ContextRouterConfig, load_config
@@ -38,6 +39,19 @@ _METADATA_OVERHEAD_TOKENS: int = 40
 def _estimate_item_tokens(title: str, excerpt: str) -> int:
     """Estimate token cost of a ContextItem including JSON metadata overhead."""
     return estimate_tokens(title + " " + excerpt) + _METADATA_OVERHEAD_TOKENS
+
+
+def _warn_optional_subsystem_failure(
+    subsystem: str,
+    consequence: str,
+    exc: Exception,
+) -> None:
+    """Emit a warning when a best-effort subsystem fails during pack generation."""
+    warnings.warn(
+        f"{subsystem} failed; {consequence}: {exc}",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 
 # ---------------------------------------------------------------------------
 # Configuration for candidate scoring
@@ -220,6 +234,7 @@ class Orchestrator:
             ValueError: If *mode* is not a recognised value.
         """
         config = load_config(self._root)
+        repo_scope = str(self._root.resolve())
         db_path = self._root / ".context-router" / "context-router.db"
 
         if not db_path.exists():
@@ -242,14 +257,16 @@ class Orchestrator:
             past_debug_files: set[str] = set()
             if runtime_signals:
                 from storage_sqlite.repositories import RuntimeSignalRepository
-                from memory.store import ObservationStore
                 sig_repo = RuntimeSignalRepository(db.connection)
-                obs_store = ObservationStore(db)
                 for sig in runtime_signals:
                     try:
                         sig_repo.add(sig)
-                    except Exception:  # noqa: BLE001
-                        pass  # best-effort
+                    except Exception as exc:  # noqa: BLE001
+                        _warn_optional_subsystem_failure(
+                            "Runtime signal persistence",
+                            "debug memory will omit the latest runtime signal",
+                            exc,
+                        )
                     # Look up past signals with the same error_hash
                     if sig.error_hash:
                         try:
@@ -258,14 +275,25 @@ class Orchestrator:
                                 for p in ps.paths:
                                     past_debug_files.add(str(p))
                                     past_debug_files.add(p.name)
-                        except Exception:  # noqa: BLE001
-                            pass
+                        except Exception as exc:  # noqa: BLE001
+                            _warn_optional_subsystem_failure(
+                                "Past runtime signal lookup",
+                                "past_debug files will not be recalled for this build",
+                                exc,
+                            )
 
             # Phase 6: load feedback-based confidence adjustments
             try:
                 from storage_sqlite.repositories import PackFeedbackRepository
-                feedback_adjustments = PackFeedbackRepository(db.connection).get_file_adjustments()
-            except Exception:  # noqa: BLE001
+                feedback_adjustments = PackFeedbackRepository(db.connection).get_file_adjustments(
+                    repo_scope=repo_scope,
+                )
+            except Exception as exc:  # noqa: BLE001
+                _warn_optional_subsystem_failure(
+                    "Feedback adjustment loading",
+                    "feedback-based ranking adjustments will be omitted",
+                    exc,
+                )
                 feedback_adjustments = {}
 
             candidates = self._build_candidates(
@@ -801,7 +829,11 @@ class Orchestrator:
                             est_tokens=_estimate_item_tokens(dec_title, excerpt),
                         )
                     )
-        except Exception:  # noqa: BLE001
-            pass  # Memory store is optional; handover works without it
+        except Exception as exc:  # noqa: BLE001
+            _warn_optional_subsystem_failure(
+                "Handover memory loading",
+                "memory and decision items will be omitted from the handover pack",
+                exc,
+            )
 
         return items

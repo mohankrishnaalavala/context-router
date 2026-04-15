@@ -26,20 +26,38 @@ def db(tmp_path: Path) -> Database:
 class TestDatabase:
     def test_schema_version_is_1_after_init(self, db: Database):
         row = db.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 7
+        assert row[0] == 8
 
     def test_initialize_is_idempotent(self, tmp_path: Path):
         database = Database(tmp_path / "idempotent.db")
         database.initialize()
         database.initialize()
         row = database.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 7
+        assert row[0] == 8
         database.close()
 
     def test_context_manager(self, tmp_path: Path):
         with Database(tmp_path / "ctx.db") as db:
             row = db.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-            assert row[0] == 7
+            assert row[0] == 8
+
+    def test_p0_indexes_exist_after_init(self, db: Database):
+        expected = {
+            "idx_feedback_repo_scope_timestamp",
+            "idx_symbols_repo_name",
+            "idx_symbols_repo_community",
+            "idx_edges_repo_from",
+            "idx_edges_repo_to",
+        }
+        rows = db.connection.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'index' AND name IN (?, ?, ?, ?, ?)
+            """,
+            tuple(expected),
+        ).fetchall()
+        assert {row["name"] for row in rows} == expected
 
     def test_connection_raises_before_initialize(self, tmp_path: Path):
         database = Database(tmp_path / "uninitialized.db")

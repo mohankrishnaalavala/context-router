@@ -31,6 +31,7 @@ class Symbol:
     signature: str = ""
     docstring: str = ""
     community_id: int | None = None
+    id: int | None = None
 
 
 @dataclass

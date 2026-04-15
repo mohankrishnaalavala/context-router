@@ -427,8 +427,8 @@ class SymbolRepository:
         """
         rows = self._conn.execute(
             """
-            SELECT name, kind, file_path, line_start, line_end,
-                   language, signature, docstring
+            SELECT id, name, kind, file_path, line_start, line_end,
+                   language, signature, docstring, community_id
             FROM symbols
             WHERE repo = ? AND file_path = ?
             """,
@@ -444,6 +444,8 @@ class SymbolRepository:
                 language=r["language"] or "",
                 signature=r["signature"] or "",
                 docstring=r["docstring"] or "",
+                community_id=r["community_id"],
+                id=r["id"],
             )
             for r in rows
         ]
@@ -550,6 +552,7 @@ class SymbolRepository:
                 signature=r["signature"] or "",
                 docstring=r["docstring"] or "",
                 community_id=r["community_id"],
+                id=r["id"],
             )
             for r in rows
         ]
@@ -799,6 +802,13 @@ class PackFeedbackRepository:
         """Initialize with an open database connection."""
         self._conn = conn
 
+    @staticmethod
+    def _scope_predicate(repo_scope: str) -> tuple[str, tuple[str, ...]]:
+        """Return a SQL predicate and bound params for feedback scope filtering."""
+        if repo_scope:
+            return "(repo_scope = ? OR repo_scope = '')", (repo_scope,)
+        return "1 = 1", ()
+
     def add(self, fb: PackFeedback) -> str:
         """Insert a feedback record and return its id.
 
@@ -811,12 +821,13 @@ class PackFeedbackRepository:
         self._conn.execute(
             """
             INSERT INTO pack_feedback
-                (id, pack_id, useful, missing, noisy, too_much_ctx, reason, files_read, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, pack_id, repo_scope, useful, missing, noisy, too_much_ctx, reason, files_read, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 fb.id,
                 fb.pack_id,
+                fb.repo_scope or "",
                 None if fb.useful is None else (1 if fb.useful else 0),
                 json.dumps(fb.missing),
                 json.dumps(fb.noisy),
@@ -829,38 +840,54 @@ class PackFeedbackRepository:
         self._conn.commit()
         return fb.id
 
-    def get_for_pack(self, pack_id: str) -> list[PackFeedback]:
+    def get_for_pack(self, pack_id: str, repo_scope: str = "") -> list[PackFeedback]:
         """Return all feedback records for a specific pack.
 
         Args:
             pack_id: UUID of the ContextPack.
+            repo_scope: Optional repository scope. Includes legacy blank-scope rows.
 
         Returns:
             List of PackFeedback objects.
         """
+        predicate, scope_params = self._scope_predicate(repo_scope)
         rows = self._conn.execute(
-            "SELECT * FROM pack_feedback WHERE pack_id = ? ORDER BY timestamp DESC",
-            (pack_id,),
+            f"""
+            SELECT * FROM pack_feedback
+            WHERE pack_id = ? AND {predicate}
+            ORDER BY timestamp DESC
+            """,
+            (pack_id, *scope_params),
         ).fetchall()
         return [self._row_to_feedback(r) for r in rows]
 
-    def get_all(self, limit: int = 100) -> list[PackFeedback]:
+    def get_all(self, limit: int = 100, repo_scope: str = "") -> list[PackFeedback]:
         """Return the most recent feedback records.
 
         Args:
             limit: Maximum number of records to return.
+            repo_scope: Optional repository scope. Includes legacy blank-scope rows.
 
         Returns:
             List of PackFeedback objects, newest first.
         """
+        predicate, scope_params = self._scope_predicate(repo_scope)
         rows = self._conn.execute(
-            "SELECT * FROM pack_feedback ORDER BY timestamp DESC LIMIT ?",
-            (limit,),
+            f"""
+            SELECT * FROM pack_feedback
+            WHERE {predicate}
+            ORDER BY timestamp DESC
+            LIMIT ?
+            """,
+            (*scope_params, limit),
         ).fetchall()
         return [self._row_to_feedback(r) for r in rows]
 
-    def aggregate_stats(self) -> dict:
+    def aggregate_stats(self, repo_scope: str = "") -> dict:
         """Compute aggregate feedback statistics.
+
+        Args:
+            repo_scope: Optional repository scope. Includes legacy blank-scope rows.
 
         Returns:
             Dict with keys: total, useful_count, not_useful_count, useful_pct,
@@ -868,8 +895,14 @@ class PackFeedbackRepository:
             read_overlap_pct (when ≥5 reports include files_read),
             noise_ratio_pct (when ≥5 reports include files_read).
         """
+        predicate, scope_params = self._scope_predicate(repo_scope)
         rows = self._conn.execute(
-            "SELECT useful, missing, noisy, files_read FROM pack_feedback"
+            f"""
+            SELECT useful, missing, noisy, files_read
+            FROM pack_feedback
+            WHERE {predicate}
+            """,
+            scope_params,
         ).fetchall()
 
         total = len(rows)
@@ -925,7 +958,11 @@ class PackFeedbackRepository:
 
         return result
 
-    def get_file_adjustments(self, min_count: int = 3) -> dict[str, float]:
+    def get_file_adjustments(
+        self,
+        min_count: int = 3,
+        repo_scope: str = "",
+    ) -> dict[str, float]:
         """Return per-file confidence adjustments derived from feedback.
 
         Files frequently in 'missing' get +0.05; frequently in 'noisy' get -0.10.
@@ -933,12 +970,19 @@ class PackFeedbackRepository:
 
         Args:
             min_count: Minimum occurrences before an adjustment is applied.
+            repo_scope: Optional repository scope. Includes legacy blank-scope rows.
 
         Returns:
             Dict mapping file path → confidence delta.
         """
+        predicate, scope_params = self._scope_predicate(repo_scope)
         rows = self._conn.execute(
-            "SELECT missing, noisy FROM pack_feedback"
+            f"""
+            SELECT missing, noisy
+            FROM pack_feedback
+            WHERE {predicate}
+            """,
+            scope_params,
         ).fetchall()
 
         missing_freq: dict[str, int] = {}
@@ -967,6 +1011,7 @@ class PackFeedbackRepository:
         return PackFeedback(
             id=row["id"],
             pack_id=row["pack_id"],
+            repo_scope=row["repo_scope"] if "repo_scope" in row.keys() else "",
             useful=useful,
             missing=json.loads(row["missing"] or "[]"),
             noisy=json.loads(row["noisy"] or "[]"),

@@ -130,3 +130,75 @@ class TestGetFileAdjustments:
         adj = store.get_file_adjustments(min_count=3)
         # +0.05 - 0.10 = -0.05
         assert adj["utils.py"] == pytest.approx(-0.05)
+
+
+class TestFeedbackStoreScopes:
+    def test_add_applies_store_repo_scope(self, db: Database):
+        store = FeedbackStore(db, repo_scope="/repo/a")
+        store.add(PackFeedback(pack_id="pack-1"))
+        row = db.connection.execute(
+            "SELECT repo_scope FROM pack_feedback LIMIT 1"
+        ).fetchone()
+        assert row["repo_scope"] == "/repo/a"
+
+    def test_get_for_pack_filters_to_scope_and_legacy_rows(self, db: Database):
+        FeedbackStore(db, repo_scope="/repo/a").add(
+            PackFeedback(pack_id="shared-pack", reason="scope-a")
+        )
+        FeedbackStore(db, repo_scope="/repo/b").add(
+            PackFeedback(pack_id="shared-pack", reason="scope-b")
+        )
+        FeedbackStore(db).add(
+            PackFeedback(pack_id="shared-pack", reason="legacy")
+        )
+
+        reasons_a = {
+            fb.reason for fb in FeedbackStore(db, repo_scope="/repo/a").get_for_pack("shared-pack")
+        }
+        reasons_b = {
+            fb.reason for fb in FeedbackStore(db, repo_scope="/repo/b").get_for_pack("shared-pack")
+        }
+
+        assert reasons_a == {"scope-a", "legacy"}
+        assert reasons_b == {"scope-b", "legacy"}
+
+    def test_get_all_filters_to_scope_and_legacy_rows(self, db: Database):
+        FeedbackStore(db, repo_scope="/repo/a").add(PackFeedback(pack_id="a1", reason="scope-a"))
+        FeedbackStore(db, repo_scope="/repo/b").add(PackFeedback(pack_id="b1", reason="scope-b"))
+        FeedbackStore(db).add(PackFeedback(pack_id="legacy", reason="legacy"))
+
+        reasons = {
+            fb.reason for fb in FeedbackStore(db, repo_scope="/repo/a").get_all(limit=10)
+        }
+        assert reasons == {"scope-a", "legacy"}
+
+    def test_aggregate_stats_filters_to_scope_and_legacy_rows(self, db: Database):
+        scoped = FeedbackStore(db, repo_scope="/repo/a")
+        other = FeedbackStore(db, repo_scope="/repo/b")
+        legacy = FeedbackStore(db)
+
+        scoped.add(PackFeedback(pack_id="a1", useful=True))
+        scoped.add(PackFeedback(pack_id="a2", useful=True))
+        other.add(PackFeedback(pack_id="b1", useful=False))
+        other.add(PackFeedback(pack_id="b2", useful=False))
+        legacy.add(PackFeedback(pack_id="legacy", useful=False))
+
+        result = scoped.aggregate_stats()
+        assert result["total"] == 3
+        assert result["useful_count"] == 2
+        assert result["not_useful_count"] == 1
+
+    def test_file_adjustments_filter_to_scope_and_legacy_rows(self, db: Database):
+        scoped = FeedbackStore(db, repo_scope="/repo/a")
+        other = FeedbackStore(db, repo_scope="/repo/b")
+        legacy = FeedbackStore(db)
+
+        for _ in range(3):
+            scoped.add(PackFeedback(pack_id="a", missing=["auth.py"]))
+            other.add(PackFeedback(pack_id="b", missing=["billing.py"]))
+            legacy.add(PackFeedback(pack_id="legacy", noisy=["legacy.py"]))
+
+        adjustments = scoped.get_file_adjustments(min_count=3)
+        assert adjustments["auth.py"] == pytest.approx(0.05)
+        assert adjustments["legacy.py"] == pytest.approx(-0.10)
+        assert "billing.py" not in adjustments

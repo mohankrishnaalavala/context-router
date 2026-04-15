@@ -16,7 +16,11 @@ def _open_store(project_root: str) -> tuple["FeedbackStore", "Database"]:
     from memory.store import FeedbackStore
     from storage_sqlite.database import Database
 
-    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    root = (
+        Path(project_root).resolve()
+        if project_root
+        else _find_project_root(Path.cwd()).resolve()
+    )
     db_path = root / ".context-router" / "context-router.db"
     if not db_path.exists():
         typer.echo(
@@ -26,7 +30,7 @@ def _open_store(project_root: str) -> tuple["FeedbackStore", "Database"]:
         raise typer.Exit(1)
     db = Database(db_path)
     db.initialize()
-    return FeedbackStore(db), db
+    return FeedbackStore(db, repo_scope=str(root)), db
 
 
 @feedback_app.command("record")

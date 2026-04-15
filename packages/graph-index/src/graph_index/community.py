@@ -72,12 +72,9 @@ def compute_communities(
     if not all_symbols:
         return 0
 
-    # Build mapping from symbol name to db id for all symbols in this repo
-    sym_ids: list[int] = []
-    for sym in all_symbols:
-        sid = sym_repo.get_id(repo, str(sym.file), sym.name, sym.kind)
-        if sid is not None:
-            sym_ids.append(sid)
+    sym_ids = [sym.id for sym in all_symbols if sym.id is not None]
+    if not sym_ids:
+        return 0
 
     uf = _UnionFind()
     for sid in sym_ids:
