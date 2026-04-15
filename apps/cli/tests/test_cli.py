@@ -273,6 +273,8 @@ class TestFeedbackFilesReadCLI:
 
     def test_feedback_record_with_files_read(self, tmp_path: Path):
         import json
+        from storage_sqlite.database import Database
+
         runner.invoke(app, ["init", "--project-root", str(tmp_path)])
         import uuid
         pack_id = str(uuid.uuid4())
@@ -287,3 +289,9 @@ class TestFeedbackFilesReadCLI:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert data["recorded"] is True
+        with Database(tmp_path / ".context-router" / "context-router.db") as db:
+            row = db.connection.execute(
+                "SELECT repo_scope FROM pack_feedback WHERE pack_id = ?",
+                (pack_id,),
+            ).fetchone()
+        assert row["repo_scope"] == str(tmp_path.resolve())

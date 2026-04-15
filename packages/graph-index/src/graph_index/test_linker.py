@@ -38,17 +38,15 @@ def link_tests(
     test_func_ids: dict[str, int] = {}
 
     for sym in all_symbols:
-        file_str = str(sym.file)
+        sid = sym.id
+        if sid is None:
+            continue
         is_test = "test" in sym.file.name.lower()
         if is_test and sym.kind == "function":
-            sid = sym_repo.get_id(repo, file_str, sym.name, sym.kind)
-            if sid:
-                test_func_ids[sym.name] = sid
+            test_func_ids[sym.name] = sid
         elif not is_test:
-            sid = sym_repo.get_id(repo, file_str, sym.name, sym.kind)
-            if sid:
-                # Last-write-wins if multiple files define the same name
-                non_test_by_name[sym.name] = sid
+            # Last-write-wins if multiple files define the same name
+            non_test_by_name[sym.name] = sid
 
     edges: list[tuple[int, int]] = []  # (source_symbol_id, test_func_id)
 

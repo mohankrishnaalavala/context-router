@@ -365,7 +365,11 @@ def save_observation(
     from memory.store import ObservationStore
     from storage_sqlite.database import Database
 
-    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    root = (
+        Path(project_root).resolve()
+        if project_root
+        else _find_project_root(Path.cwd()).resolve()
+    )
     db_path = root / ".context-router" / "context-router.db"
     if not db_path.exists():
         return {"error": "Database not found. Run init first.", "saved": False}
@@ -513,7 +517,7 @@ def record_feedback(
     )
 
     with Database(db_path) as db:
-        fb_id = FeedbackStore(db).add(fb)
+        fb_id = FeedbackStore(db, repo_scope=str(root)).add(fb)
 
     return {"recorded": True, "id": fb_id}
 

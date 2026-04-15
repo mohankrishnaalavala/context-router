@@ -227,15 +227,18 @@ class FeedbackStore:
 
     Args:
         db: An open and initialised Database instance.
+        repo_scope: Optional repository scope applied to feedback reads and writes.
     """
 
-    def __init__(self, db: Database) -> None:
+    def __init__(self, db: Database, repo_scope: str = "") -> None:
         """Initialise the store with an open database.
 
         Args:
             db: Open Database (caller owns lifetime).
+            repo_scope: Optional repository scope. Legacy blank-scope rows remain visible.
         """
         self._repo = PackFeedbackRepository(db.connection)
+        self._repo_scope = repo_scope
 
     def add(self, fb: PackFeedback) -> str:
         """Persist a feedback record.
@@ -246,7 +249,10 @@ class FeedbackStore:
         Returns:
             UUID string of the inserted record.
         """
-        return self._repo.add(fb)
+        feedback = fb
+        if self._repo_scope and not fb.repo_scope:
+            feedback = fb.model_copy(update={"repo_scope": self._repo_scope})
+        return self._repo.add(feedback)
 
     def get_for_pack(self, pack_id: str) -> list[PackFeedback]:
         """Return all feedback for a specific pack.
@@ -257,7 +263,7 @@ class FeedbackStore:
         Returns:
             List of PackFeedback objects.
         """
-        return self._repo.get_for_pack(pack_id)
+        return self._repo.get_for_pack(pack_id, repo_scope=self._repo_scope)
 
     def get_all(self, limit: int = 100) -> list[PackFeedback]:
         """Return recent feedback records.
@@ -268,7 +274,7 @@ class FeedbackStore:
         Returns:
             PackFeedback objects, newest first.
         """
-        return self._repo.get_all(limit)
+        return self._repo.get_all(limit, repo_scope=self._repo_scope)
 
     def aggregate_stats(self) -> dict:
         """Return aggregate usefulness statistics.
@@ -277,7 +283,7 @@ class FeedbackStore:
             Dict with total, useful_count, not_useful_count, useful_pct,
             top_missing, top_noisy.
         """
-        return self._repo.aggregate_stats()
+        return self._repo.aggregate_stats(repo_scope=self._repo_scope)
 
     def get_file_adjustments(self, min_count: int = 3) -> dict[str, float]:
         """Return per-file confidence adjustments derived from feedback.
@@ -288,4 +294,7 @@ class FeedbackStore:
         Returns:
             Dict mapping file path → confidence delta.
         """
-        return self._repo.get_file_adjustments(min_count)
+        return self._repo.get_file_adjustments(
+            min_count=min_count,
+            repo_scope=self._repo_scope,
+        )

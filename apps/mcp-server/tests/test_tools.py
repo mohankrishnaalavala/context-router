@@ -243,6 +243,7 @@ class TestGetContextPackPagination:
 class TestRecordFeedbackFilesRead:
     def test_record_feedback_accepts_files_read(self, project_root: Path):
         from mcp_server.tools import record_feedback
+        from storage_sqlite.database import Database
 
         # Save an observation first to get a valid pack_id-like UUID
         import uuid
@@ -255,6 +256,12 @@ class TestRecordFeedbackFilesRead:
         )
         assert result.get("recorded") is True
         assert "id" in result
+        with Database(project_root / ".context-router" / "context-router.db") as db:
+            row = db.connection.execute(
+                "SELECT repo_scope FROM pack_feedback WHERE pack_id = ?",
+                (pack_id,),
+            ).fetchone()
+        assert row["repo_scope"] == str(project_root.resolve())
 
     def test_record_feedback_without_files_read_still_works(self, project_root: Path):
         from mcp_server.tools import record_feedback

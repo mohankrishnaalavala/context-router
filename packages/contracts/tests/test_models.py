@@ -224,6 +224,7 @@ class TestPackFeedbackFilesRead:
     def test_files_read_defaults_to_empty(self):
         fb = PackFeedback(pack_id="abc")
         assert fb.files_read == []
+        assert fb.repo_scope == ""
 
     def test_files_read_can_be_set(self):
         fb = PackFeedback(pack_id="abc", files_read=["src/auth.py", "src/token.py"])
@@ -231,9 +232,14 @@ class TestPackFeedbackFilesRead:
         assert "src/token.py" in fb.files_read
 
     def test_files_read_json_round_trip(self):
-        fb = PackFeedback(pack_id="xyz", files_read=["a.py", "b.py"])
+        fb = PackFeedback(
+            pack_id="xyz",
+            repo_scope="/tmp/project",
+            files_read=["a.py", "b.py"],
+        )
         restored = PackFeedback.model_validate_json(fb.model_dump_json())
         assert restored.files_read == ["a.py", "b.py"]
+        assert restored.repo_scope == "/tmp/project"
 
     def test_files_read_independent_of_missing(self):
         """files_read and missing can contain different paths."""

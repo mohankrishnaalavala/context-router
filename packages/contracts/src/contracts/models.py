@@ -145,6 +145,7 @@ class PackFeedback(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     pack_id: str
+    repo_scope: str = ""
     useful: bool | None = None              # True=yes, False=no, None=not rated
     missing: list[str] = Field(default_factory=list)   # files/symbols needed but absent
     noisy: list[str] = Field(default_factory=list)     # files/symbols irrelevant

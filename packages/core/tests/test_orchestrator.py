@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from contracts.interfaces import Symbol
-from contracts.models import ContextPack
+from contracts.models import ContextPack, RuntimeSignal
 from core.orchestrator import Orchestrator
 
 
@@ -269,3 +269,113 @@ def test_no_pagination_has_more_false(tmp_path: Path) -> None:
     pack = Orchestrator(project_root=root).build_pack("implement", "")
     assert pack.has_more is False
     assert pack.total_items == 0
+
+
+# ---------------------------------------------------------------------------
+# P0: warning on best-effort failures
+# ---------------------------------------------------------------------------
+
+def test_build_pack_warns_when_runtime_signal_persist_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import runtime
+    from storage_sqlite.repositories import RuntimeSignalRepository
+
+    root = _make_project(tmp_path)
+    error_file = root / "error.log"
+    error_file.write_text("Traceback")
+    monkeypatch.setattr(
+        runtime,
+        "parse_error_file",
+        lambda _path: [RuntimeSignal(message="boom", paths=[Path("src/main.py")])],
+    )
+
+    def fail_add(self, _sig):
+        raise RuntimeError("signal write failed")
+
+    monkeypatch.setattr(RuntimeSignalRepository, "add", fail_add)
+
+    with pytest.warns(RuntimeWarning, match="Runtime signal persistence failed"):
+        pack = Orchestrator(project_root=root).build_pack(
+            "debug",
+            "investigate failure",
+            error_file=error_file,
+        )
+    assert isinstance(pack, ContextPack)
+
+
+def test_build_pack_warns_when_past_debug_lookup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import runtime
+    from storage_sqlite.repositories import RuntimeSignalRepository
+
+    root = _make_project(tmp_path)
+    error_file = root / "error.log"
+    error_file.write_text("Traceback")
+    monkeypatch.setattr(
+        runtime,
+        "parse_error_file",
+        lambda _path: [
+            RuntimeSignal(
+                message="boom",
+                error_hash="abc123",
+                paths=[Path("src/main.py")],
+            )
+        ],
+    )
+
+    def fail_lookup(self, _error_hash):
+        raise RuntimeError("lookup failed")
+
+    monkeypatch.setattr(RuntimeSignalRepository, "find_by_error_hash", fail_lookup)
+
+    with pytest.warns(RuntimeWarning, match="Past runtime signal lookup failed"):
+        pack = Orchestrator(project_root=root).build_pack(
+            "debug",
+            "investigate failure",
+            error_file=error_file,
+        )
+    assert isinstance(pack, ContextPack)
+
+
+def test_build_pack_warns_when_feedback_adjustments_fail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from storage_sqlite.repositories import PackFeedbackRepository
+
+    root = _make_project(tmp_path)
+
+    def fail_adjustments(self, min_count=3, repo_scope=""):
+        raise RuntimeError("feedback unavailable")
+
+    monkeypatch.setattr(
+        PackFeedbackRepository,
+        "get_file_adjustments",
+        fail_adjustments,
+    )
+
+    with pytest.warns(RuntimeWarning, match="Feedback adjustment loading failed"):
+        pack = Orchestrator(project_root=root).build_pack("implement", "add endpoint")
+    assert isinstance(pack, ContextPack)
+
+
+def test_build_pack_warns_when_handover_memory_load_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from memory.store import ObservationStore
+
+    root = _make_project(tmp_path)
+
+    def fail_list(self):
+        raise RuntimeError("memory unavailable")
+
+    monkeypatch.setattr(ObservationStore, "list_by_freshness", fail_list)
+
+    with pytest.warns(RuntimeWarning, match="Handover memory loading failed"):
+        pack = Orchestrator(project_root=root).build_pack("handover", "summarize project")
+    assert isinstance(pack, ContextPack)

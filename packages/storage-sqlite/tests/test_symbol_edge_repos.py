@@ -50,12 +50,21 @@ class TestSymbolRepository:
 
     def test_get_all(self, db: Database):
         repo = SymbolRepository(db.connection)
-        repo.add(_sym("a"), "myrepo")
-        repo.add(_sym("b"), "myrepo")
+        sid_a = repo.add(_sym("a"), "myrepo")
+        sid_b = repo.add(_sym("b"), "myrepo")
         all_syms = repo.get_all("myrepo")
         names = {s.name for s in all_syms}
+        ids = {s.id for s in all_syms}
         assert "a" in names
         assert "b" in names
+        assert ids == {sid_a, sid_b}
+
+    def test_get_by_file_populates_symbol_ids(self, db: Database):
+        repo = SymbolRepository(db.connection)
+        sid = repo.add(_sym("only"), "myrepo")
+        syms = repo.get_by_file("myrepo", "/src/app.py")
+        assert len(syms) == 1
+        assert syms[0].id == sid
 
     def test_update_community(self, db: Database):
         repo = SymbolRepository(db.connection)
