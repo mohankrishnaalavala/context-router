@@ -59,8 +59,9 @@ def to_markdown(
         "| Metric | Value |",
         "|--------|-------|",
         f"| Average token reduction | **{s.get('avg_reduction_pct', 0):.1f}%** |",
+        f"| Token reduction 95% CI | [{s.get('reduction_ci_low', 0):.1f}%, {s.get('reduction_ci_high', 0):.1f}%] |",
         f"| Average tokens selected | {s.get('avg_est_tokens', 0):,} |",
-        f"| Average latency | {s.get('avg_latency_ms', 0):.0f} ms |",
+        f"| Average warm latency | {s.get('avg_latency_ms', 0):.0f} ms |",
         f"| Hit rate (router) | **{hit_pct:.1f}%** |",
         f"| Hit rate (random baseline) | {rand_pct:.1f}% |",
         f"| Rank quality (conf ≥ 0.70) | {rank_pct:.1f}% |",
@@ -118,20 +119,25 @@ def to_markdown(
             "",
             f"Reduction: **{avg_red:.1f}%**  |  "
             f"Tokens: **{avg_tok:,}**  |  "
-            f"Latency: **{avg_lat:.0f} ms**  |  "
+            f"Warm latency: **{avg_lat:.0f} ms**  |  "
             f"Hit rate: **{avg_hit:.1f}%** vs {avg_rand:.1f}% random",
             "",
-            "| ID | Query | Tokens | Reduction | Hit Rate | Latency |",
-            "|----|-------|--------|-----------|----------|---------|",
+            "| ID | Query | Tokens | Reduction | Hit Rate | Warm Latency | Cold Latency |",
+            "|----|-------|--------|-----------|----------|--------------|--------------|",
         ]
         for task in tasks:
             status = "✅" if task.success else "❌"
             query_short = task.query[:45] + "…" if len(task.query) > 45 else task.query
             hit_str = f"{task.hit_rate * 100:.0f}%" if task.hit_rate > 0 or task.random_hit_rate > 0 else "—"
+            if task.latency_std_ms > 0:
+                warm_str = f"{task.latency_ms:.0f} ± {task.latency_std_ms:.1f} ms"
+            else:
+                warm_str = f"{task.latency_ms:.0f} ms"
+            cold_str = f"{task.cold_latency_ms:.0f} ms" if task.cold_latency_ms is not None else "—"
             lines.append(
                 f"| {status} {task.task_id} | {query_short} | "
                 f"{task.est_tokens:,} | {task.reduction_pct:.0f}% | "
-                f"{hit_str} | {task.latency_ms:.0f} ms |"
+                f"{hit_str} | {warm_str} | {cold_str} |"
             )
         lines.append("")
 

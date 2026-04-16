@@ -277,6 +277,136 @@ def explain_selection(project_root: str = "") -> dict:
     }
 
 
+def suggest_next_files(
+    pack_id: str = "",
+    project_root: str = "",
+    limit: int = 3,
+) -> dict:
+    """Given the last context pack, suggest the top N files to read next.
+
+    Uses structural adjacency of items in the pack (imports and callers),
+    ranked by how many pack items reference each candidate.  Files already
+    in the pack are excluded.
+
+    Args:
+        pack_id: UUID of the pack (uses last pack if omitted).
+        project_root: Project root. Auto-detected if omitted.
+        limit: Maximum number of files to return (default 3).
+
+    Returns:
+        Dict with ``suggestions`` list of {file, reason} dicts.
+    """
+    from core.orchestrator import _find_project_root
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    db_path = root / ".context-router" / "context-router.db"
+    if not db_path.exists():
+        return {"error": "Database not found. Run init first.", "suggestions": []}
+
+    # Retrieve the pack whose items we will use as the starting set.
+    try:
+        from core.orchestrator import Orchestrator
+        orch = Orchestrator(project_root=root)
+
+        if pack_id:
+            # Try to load by pack_id via the storage layer
+            try:
+                from storage_sqlite.database import Database
+                from contracts.models import ContextPack
+                with Database(db_path) as db:
+                    row = db.connection.execute(
+                        "SELECT payload FROM context_packs WHERE id = ?", (pack_id,)
+                    ).fetchone()
+                if row is None:
+                    return {"error": f"Pack {pack_id!r} not found.", "suggestions": []}
+                import json as _json
+                pack = ContextPack.model_validate(_json.loads(row["payload"]))
+            except Exception:  # noqa: BLE001
+                pack = orch.last_pack()
+        else:
+            pack = orch.last_pack()
+    except Exception as exc:  # noqa: BLE001
+        return {"error": f"Could not load pack: {exc}", "suggestions": []}
+
+    if pack is None:
+        return {"error": "No pack found. Call get_context_pack first.", "suggestions": []}
+
+    # Collect file paths that are already in the pack.
+    pack_files: set[str] = {
+        item.path_or_ref for item in pack.selected_items if item.path_or_ref
+    }
+
+    if not pack_files:
+        return {"suggestions": []}
+
+    # Try to find adjacent files via the edge repository.
+    # candidate_file -> list of pack files that reference it (for ranking + reason)
+    candidate_refs: dict[str, list[str]] = {}
+
+    try:
+        from storage_sqlite.database import Database
+        with Database(db_path) as db:
+            for pack_file in pack_files:
+                # Find files that this pack file imports or is imported by (edges table)
+                rows = db.connection.execute(
+                    """
+                    SELECT DISTINCT
+                        CASE
+                            WHEN source = ? THEN target
+                            ELSE source
+                        END AS neighbor
+                    FROM edges
+                    WHERE (source = ? OR target = ?)
+                      AND kind IN ('imports', 'calls', 'uses')
+                    """,
+                    (pack_file, pack_file, pack_file),
+                ).fetchall()
+                for row in rows:
+                    neighbor = row["neighbor"]
+                    if neighbor and neighbor not in pack_files:
+                        candidate_refs.setdefault(neighbor, []).append(pack_file)
+    except Exception:  # noqa: BLE001
+        # Edges table may not exist or schema differs — fall back to positional neighbors
+        pack_file_list = sorted(pack_files)
+        for i, f in enumerate(pack_file_list):
+            for delta in (-1, 1):
+                j = i + delta
+                if 0 <= j < len(pack_file_list):
+                    neighbor = pack_file_list[j]
+                    if neighbor not in pack_files:
+                        candidate_refs.setdefault(neighbor, []).append(f)
+
+    if not candidate_refs:
+        # Last-resort fallback: suggest filesystem siblings of pack files
+        for pack_file in sorted(pack_files):
+            p = root / pack_file if not Path(pack_file).is_absolute() else Path(pack_file)
+            try:
+                siblings = [
+                    s for s in p.parent.iterdir()
+                    if s.is_file() and str(s) != str(p)
+                ]
+                for sib in siblings[:2]:
+                    rel = str(sib.relative_to(root)) if sib.is_relative_to(root) else str(sib)
+                    if rel not in pack_files:
+                        candidate_refs.setdefault(rel, []).append(pack_file)
+            except Exception:  # noqa: BLE001
+                pass
+
+    # Rank by number of pack items that reference each candidate (descending).
+    ranked = sorted(candidate_refs.items(), key=lambda kv: len(kv[1]), reverse=True)
+
+    suggestions = []
+    for file_path, refs in ranked[:limit]:
+        n = len(refs)
+        if n == 1:
+            reason = f"Structural neighbor of {refs[0]}"
+        else:
+            reason = f"Referenced by {n} files in your current pack"
+        suggestions.append({"file": file_path, "reason": reason})
+
+    return {"suggestions": suggestions}
+
+
 def generate_handover(query: str = "", project_root: str = "") -> dict:
     """Generate a handover context pack combining memory + decisions + changes.
 

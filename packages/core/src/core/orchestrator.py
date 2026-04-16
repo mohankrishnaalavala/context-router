@@ -302,30 +302,37 @@ class Orchestrator:
                 feedback_adjustments=feedback_adjustments,
             )
 
-        # Boost items whose file matches a filename mentioned in the query
-        query_filenames = {
-            m.lower() for m in _QUERY_FILENAME_RE.findall(query)
-            if not m.startswith("http")
-        }
-        if query_filenames:
-            candidates = [
-                item.model_copy(update={
-                    "confidence": min(0.95, item.confidence + 0.40)
-                })
-                if any(
-                    Path(item.path_or_ref).name.lower() == fn
-                    for fn in query_filenames
-                )
-                else item
-                for item in candidates
-            ]
+            # Boost items whose file matches a filename mentioned in the query
+            query_filenames = {
+                m.lower() for m in _QUERY_FILENAME_RE.findall(query)
+                if not m.startswith("http")
+            }
+            if query_filenames:
+                candidates = [
+                    item.model_copy(update={
+                        "confidence": min(0.95, item.confidence + 0.40)
+                    })
+                    if any(
+                        Path(item.path_or_ref).name.lower() == fn
+                        for fn in query_filenames
+                    )
+                    else item
+                    for item in candidates
+                ]
 
-        baseline = sum(c.est_tokens for c in candidates)
-        # Always apply at least 50% reduction so small repos benefit too
-        effective_budget = min(config.token_budget, max(1000, baseline // 2))
-        ranker = ContextRanker(token_budget=effective_budget)
-        all_ranked = ranker.rank(candidates, query, mode)
-        total_items_count = len(all_ranked)
+            baseline = sum(c.est_tokens for c in candidates)
+            # Always apply at least 50% reduction so small repos benefit too
+            effective_budget = min(config.token_budget, max(1000, baseline // 2))
+            ranker = ContextRanker(token_budget=effective_budget)
+            all_ranked = ranker.rank(candidates, query, mode)
+            total_items_count = len(all_ranked)
+
+            # P1-8: record_access for each item in the final pack (best-effort)
+            for item in all_ranked:
+                try:
+                    sym_repo.record_access(item.path_or_ref, item.title.split(" (")[0])
+                except Exception:  # noqa: BLE001
+                    pass  # best-effort
 
         # Apply pagination if requested
         if page_size > 0:
@@ -442,12 +449,21 @@ class Orchestrator:
         changed_files = self._get_changed_files()
         all_symbols = sym_repo.get_all(repo_name)
 
-        # Pre-compute adjacency for changed files (blast radius)
+        # Pre-compute adjacency for changed files (blast radius, depth=1)
         blast_radius_files: set[str] = set()
         for cf in changed_files:
             adjacent = edge_repo.get_adjacent_files(repo_name, cf)
             blast_radius_files.update(adjacent)
         blast_radius_files -= changed_files  # don't double-count
+
+        # P1-5: compute transitive blast radius (depth=2) via call chain
+        transitive_blast_files: dict[str, int] = {}  # file_path -> min_depth
+        for cf in changed_files:
+            chain = edge_repo.get_call_chain_files(repo_name, cf, max_depth=2)
+            for fp, depth in chain:
+                if fp not in changed_files and fp not in blast_radius_files:
+                    if fp not in transitive_blast_files or depth < transitive_blast_files[fp]:
+                        transitive_blast_files[fp] = depth
 
         seen_files: set[str] = set()
         items: list[ContextItem] = []
@@ -479,6 +495,24 @@ class Orchestrator:
                     repo=repo_name,
                 )
             )
+
+        # P1-5: add transitive blast radius items not already in the pack
+        existing_paths = {item.path_or_ref for item in items}
+        for fp, _depth in transitive_blast_files.items():
+            if fp not in existing_paths:
+                title = f"{Path(fp).name} (blast radius transitive)"
+                items.append(
+                    ContextItem(
+                        source_type="blast_radius_transitive",
+                        repo=repo_name,
+                        path_or_ref=fp,
+                        title=title,
+                        excerpt="",
+                        reason="",
+                        confidence=0.35,
+                        est_tokens=_estimate_item_tokens(title, ""),
+                    )
+                )
 
         return items
 

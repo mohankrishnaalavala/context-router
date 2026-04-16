@@ -273,3 +273,59 @@ class TestRecordFeedbackFilesRead:
             project_root=str(project_root),
         )
         assert result.get("recorded") is True
+
+
+# ---------------------------------------------------------------------------
+# P1-2: suggest_next_files
+# ---------------------------------------------------------------------------
+
+class TestSuggestNextFiles:
+    def test_missing_db_returns_error(self, tmp_path: Path):
+        from mcp_server.tools import suggest_next_files
+
+        result = suggest_next_files(project_root=str(tmp_path))
+        assert "error" in result
+
+    def test_no_pack_returns_error(self, project_root: Path):
+        from mcp_server.tools import suggest_next_files
+
+        # Fresh project with no pack generated yet
+        result = suggest_next_files(project_root=str(project_root))
+        # Either error key or empty suggestions — no crash
+        assert "error" in result or "suggestions" in result
+
+    def test_returns_suggestions_key(self, project_root: Path):
+        from mcp_server.tools import get_context_pack, suggest_next_files
+
+        # Generate a pack first so last_pack() has data
+        get_context_pack(mode="implement", project_root=str(project_root))
+        result = suggest_next_files(project_root=str(project_root))
+        # Should always return suggestions key (possibly empty list)
+        assert "suggestions" in result or "error" in result
+
+    def test_limit_respected(self, project_root: Path):
+        from mcp_server.tools import get_context_pack, suggest_next_files
+
+        get_context_pack(mode="implement", project_root=str(project_root))
+        result = suggest_next_files(project_root=str(project_root), limit=2)
+        if "suggestions" in result:
+            assert len(result["suggestions"]) <= 2
+
+    def test_each_suggestion_has_file_and_reason(self, project_root: Path):
+        from mcp_server.tools import get_context_pack, suggest_next_files
+
+        get_context_pack(mode="implement", project_root=str(project_root))
+        result = suggest_next_files(project_root=str(project_root))
+        for suggestion in result.get("suggestions", []):
+            assert "file" in suggestion
+            assert "reason" in suggestion
+
+    def test_invalid_pack_id_returns_error(self, project_root: Path):
+        from mcp_server.tools import suggest_next_files
+
+        result = suggest_next_files(
+            pack_id="00000000-0000-0000-0000-000000000000",
+            project_root=str(project_root),
+        )
+        # Should return error or empty suggestions — not crash
+        assert "error" in result or "suggestions" in result

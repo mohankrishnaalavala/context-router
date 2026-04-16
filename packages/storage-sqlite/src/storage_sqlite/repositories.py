@@ -75,7 +75,7 @@ class ObservationRepository:
             query: FTS5 query string.
 
         Returns:
-            List of matching Observation objects, most recently added first.
+            List of matching Observation objects, best BM25 relevance first.
         """
         rows = self._conn.execute(
             """
@@ -83,7 +83,7 @@ class ObservationRepository:
             FROM observations o
             JOIN observations_fts fts ON o.rowid = fts.rowid
             WHERE observations_fts MATCH ?
-            ORDER BY o.rowid DESC
+            ORDER BY fts.rank
             """,
             (query,),
         ).fetchall()
@@ -221,7 +221,7 @@ class DecisionRepository:
             FROM decisions d
             JOIN decisions_fts fts ON d.rowid = fts.rowid
             WHERE decisions_fts MATCH ?
-            ORDER BY d.created_at DESC
+            ORDER BY fts.rank
             """,
             (query,),
         ).fetchall()
@@ -578,6 +578,23 @@ class SymbolRepository:
             "SELECT COUNT(*) FROM symbols WHERE repo = ?", (repo,)
         ).fetchone()
         return row[0]
+
+    def record_access(self, file_path: str, name: str) -> None:
+        """Increment access_count and update last_accessed_at for a symbol.
+
+        Called after a pack is built to track selection frequency.
+
+        Args:
+            file_path: The file path of the symbol as stored in the DB.
+            name: The symbol name.
+        """
+        from datetime import UTC, datetime as _dt
+        self._conn.execute(
+            "UPDATE symbols SET access_count = access_count + 1, "
+            "last_accessed_at = ? WHERE file_path = ? AND name = ?",
+            (_dt.now(UTC).isoformat(), file_path, name),
+        )
+        self._conn.commit()
 
     def update_community(self, repo: str, symbol_id: int, community_id: int) -> None:
         """Set the community_id for a given symbol."""

@@ -40,7 +40,7 @@ class TestPing:
 # ---------------------------------------------------------------------------
 
 class TestToolsList:
-    def test_returns_all_fourteen_tools(self):
+    def test_returns_all_fifteen_tools(self):
         resp = _handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = {t["name"] for t in resp["result"]["tools"]}
         assert names == {
@@ -58,6 +58,7 @@ class TestToolsList:
             "list_memory",
             "mark_decision_superseded",
             "record_feedback",
+            "suggest_next_files",
         }
 
     def test_each_tool_has_schema(self):
@@ -78,8 +79,10 @@ class TestToolsCall:
             "jsonrpc": "2.0", "id": 3, "method": "tools/call",
             "params": {"name": "no_such_tool", "arguments": {}},
         })
-        assert resp["result"]["isError"] is True
-        assert "Unknown tool" in resp["result"]["content"][0]["text"]
+        # Unknown tool must be a JSON-RPC error response (not a successful result)
+        assert "error" in resp
+        assert resp["error"]["code"] == -32601
+        assert "no_such_tool" in resp["error"]["message"]
 
     def test_result_is_json_text(self, tmp_path):
         # build_index with a non-existent DB returns an error dict — still valid JSON
@@ -92,13 +95,14 @@ class TestToolsCall:
         parsed = json.loads(content_text)
         assert "error" in parsed
 
-    def test_invalid_arguments_returns_error(self):
-        # update_index requires changed_files — omitting it should return isError
+    def test_invalid_arguments_returns_jsonrpc_error(self):
+        # update_index requires changed_files — omitting it must return a JSON-RPC error
         resp = _handle({
             "jsonrpc": "2.0", "id": 5, "method": "tools/call",
             "params": {"name": "update_index", "arguments": {}},
         })
-        assert resp["result"]["isError"] is True
+        assert "error" in resp
+        assert resp["error"]["code"] == -32602
 
 
 # ---------------------------------------------------------------------------

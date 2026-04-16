@@ -17,6 +17,7 @@ import math
 import re
 import threading
 from collections import Counter as _Counter
+from typing import Any
 
 from contracts.models import ContextItem
 
@@ -111,6 +112,8 @@ _REASON: dict[str, str] = {
     "decision": "Architectural decision record",
     # Call flow (P5)
     "call_chain": "Reachable via function call chain from error site",
+    # Transitive blast radius (P1-5)
+    "blast_radius_transitive": "Transitively reachable via call chain from a changed file",
 }
 
 _DEFAULT_REASON = "Included in context pack"
@@ -143,19 +146,23 @@ class ContextRanker:
         """
         self._budget = token_budget
         self._use_embeddings = use_embeddings
+        # P1-6: BM25 corpus cache — maps items_key -> _BM25Scorer
+        # Bounded at 5 entries to avoid unbounded memory growth.
+        self._bm25_cache: dict[int, Any] = {}
 
     def rank(
         self,
         items: list[ContextItem],
         query: str,
-        mode: str,  # noqa: ARG002 — reserved for mode-specific post-processing
+        mode: str,
     ) -> list[ContextItem]:
         """Rank *items* and enforce the token budget.
 
         Steps:
         1. Annotate each item's ``reason`` from its ``source_type``.
-        2. Apply query-relevance confidence boost (keyword overlap).
-        3. Optionally apply semantic similarity boost (if use_embeddings=True).
+        2. Apply query-relevance confidence boost (keyword overlap + BM25).
+        3. For implement mode: optionally apply semantic similarity boost
+           (if use_embeddings=True and a model is available).
         4. Sort by ``confidence`` descending.
         5. Trim to token budget while keeping at least one item per
            ``source_type`` (so every category of evidence is represented).
@@ -163,7 +170,8 @@ class ContextRanker:
         Args:
             items: Pre-scored ContextItem candidates.
             query: Free-text task description used for relevance boosting.
-            mode: Task mode (reserved for future use).
+            mode: Task mode — "implement" enables semantic boost when
+                use_embeddings=True.
 
         Returns:
             Ranked and budget-enforced list of ContextItems.
@@ -174,7 +182,9 @@ class ContextRanker:
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
         boosted = self._apply_bm25_boost(annotated, query_tokens)
-        if self._use_embeddings:
+        # P1-7: apply semantic boost only in implement mode to avoid
+        # expensive embedding computation in other modes
+        if self._use_embeddings and mode == "implement":
             boosted = self._apply_semantic_boost(boosted, query)
         sorted_items = sorted(boosted, key=lambda i: i.confidence, reverse=True)
 
@@ -188,10 +198,11 @@ class ContextRanker:
     # ------------------------------------------------------------------
 
     def _apply_semantic_boost(self, items: list[ContextItem], query: str) -> list[ContextItem]:
-        """Boost items using cosine similarity from sentence-transformers.
+        """Boost implement-mode items using cosine similarity from sentence-transformers.
 
-        Only runs when ``use_embeddings=True`` and the model is available.
-        Items with similarity > 0.3 receive up to +0.20 confidence boost.
+        Only runs when ``use_embeddings=True``, mode=="implement", and the model
+        is available.  Formula: ``boost = min(0.15, max(0, sim - 0.3) * 0.3)``.
+        Items with similarity <= 0.3 receive no boost.
         """
         if not query or not items:
             return items
@@ -199,7 +210,6 @@ class ContextRanker:
         if not model:
             return items
         try:
-            import numpy as np  # type: ignore[import]
             texts = [f"{i.title} {i.excerpt}" for i in items]
             query_emb = model.encode([query], normalize_embeddings=True)
             item_embs = model.encode(texts, normalize_embeddings=True, batch_size=32)
@@ -207,8 +217,8 @@ class ContextRanker:
             result = []
             for item, sim in zip(items, similarities):
                 sim_f = float(sim)
-                if sim_f > 0.3:
-                    boost = min(0.20, sim_f * 0.20)
+                boost = min(0.15, max(0.0, sim_f - 0.3) * 0.3)
+                if boost > 0:
                     new_conf = min(0.95, item.confidence + boost)
                     result.append(item.model_copy(update={"confidence": new_conf}))
                 else:
@@ -234,7 +244,15 @@ class ContextRanker:
         if not query_tokens or not items:
             return items
         corpus = [f"{i.title} {i.excerpt}" for i in items]
-        scorer = _BM25Scorer(corpus)
+        # P1-6: cache BM25 corpus per unique items set to avoid rebuilding on every call
+        items_key = hash(tuple(i.path_or_ref + i.title for i in items))
+        if items_key not in self._bm25_cache:
+            self._bm25_cache[items_key] = _BM25Scorer(corpus)
+            # Keep cache bounded: evict oldest entry if > 5 entries
+            if len(self._bm25_cache) > 5:
+                oldest = next(iter(self._bm25_cache))
+                del self._bm25_cache[oldest]
+        scorer = self._bm25_cache[items_key]
         bm25_scores = scorer.scores_normalized(query_tokens)
         result = []
         for item, bm25 in zip(items, bm25_scores):
