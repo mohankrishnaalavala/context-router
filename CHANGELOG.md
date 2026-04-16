@@ -9,6 +9,80 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.7.0] — 2026-04-16
+
+Phase P2 — quality improvements and broader language coverage. 13 P2 items
+shipped across three streams; 27 new tests, 659 total passing.
+
+### Added
+- **Community-aware ranking boost** (`packages/core/src/core/orchestrator.py`):
+  the orchestrator now reads `Symbol.community_id` (populated by the
+  union-find clustering in `graph_index.community`) and boosts candidates
+  sharing the anchor's community by `+0.10` (capped at 1.0). Additive —
+  no effect when no symbol has a community assigned. (P2-1)
+- **Cost-aware budget enforcement** (`packages/ranking/src/ranking/ranker.py`):
+  `_enforce_budget` replaced greedy confidence-desc admission with
+  value-per-token ordering (`confidence / est_tokens`). Four high-value
+  small items now beat one large low-value item under the same budget.
+  `is_first_of_type` guarantee preserved; final emit order stays
+  confidence-desc. (P2-2)
+- **Configurable confidence weights** (`packages/contracts/src/contracts/config.py`,
+  orchestrator): new optional `confidence_weights` block on
+  `ContextRouterConfig`. Per-mode dicts merge over the hardcoded defaults,
+  so partial overrides are safe. Absent config = prior behaviour. README
+  "Advanced Configuration → Tuning confidence weights" documents the
+  schema. (P2-11)
+- **Java constructor extraction** (`packages/language-java/src/language_java/__init__.py`):
+  new `constructor_declaration` branch emits `Symbol(kind="constructor")`.
+  Dependency-injection constructors are now first-class graph nodes. (P2-3)
+- **C# constructor extraction** (`packages/language-dotnet/src/language_dotnet/__init__.py`):
+  matching `constructor_declaration` handler; inherits attribute
+  extraction. ASP.NET Core DI constructors are now indexed. (P2-4)
+- **Broad Java annotation surface** (`packages/language-java/src/language_java/__init__.py`):
+  every annotation (Spring, JPA, JUnit, custom) is prefixed on the symbol
+  signature — BM25 can now discover `@Transactional`, `@Async`,
+  `@RestController`, `@Bean`, etc. without a whitelist.
+  `_collect_annotations` now handles both the modifiers child (modern
+  grammar) and preceding siblings (legacy grammar), plus
+  `marker_annotation` nodes. (P2-5)
+- **TypeScript enum extraction** (`packages/language-typescript/src/language_typescript/__init__.py`):
+  new `enum_declaration` branch (`kind="enum"`), covering both `enum` and
+  `const enum`. (P2-7)
+- **TypeScript decorator extraction** (same file):
+  `_collect_decorator_names` handles bare (`@Inject`), call-expression
+  (`@Component({...})`), and member-expression (`@ng.Module()`) decorator
+  forms. Decorator names are prefixed on class/method signatures so BM25
+  surfaces Angular and NestJS structural metadata. (P2-8)
+- **Per-language benchmark task suites** (`packages/benchmark/src/benchmark/task_suite.py`):
+  `TASK_SUITE_TS_REACT` (React/Next.js), `TASK_SUITE_JAVA_SPRING` (Spring
+  Boot), `TASK_SUITE_DOTNET` (ASP.NET Core) — ~15 tasks each covering all
+  four modes. `get_task_suite(name)` resolves by name.
+  `context-router benchmark run --task-suite {generic,typescript,java,dotnet}`
+  selects the suite. (P2-9)
+- **MCP tool schemas**: all 15 MCP tools now declare `"required"` arrays
+  in their `inputSchema` (the 7 that omitted it now do so explicitly),
+  and every tool publishes an `outputSchema` describing its return shape.
+  `tools/list` response includes `outputSchema` so MCP clients can
+  validate responses. (P2-12, P2-13)
+
+### Changed
+- **`get_adjacent_files` rewritten** (`packages/storage-sqlite/src/storage_sqlite/repositories.py`):
+  the previous OR-joined subquery is now a two-branch UNION that hits
+  `idx_edges_repo_from` and `idx_edges_repo_to` (from migration
+  `0008_feedback_scope_indexes.sql`) directly. Result set identical;
+  large-repo blast-radius computation no longer degrades to a scan. (P2-16)
+
+### Notes
+- Skipped as already-satisfied during Phase P1 work: **P2-10** (handover
+  observations already freshness-ranked via
+  `memory.freshness.score_for_pack`), **P2-14** (stdio already wrapped by
+  the outer `main()` exception handler), **P2-15** (`get_all_edges`
+  already has `WHERE repo=?`).
+- Version bumped from `0.6.0` → `0.7.0` across all 19 workspace packages;
+  no schema migration required (current schema version remains 9).
+
+---
+
 ## [0.6.0] — Unreleased
 
 ### Added
