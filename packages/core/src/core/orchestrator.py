@@ -393,7 +393,42 @@ class Orchestrator:
         last_pack_path = self._root / ".context-router" / "last-pack.json"
         last_pack_path.write_text(pack.model_dump_json(indent=2))
 
+        # Persist to the pack registry so MCP `resources/list` can surface it.
+        try:
+            from core.pack_store import PackStore
+            PackStore(self._root).save(pack)
+        except Exception as exc:  # noqa: BLE001 — best-effort registry write
+            _warn_optional_subsystem_failure(
+                "Pack registry persistence",
+                "the pack will not appear in MCP resources/list until the next successful build",
+                exc,
+            )
+
         return pack
+
+    def list_packs(self) -> list[dict]:
+        """Return registry entries for all stored packs, newest first.
+
+        Returns:
+            A list of ``{uuid, mode, query, created_at, tokens}`` dicts.
+            Empty when no packs have been built yet.
+        """
+        from core.pack_store import PackStore
+        return list(PackStore(self._root).list())
+
+    def get_pack(self, uuid: str) -> ContextPack | None:
+        """Return the stored :class:`ContextPack` with ``id == uuid``, or ``None``."""
+        from core.pack_store import PackStore
+        return PackStore(self._root).get(uuid)
+
+    def get_pack_raw(self, uuid: str) -> str | None:
+        """Return the stored pack's raw JSON text, byte-for-byte.
+
+        Used by the MCP ``resources/read`` handler to keep the response
+        identical to ``last-pack.json``.
+        """
+        from core.pack_store import PackStore
+        return PackStore(self._root).read_raw(uuid)
 
     def last_pack(self) -> ContextPack | None:
         """Return the most recently generated ContextPack, or None.
