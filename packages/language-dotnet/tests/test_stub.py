@@ -51,6 +51,39 @@ def test_implements_protocol():
     assert isinstance(DotnetAnalyzer(), LanguageAnalyzer)
 
 
+SAMPLE_CS_CTOR = """\
+using Microsoft.AspNetCore.Mvc;
+
+namespace Example.Api;
+
+[ApiController]
+[Route("api/[controller]")]
+public class UsersController : ControllerBase
+{
+    private readonly IUserService _svc;
+
+    public UsersController(IUserService svc)
+    {
+        _svc = svc;
+    }
+
+    [HttpGet("{id}")]
+    public IActionResult FindOne(long id)
+    {
+        return Ok(_svc.Find(id));
+    }
+}
+"""
+
+
+def test_extracts_constructor_declaration(tmp_path: Path):
+    f = tmp_path / "UsersController.cs"
+    f.write_text(SAMPLE_CS_CTOR)
+    results = DotnetAnalyzer().analyze(f)
+    ctors = [s for s in results if isinstance(s, Symbol) and s.kind == "constructor"]
+    assert any(s.name == "UsersController" for s in ctors)
+
+
 def test_returns_list(tmp_path: Path):
     result = DotnetAnalyzer().analyze(tmp_path / "nonexistent.cs")
     assert isinstance(result, list)

@@ -35,6 +35,54 @@ def test_implements_protocol():
     assert isinstance(JavaAnalyzer(), LanguageAnalyzer)
 
 
+SAMPLE_CTOR_AND_ANNOTATIONS = """\
+package com.example;
+
+@RestController
+@RequestMapping("/users")
+public class UserController {
+
+    private final UserService userService;
+
+    @Autowired
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
+
+    @GetMapping("/{id}")
+    @Transactional
+    public String findOne(long id) {
+        return userService.find(id);
+    }
+}
+"""
+
+
+def test_extracts_constructor_declaration(tmp_path: Path):
+    f = tmp_path / "UserController.java"
+    f.write_text(SAMPLE_CTOR_AND_ANNOTATIONS)
+    results = JavaAnalyzer().analyze(f)
+    ctors = [s for s in results if isinstance(s, Symbol) and s.kind == "constructor"]
+    assert any(s.name == "UserController" for s in ctors)
+
+
+def test_extracts_all_annotations_in_signature(tmp_path: Path):
+    f = tmp_path / "UserController.java"
+    f.write_text(SAMPLE_CTOR_AND_ANNOTATIONS)
+    results = JavaAnalyzer().analyze(f)
+    classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
+    controller = next((s for s in classes if s.name == "UserController"), None)
+    assert controller is not None
+    assert "@RestController" in controller.signature
+    assert "@RequestMapping" in controller.signature
+
+    methods = [s for s in results if isinstance(s, Symbol) and s.kind == "method"]
+    find_one = next((s for s in methods if s.name == "findOne"), None)
+    assert find_one is not None
+    assert "@GetMapping" in find_one.signature
+    assert "@Transactional" in find_one.signature
+
+
 def test_returns_list(tmp_path: Path):
     result = JavaAnalyzer().analyze(tmp_path / "nonexistent.java")
     assert isinstance(result, list)

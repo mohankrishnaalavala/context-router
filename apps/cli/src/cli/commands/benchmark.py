@@ -39,15 +39,26 @@ def benchmark_run(
         typer.Option("--keyword/--no-keyword", help="Include keyword baseline token count."),
     ] = True,
     json_output: Annotated[bool, typer.Option("--json")] = False,
+    task_suite: Annotated[
+        str,
+        typer.Option(
+            "--task-suite",
+            help=(
+                "Task suite to run: generic (default, Python/web), typescript, "
+                "java, or dotnet."
+            ),
+        ),
+    ] = "generic",
 ) -> None:
-    """Run the 20-task benchmark suite and produce a JSON + Markdown report.
+    """Run a benchmark task suite and produce a JSON + Markdown report.
 
     Exit codes:
       0 — success
-      1 — project not initialised (no DB)
+      1 — project not initialised (no DB), or unknown --task-suite
     """
     from benchmark import BenchmarkRunner, to_json, to_markdown
     from benchmark.baselines import naive_tokens, keyword_tokens
+    from benchmark.task_suite import get_task_suite
 
     root = _root_path(project_root)
     db_path = root / ".context-router" / "context-router.db"
@@ -58,10 +69,16 @@ def benchmark_run(
         )
         raise typer.Exit(1)
 
+    try:
+        tasks = get_task_suite(task_suite)
+    except ValueError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1)
+
     if not json_output:
-        typer.echo("Running 20-task benchmark suite...")
+        typer.echo(f"Running {len(tasks)}-task '{task_suite}' benchmark suite...")
     runner = BenchmarkRunner(project_root=root)
-    report = runner.run_suite()
+    report = runner.run_suite(tasks=tasks)
 
     naive_tok = naive_tokens(root) if naive else 0
     keyword_tok = 0

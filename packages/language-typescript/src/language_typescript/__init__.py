@@ -71,6 +71,66 @@ def _first_child_of_type(node: object, node_type: str) -> object | None:
     return None
 
 
+def _collect_decorator_names(node: object) -> list[str]:
+    """Return decorator identifier names attached to *node* (e.g. ``@Component``).
+
+    Handles three common shapes produced by tree-sitter-typescript:
+      * ``decorator(identifier)`` — bare ``@Inject``
+      * ``decorator(call_expression(function=identifier))`` — ``@Component({...})``
+      * ``decorator(call_expression(function=member_expression))`` — ``@ng.Component()``
+    Decorators appear either as direct children of the declaration or as
+    preceding siblings, depending on grammar version — we scan both.
+    """
+    names: list[str] = []
+    candidates: list[object] = []
+    # Direct children (tree-sitter-typescript typically attaches decorators here)
+    for child in node.children:  # type: ignore[attr-defined]
+        if child.type == "decorator":
+            candidates.append(child)
+    # Preceding siblings (older grammar shapes)
+    parent = getattr(node, "parent", None)
+    if parent is not None:
+        try:
+            idx = parent.children.index(node)  # type: ignore[attr-defined]
+            for sib in parent.children[:idx]:  # type: ignore[attr-defined]
+                if sib.type == "decorator":
+                    candidates.append(sib)
+        except (ValueError, AttributeError):
+            pass
+
+    for dec in candidates:
+        inner: object | None = None
+        for c in dec.children:  # type: ignore[attr-defined]
+            if c.type in ("identifier", "call_expression", "member_expression"):
+                inner = c
+                break
+        if inner is None:
+            continue
+        if inner.type == "identifier":  # type: ignore[attr-defined]
+            names.append(_text(inner))
+        elif inner.type == "call_expression":  # type: ignore[attr-defined]
+            fn = _child_by_field(inner, "function")
+            if fn is not None:
+                if fn.type == "identifier":  # type: ignore[attr-defined]
+                    names.append(_text(fn))
+                elif fn.type == "member_expression":  # type: ignore[attr-defined]
+                    prop = _child_by_field(fn, "property")
+                    if prop:
+                        names.append(_text(prop))
+        elif inner.type == "member_expression":  # type: ignore[attr-defined]
+            prop = _child_by_field(inner, "property")
+            if prop:
+                names.append(_text(prop))
+    # Dedupe preserving order
+    seen: set[str] = set()
+    result: list[str] = []
+    for n in names:
+        if n and n not in seen:
+            seen.add(n)
+            result.append(n)
+    return result
+
+
 def _walk_ts(
     node: object,
     results: list[Symbol | DependencyEdge],
@@ -113,6 +173,8 @@ def _walk_ts(
             name = _text(name_node)
             start = node.start_point[0] + 1  # type: ignore[index]
             end = node.end_point[0] + 1  # type: ignore[index]
+            decorators = _collect_decorator_names(node)
+            sig = " ".join(f"@{d}" for d in decorators) + f" {name}()" if decorators else ""
             results.append(
                 Symbol(
                     name=name,
@@ -121,6 +183,7 @@ def _walk_ts(
                     line_start=start,
                     line_end=end,
                     language="typescript",
+                    signature=sig.strip(),
                 )
             )
             for child in node.children:  # type: ignore[attr-defined]
@@ -133,6 +196,9 @@ def _walk_ts(
             name = _text(name_node)
             start = node.start_point[0] + 1  # type: ignore[index]
             end = node.end_point[0] + 1  # type: ignore[index]
+            decorators = _collect_decorator_names(node)
+            prefix = " ".join(f"@{d}" for d in decorators)
+            signature = (prefix + " class " + name).strip() if prefix else f"class {name}"
             results.append(
                 Symbol(
                     name=name,
@@ -141,6 +207,28 @@ def _walk_ts(
                     line_start=start,
                     line_end=end,
                     language="typescript",
+                    signature=signature,
+                )
+            )
+        for child in node.children:  # type: ignore[attr-defined]
+            _walk_ts(child, results, file, current_func)
+        return
+
+    if node_type == "enum_declaration":
+        name_node = _child_by_field(node, "name")
+        if name_node:
+            name = _text(name_node)
+            start = node.start_point[0] + 1  # type: ignore[index]
+            end = node.end_point[0] + 1  # type: ignore[index]
+            results.append(
+                Symbol(
+                    name=name,
+                    kind="enum",
+                    file=file,
+                    line_start=start,
+                    line_end=end,
+                    language="typescript",
+                    signature=f"enum {name}",
                 )
             )
         for child in node.children:  # type: ignore[attr-defined]

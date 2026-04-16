@@ -35,6 +35,45 @@ def test_returns_list_on_missing_file():
 
 
 @needs_ts
+def test_extracts_enum_declaration(tmp_path: Path):
+    code = "export enum Status { Active, Inactive, Suspended }\n"
+    f = tmp_path / "enum.ts"
+    f.write_text(code)
+    results = TypeScriptAnalyzer().analyze(f)
+    enums = [s for s in results if getattr(s, "kind", None) == "enum"]
+    assert any(s.name == "Status" for s in enums)
+
+
+@needs_ts
+def test_extracts_const_enum_declaration(tmp_path: Path):
+    code = "const enum Mode { Read = 1, Write = 2 }\n"
+    f = tmp_path / "const_enum.ts"
+    f.write_text(code)
+    results = TypeScriptAnalyzer().analyze(f)
+    enums = [s for s in results if getattr(s, "kind", None) == "enum"]
+    assert any(s.name == "Mode" for s in enums)
+
+
+@needs_ts
+def test_extracts_decorators_on_class_signature(tmp_path: Path):
+    code = (
+        "@Component({selector: 'app-foo', templateUrl: './foo.html'})\n"
+        "@Injectable()\n"
+        "export class FooComponent {\n"
+        "  doStuff() { return 1; }\n"
+        "}\n"
+    )
+    f = tmp_path / "foo.component.ts"
+    f.write_text(code)
+    results = TypeScriptAnalyzer().analyze(f)
+    classes = [s for s in results if getattr(s, "kind", None) == "class"]
+    foo = next((s for s in classes if s.name == "FooComponent"), None)
+    assert foo is not None
+    assert "@Component" in foo.signature
+    assert "@Injectable" in foo.signature
+
+
+@needs_ts
 def test_extracts_function(tmp_path: Path):
     code = "function greet(name: string): string { return name; }\n"
     f = tmp_path / "sample.ts"
