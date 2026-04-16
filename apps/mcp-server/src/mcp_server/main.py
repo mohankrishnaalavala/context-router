@@ -742,7 +742,10 @@ def _handle(request: dict) -> dict | None:
     if method == "initialize":
         return _ok(req_id, {
             "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
+            "capabilities": {
+                "tools": {},
+                "resources": {"listChanged": True},
+            },
             "serverInfo": {"name": "context-router", "version": "0.1.0"},
         })
 
@@ -781,6 +784,29 @@ def _handle(request: dict) -> dict | None:
 
     if method == "ping":
         return _ok(req_id, {})
+
+    if method == "resources/list":
+        from mcp_server import resources as _resources
+        project_root = params.get("project_root") or ""
+        try:
+            return _ok(req_id, _resources.list_resources(project_root or None))
+        except Exception as exc:  # noqa: BLE001
+            return _err(req_id, -32603, f"Internal error: {exc}")
+
+    if method == "resources/read":
+        from mcp_server import resources as _resources
+        uri = params.get("uri", "")
+        project_root = params.get("project_root") or ""
+        if not uri:
+            return _err(req_id, -32602, "Invalid params: 'uri' is required")
+        try:
+            return _ok(req_id, _resources.read_resource(uri, project_root or None))
+        except ValueError as exc:
+            return _err(req_id, -32602, f"Invalid params: {exc}")
+        except FileNotFoundError as exc:
+            return _err(req_id, -32002, f"Resource not found: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            return _err(req_id, -32603, f"Internal error: {exc}")
 
     return _err(req_id, -32601, f"Method not found: {method!r}")
 
