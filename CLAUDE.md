@@ -109,3 +109,7 @@ Grep or code-review-graph for task-scoped work.
 | `save_decision` | Recording an architectural decision |
 | `list_memory` | Browsing observations sorted by freshness |
 | `mark_decision_superseded` | Linking an old decision to its replacement |
+
+### development flow for each code change
+- before implementation pull code from main to dev
+- push code to dev and create a pr to main and make sure ci checks are green

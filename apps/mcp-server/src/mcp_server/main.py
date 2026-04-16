@@ -453,6 +453,32 @@ _TOOLS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "suggest_next_files": {
+        "fn": tools.suggest_next_files,
+        "description": (
+            "Suggest the top N files to read next after receiving a context pack. "
+            "Uses structural adjacency (imports, call edges) of pack items to rank "
+            "candidates not already in the pack."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "pack_id": {
+                    "type": "string",
+                    "description": "UUID of the pack (uses last pack if omitted).",
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max files to return (default 3).",
+                    "default": 3,
+                },
+            },
+        },
+    },
 }
 
 
@@ -512,10 +538,7 @@ def _handle(request: dict) -> dict | None:
         arguments: dict = params.get("arguments") or {}
 
         if tool_name not in _TOOLS:
-            return _ok(req_id, {
-                "content": [{"type": "text", "text": f"Unknown tool: {tool_name!r}"}],
-                "isError": True,
-            })
+            return _err(req_id, -32601, f"Unknown tool: {tool_name!r}")
 
         try:
             result = _TOOLS[tool_name]["fn"](**arguments)
@@ -526,15 +549,9 @@ def _handle(request: dict) -> dict | None:
             })
         except TypeError as exc:
             # Wrong arguments supplied by client
-            return _ok(req_id, {
-                "content": [{"type": "text", "text": f"Invalid arguments: {exc}"}],
-                "isError": True,
-            })
+            return _err(req_id, -32602, f"Invalid params: {exc}")
         except Exception as exc:  # noqa: BLE001
-            return _ok(req_id, {
-                "content": [{"type": "text", "text": f"Tool error: {exc}"}],
-                "isError": True,
-            })
+            return _err(req_id, -32603, f"Internal error: {exc}")
 
     if method == "ping":
         return _ok(req_id, {})

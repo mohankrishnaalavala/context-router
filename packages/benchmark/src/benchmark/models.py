@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import statistics
 import uuid
 from datetime import UTC, datetime
 from typing import Literal
@@ -35,6 +37,12 @@ class TaskMetrics(BaseModel):
     baseline_tokens: int = 0
     reduction_pct: float = 0.0
     latency_ms: float = 0.0
+    latency_std_ms: float = 0.0
+    """Standard deviation of warm latency across N runs (0.0 when n_runs == 1)."""
+    n_runs: int = 1
+    """Number of runs this result was aggregated from."""
+    cold_latency_ms: float | None = None
+    """CLI cold-start latency in ms (None if CLI not installed or invocation failed)."""
     items_selected: int = 0
     success: bool = True
     error: str = ""
@@ -70,12 +78,26 @@ class BenchmarkReport(BaseModel):
 
         successful = [t for t in self.tasks if t.success]
         rated = [t for t in successful if t.hit_rate > 0 or t.random_hit_rate > 0]
+
+        # 95% CI for token reduction: mean ± 1.96 * (std / sqrt(n))
+        reduction_ci_low = 0.0
+        reduction_ci_high = 0.0
+        if len(successful) >= 2:
+            reductions = [t.reduction_pct for t in successful]
+            red_mean = statistics.mean(reductions)
+            red_std = statistics.stdev(reductions)
+            margin = 1.96 * (red_std / math.sqrt(len(reductions)))
+            reduction_ci_low = round(red_mean - margin, 1)
+            reduction_ci_high = round(red_mean + margin, 1)
+
         self.summary = {
             "total_tasks": len(self.tasks),
             "success_rate": round(len(successful) / len(self.tasks) * 100, 1),
             "avg_reduction_pct": round(
                 sum(t.reduction_pct for t in successful) / len(successful), 1
             ) if successful else 0.0,
+            "reduction_ci_low": reduction_ci_low,
+            "reduction_ci_high": reduction_ci_high,
             "avg_latency_ms": round(
                 sum(t.latency_ms for t in self.tasks) / len(self.tasks), 1
             ),

@@ -14,7 +14,7 @@ AI coding agents work best with focused, relevant context rather than entire cod
 
 - Indexes your repo's symbols, dependency edges, call graphs, and test coverage into a local SQLite database
 - Ranks candidates by structural relevance, query similarity, and community membership for your task mode
-- Enforces a configurable token budget so your agent prompt stays lean (64–80% average reduction)
+- Enforces a configurable token budget so your agent prompt stays lean (50–88% token reduction depending on codebase size and language)
 - Explains every selection decision in one human-readable sentence
 - Supports multi-repo workspaces with cross-repo confidence boosting
 - Works as a CLI, MCP server, or Python library — no API key required
@@ -26,14 +26,15 @@ AI coding agents work best with focused, relevant context rather than entire cod
 | **Language support** | Python (full), TypeScript/JS (full), YAML (k8s/Helm/GHA), Java (full), .NET/C# (full) |
 | **Edge types** | `imports`, `calls` (function-level), `tested_by`, `needs` (GHA), community links |
 | **Task modes** | `review`, `implement`, `debug`, `handover` |
-| **Ranking** | Confidence scoring, freshness decay (30-day half-life), query keyword boost, optional semantic boost |
+| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional semantic boost |
 | **Token budget** | Hard cap with per-source-type guarantee; dynamic scaling for small repos |
 | **Memory** | Persistent observations (FTS), ADRs, freshness scoring, `memory export`, `decisions export` |
-| **Feedback loop** | `feedback record/stats/list` — per-file confidence adjustments from agent usage |
+| **Feedback loop** | `feedback record/stats/list` — per-file confidence adjustments; `--files-read` tracks actual file consumption for read-coverage analytics |
 | **Debug memory** | `error_hash` deduplication, `top_frames` extraction, `past_debug` recall (same error = boosts prior fix files) |
 | **Multi-repo** | Workspace YAML, cross-repo link detection, unified ranked pack |
 | **Graph viz** | Interactive D3.js HTML — color by kind or community cluster |
-| **MCP server** | **13 tools** over stdio JSON-RPC 2.0, compatible with Claude Code, Cursor, Windsurf |
+| **Call flow analysis** | Debug mode walks `calls` edges up to 3 hops; `call_chain` items surfaced with decaying confidence (0.45 → 0.315 → 0.22) |
+| **MCP server** | **14 tools** over stdio JSON-RPC 2.0, compatible with Claude Code, Cursor, Windsurf |
 | **Agent adapters** | Claude system prompt, Copilot instructions, Codex task prompt |
 | **Benchmarks** | 20-task suite, 3 baselines, external repo testing, Markdown report |
 
@@ -254,7 +255,7 @@ uv run context-router pack --mode review --json | jq '.selected_items[].title'
 Explain the last generated context pack.
 
 ```
-context-router explain last-pack [--json]
+context-router explain last-pack [--show-call-chains] [--json]
 ```
 
 ```
@@ -263,6 +264,8 @@ context-router explain last-pack [--json]
   [impacted_test] test_ranker.py                      — Tests code affected by this change
   [contract]      ContextItem (models.py)             — Data contract or interface definition
 ```
+
+`--show-call-chains` groups `call_chain` items under a labelled section, making it easy to distinguish inferred call-chain candidates from structural ones.
 
 ---
 
@@ -365,7 +368,7 @@ uv run context-router decisions export --output-dir docs/adr/
 Record agent feedback for context packs — drives confidence adjustments over time.
 
 ```
-context-router feedback record --pack-id ID [--useful yes|no] [--missing FILES] [--noisy FILES] [--reason TEXT]
+context-router feedback record --pack-id ID [--useful yes|no] [--missing FILES] [--noisy FILES] [--files-read FILES] [--reason TEXT]
 context-router feedback stats [--project-root PATH]
 context-router feedback list [--limit N] [--project-root PATH]
 ```
@@ -375,6 +378,8 @@ context-router feedback list [--limit N] [--project-root PATH]
 Each `feedback record` call stores one `PackFeedback` entry. After ≥3 reports for the same file:
 - **missing** files get a **+0.05** confidence boost in future packs
 - **noisy** files get a **−0.10** confidence penalty in future packs
+
+`--files-read` records which files the agent actually consumed from the pack (space-separated). After ≥5 reports with `files_read`, `stats` shows `read_overlap_pct` (fraction of reads that were pack hits) and `noise_ratio_pct` (fraction of pack items never read).
 
 `stats` shows aggregate usefulness percentage plus top missing and noisy files.
 
@@ -467,7 +472,7 @@ context-router benchmark run [--project-root PATH] [--output PATH] [--json]
 context-router benchmark report [--project-root PATH] [--input PATH] [--json]
 ```
 
-See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real numbers on external codebases (**49–81% average token reduction**, quality metrics, and per-mode breakdown).
+See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real numbers on external codebases (**49–81% average token reduction**, quality metrics, and per-mode breakdown). Token reduction is highest on large repos (project_handover: 79%, context-router self: 81%). Hit-rate benchmarks use a Python-optimized task suite; accuracy on non-Python repos improves with language-specific task suites.
 
 ---
 
@@ -735,7 +740,7 @@ Measured on two external Python codebases using the built-in 20-task suite (5 ta
 | project_handover (Python CLI) | 1,313 | **79.1%** | — | ~750 ms |
 | context-router (self) | 1,100 | **80.9%** | 37.2% vs 41.2% | 333 ms |
 
-**Hit rate** measures whether the right symbols were selected, not just token count. The router outperforms random sampling by +12.9 pp on domain-matched repos.
+**Hit rate** measures whether the right symbols were selected, not just token count. The router outperforms random sampling by +12.9 pp on domain-matched repos (on Python repositories with domain-matched queries).
 
 See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown, metric definitions, and confidence scoring explanation.
 
