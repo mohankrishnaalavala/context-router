@@ -14,9 +14,16 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from typing import Any
 
 from mcp_server import tools
+
+
+# Shared mutex guarding stdout writes.  Both _send() and _notify() must
+# acquire this lock so a response and an in-flight notification cannot
+# interleave mid-line in the JSON-RPC stream.
+_write_lock: Any = threading.RLock()
 
 
 # ---------------------------------------------------------------------------
@@ -696,9 +703,26 @@ def _err(req_id: Any, code: int, message: str) -> dict:
 
 
 def _send(obj: dict) -> None:
-    """Write a single JSON-RPC response to stdout, flushed immediately."""
-    sys.stdout.write(json.dumps(obj) + "\n")
-    sys.stdout.flush()
+    """Write a single JSON-RPC response to stdout, flushed immediately.
+
+    Mutex-guarded so it cannot interleave with an in-flight ``_notify`` call.
+    """
+    with _write_lock:
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+
+def _notify(method: str, params: dict) -> None:
+    """Write a JSON-RPC 2.0 notification (no ``id``) to stdout.
+
+    Used for MCP notifications such as ``notifications/progress`` and
+    ``notifications/resources/list_changed``.  Writes are guarded by the
+    same ``_write_lock`` as :func:`_send` to preserve newline-delimited
+    framing on the stdio transport.
+    """
+    with _write_lock:
+        sys.stdout.write(json.dumps({"jsonrpc": "2.0", "method": method, "params": params}) + "\n")
+        sys.stdout.flush()
 
 
 # ---------------------------------------------------------------------------
