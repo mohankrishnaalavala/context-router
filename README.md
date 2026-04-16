@@ -26,17 +26,17 @@ AI coding agents work best with focused, relevant context rather than entire cod
 | **Language support** | Python (full), TypeScript/JS (full), YAML (k8s/Helm/GHA), Java (full), .NET/C# (full) |
 | **Edge types** | `imports`, `calls` (function-level), `tested_by`, `needs` (GHA), community links |
 | **Task modes** | `review`, `implement`, `debug`, `handover` |
-| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional semantic boost |
-| **Token budget** | Hard cap with per-source-type guarantee; dynamic scaling for small repos |
+| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional semantic boost, community-cohesion boost (+0.10 for same-cluster candidates), per-project `confidence_weights` overrides in `.context-router/config.yaml` |
+| **Token budget** | Value-per-token knapsack admission + hard cap with per-source-type guarantee; dynamic scaling for small repos |
 | **Memory** | Persistent observations (FTS), ADRs, freshness scoring, `memory export`, `decisions export` |
 | **Feedback loop** | `feedback record/stats/list` — per-file confidence adjustments; `--files-read` tracks actual file consumption for read-coverage analytics |
 | **Debug memory** | `error_hash` deduplication, `top_frames` extraction, `past_debug` recall (same error = boosts prior fix files) |
 | **Multi-repo** | Workspace YAML, cross-repo link detection, unified ranked pack |
 | **Graph viz** | Interactive D3.js HTML — color by kind or community cluster |
 | **Call flow analysis** | Debug mode walks `calls` edges up to 3 hops; `call_chain` items surfaced with decaying confidence (0.45 → 0.315 → 0.22) |
-| **MCP server** | **14 tools** over stdio JSON-RPC 2.0, compatible with Claude Code, Cursor, Windsurf |
+| **MCP server** | **15 tools** over stdio JSON-RPC 2.0 with validated `inputSchema.required` and `outputSchema` on every tool; compatible with Claude Code, Cursor, Windsurf |
 | **Agent adapters** | Claude system prompt, Copilot instructions, Codex task prompt |
-| **Benchmarks** | 20-task suite, 3 baselines, external repo testing, Markdown report |
+| **Benchmarks** | Generic 20-task suite plus language-specific suites (React, Spring Boot, ASP.NET Core — `--task-suite` flag), 3 baselines, external repo testing, Markdown report with 95% CIs |
 
 ## Requirements
 
@@ -786,6 +786,8 @@ See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown
 | **Phase 5** — Team-safe export | ✅ complete | `memory export` (Markdown, redacted mode), `decisions export` (per-ADR .md files with slug filenames) |
 | **Phase 6** — Agent feedback loop | ✅ complete | `PackFeedback` model, `pack_feedback` DB table, `feedback record/stats/list` CLI, `record_feedback` MCP tool (13 total), per-file confidence adjustments |
 | **Phase 7** — Distribution + DX | ✅ complete | `setup` command (auto-configure Claude/Copilot/Cursor/Windsurf/Codex), Homebrew tap, tiktoken estimation, quality benchmark metrics, additive query boost |
+| **Phase P1** — Production quality (v0.6) | ✅ complete | MCP protocol compliance (JSON-RPC errors), `suggest_next_files` 15th tool, multi-run benchmarks w/ CIs, feedback-loop file boost, BM25 memory search, CONTRIBUTING.md |
+| **Phase P2** — Ranking and coverage (v0.7) | ✅ complete | Community-cohesion boost, value-per-token knapsack budget, `.context-router/config.yaml` `confidence_weights`, Java/C# constructor extraction, broad Java annotation surface, TypeScript enums + decorators, per-language benchmark suites (`--task-suite`), MCP `required`/`outputSchema` on all 15 tools, indexed `get_adjacent_files` UNION rewrite |
 | **Phase 8** — Astro/Vue/Svelte | planned | Single-file component analyzers for modern frontend repos |
 | **Phase 9** — Semantic ranking | planned | sentence-transformers embedding index for query-to-symbol similarity |
 

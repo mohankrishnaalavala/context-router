@@ -1,6 +1,6 @@
 [project]
 name = "context-router-language-python"
-version = "0.6.0"
+version = "0.7.0"
 requires-python = ">=3.12"
 description = "Python language analyzer plugin for context-router (Phase 1)"
 dependencies = [

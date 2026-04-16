@@ -1,6 +1,6 @@
 [project]
 name = "context-router-language-dotnet"
-version = "0.6.0"
+version = "0.7.0"
 requires-python = ">=3.12"
 description = "C#/.NET language analyzer plugin for context-router (Phase 1)"
 dependencies = [
