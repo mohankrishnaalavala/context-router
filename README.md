@@ -643,6 +643,35 @@ ignore_patterns:
   - "build"
 ```
 
+### Tuning confidence weights (advanced)
+
+Per-mode confidence for each source category can be overridden without
+patching the code. Add a `confidence_weights` block to `.context-router/config.yaml`:
+
+```yaml
+confidence_weights:
+  review:
+    changed_file: 0.98   # trust diff-touched files more
+    blast_radius: 0.65
+  implement:
+    entrypoint: 0.95
+    file_function: 0.35
+  debug:
+    failing_test: 0.90
+  handover:
+    memory: 0.85
+```
+
+Missing keys fall back to the built-in defaults, so partial overrides are safe.
+Valid source-category keys per mode:
+
+| Mode | Source categories |
+|------|-------------------|
+| `review`   | `changed_file`, `blast_radius`, `impacted_test`, `config`, `file` |
+| `implement` | `entrypoint`, `contract`, `extension_point`, `file_class`, `file_function`, `file` |
+| `debug`    | `runtime_signal`, `past_debug`, `failing_test`, `changed_file`, `blast_radius`, `file` |
+| `handover` | `changed_file`, `memory`, `decision`, `blast_radius`, `file` |
+
 ---
 
 ## Architecture

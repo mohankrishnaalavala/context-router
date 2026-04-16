@@ -48,20 +48,45 @@ def _first_child_of_type(node: Node, *types: str) -> Node | None:
 
 
 def _collect_annotations(node: Node) -> list[str]:
-    """Collect annotation names from the siblings before a declaration node."""
+    """Collect annotation identifier names from a declaration's ``modifiers`` node.
+
+    Tree-sitter-java attaches the ``modifiers`` node as a direct child of the
+    declaration, containing both ``annotation`` and ``marker_annotation`` nodes.
+    Older grammar versions may expose it as a preceding sibling — we scan both.
+    """
     annotations: list[str] = []
-    if node.parent is None:
-        return annotations
-    siblings = node.parent.children
-    idx = siblings.index(node)
-    for sib in siblings[:idx]:
-        if sib.type == "modifiers":
-            for mod in sib.children:
-                if mod.type == "annotation":
-                    name_node = _first_child_of_type(mod, "identifier")
-                    if name_node:
-                        annotations.append(_text(name_node))
-    return annotations
+
+    def _scan_modifiers(mods: Node) -> None:
+        for mod in mods.children:
+            if mod.type in ("annotation", "marker_annotation"):
+                name_node = _first_child_of_type(mod, "identifier")
+                if name_node:
+                    annotations.append(_text(name_node))
+
+    # Direct child (most tree-sitter-java versions)
+    for child in node.children:
+        if child.type == "modifiers":
+            _scan_modifiers(child)
+
+    # Preceding sibling (older grammar variants)
+    if node.parent is not None:
+        siblings = node.parent.children
+        try:
+            idx = siblings.index(node)
+        except ValueError:
+            idx = -1
+        for sib in siblings[:idx]:
+            if sib.type == "modifiers":
+                _scan_modifiers(sib)
+
+    # Dedupe preserving order
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for name in annotations:
+        if name not in seen:
+            seen.add(name)
+            ordered.append(name)
+    return ordered
 
 
 def _extract_javadoc(node: Node) -> str:
@@ -100,15 +125,12 @@ def _walk(
                      "annotation_type_declaration"):
         name_node = _first_child_of_type(node, "identifier")
         name = _text(name_node) if name_node else "<unknown>"
+        # P2-5: surface every annotation name in the signature so BM25 can
+        # discover Spring / JPA / JUnit patterns without a hardcoded list.
         annotations = _collect_annotations(node)
-        tags: list[str] = []
-        if any(a in _SPRING_ANNOTATIONS for a in annotations):
-            tags.append("spring")
-        if any(name.endswith(s) for s in _TEST_SUFFIXES):
-            tags.append("test")
-        signature = f"class {name}"
-        if node.type == "interface_declaration":
-            signature = f"interface {name}"
+        annotation_prefix = " ".join(f"@{a}" for a in annotations)
+        base = "class" if node.type != "interface_declaration" else "interface"
+        signature = f"{annotation_prefix} {base} {name}".strip() if annotation_prefix else f"{base} {name}"
         results.append(
             Symbol(
                 name=name,
@@ -126,15 +148,19 @@ def _walk(
             _walk(body, results, file, current_method)
         return
 
-    if node.type == "method_declaration":
+    if node.type in ("method_declaration", "constructor_declaration"):
         name_node = _first_child_of_type(node, "identifier")
         name = _text(name_node) if name_node else "<unknown>"
-        signature = _text(node).split("{")[0].strip()
+        annotations = _collect_annotations(node)
+        annotation_prefix = " ".join(f"@{a}" for a in annotations)
+        raw_sig = _text(node).split("{")[0].strip()
+        signature = (annotation_prefix + " " + raw_sig).strip() if annotation_prefix else raw_sig
         docstring = _extract_javadoc(node)
+        kind = "constructor" if node.type == "constructor_declaration" else "method"
         results.append(
             Symbol(
                 name=name,
-                kind="method",
+                kind=kind,
                 file=file,
                 line_start=node.start_point[0] + 1,
                 line_end=node.end_point[0] + 1,
@@ -143,8 +169,7 @@ def _walk(
                 docstring=docstring,
             )
         )
-        # Recurse into method body with this method as current context
-        body = _first_child_of_type(node, "block")
+        body = _first_child_of_type(node, "block", "constructor_body")
         if body:
             _walk(body, results, file, name)
         return

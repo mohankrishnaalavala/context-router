@@ -33,6 +33,10 @@ class ContextRouterConfig(BaseModel):
     ignore_patterns: list[str] = Field(
         default_factory=lambda: [".git", "__pycache__", "*.pyc", "*.egg-info", ".venv"]
     )
+    # Per-mode confidence overrides. Outer keys: review | implement | debug | handover.
+    # Each inner dict maps source_type -> float in [0, 1]. Missing keys fall back to
+    # the hardcoded defaults in core.orchestrator. Absent config = current behaviour.
+    confidence_weights: dict[str, dict[str, float]] | None = None
 
 
 def load_config(project_root: Path) -> ContextRouterConfig:

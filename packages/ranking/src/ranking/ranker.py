@@ -266,29 +266,35 @@ class ContextRanker:
         return item.model_copy(update={"reason": reason})
 
     def _enforce_budget(self, items: list[ContextItem]) -> list[ContextItem]:
-        """Trim *items* (already sorted desc by confidence) to the budget.
+        """Trim *items* to the budget using a value-per-token ordering.
 
-        Guarantees that at least one item per ``source_type`` is kept even
-        if doing so slightly exceeds the budget (a single item can never be
-        rejected if it is the only representative of its category).
-
-        Args:
-            items: Sorted list of ContextItems (highest confidence first).
-
-        Returns:
-            Filtered list that fits within the token budget (best effort).
+        Items are admitted greedily in descending ``confidence / est_tokens``
+        order so a handful of small high-confidence items outrank a single
+        large low-confidence one. ``is_first_of_type`` is preserved: at
+        least one item per ``source_type`` survives even if admitting it
+        slightly exceeds the budget. Returned items are re-sorted by raw
+        confidence (descending) to match the original output contract.
         """
-        result: list[ContextItem] = []
+        admission_order = sorted(
+            items,
+            key=lambda i: (
+                i.confidence / max(1, i.est_tokens),
+                i.confidence,
+            ),
+            reverse=True,
+        )
+
+        admitted: list[ContextItem] = []
         accumulated = 0
         seen_types: set[str] = set()
 
-        for item in items:
+        for item in admission_order:
             is_first_of_type = item.source_type not in seen_types
             fits = accumulated + item.est_tokens <= self._budget
 
             if fits or is_first_of_type:
-                result.append(item)
+                admitted.append(item)
                 accumulated += item.est_tokens
                 seen_types.add(item.source_type)
 
-        return result
+        return sorted(admitted, key=lambda i: i.confidence, reverse=True)

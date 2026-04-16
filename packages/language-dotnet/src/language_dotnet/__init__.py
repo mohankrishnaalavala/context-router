@@ -145,9 +145,6 @@ def _walk(
         name_node = _first_child_of_type(node, "identifier")
         name = _text(name_node) if name_node else "<unknown>"
         attrs = _collect_attributes(node)
-        tags: list[str] = []
-        if any(a in _TEST_ATTRIBUTES for a in attrs):
-            tags.append("test")
         return_type = _first_child_of_type(node, "predefined_type", "identifier",
                                             "nullable_type", "generic_name")
         attrs_str = ", ".join(f"[{a}]" for a in attrs) if attrs else ""
@@ -166,6 +163,29 @@ def _walk(
             )
         )
         # Recurse into method body with this method as context
+        body = _first_child_of_type(node, "block")
+        if body:
+            _walk(body, results, file, name)
+        return
+
+    if node.type == "constructor_declaration":
+        name_node = _first_child_of_type(node, "identifier")
+        name = _text(name_node) if name_node else "<unknown>"
+        attrs = _collect_attributes(node)
+        attrs_str = ", ".join(f"[{a}]" for a in attrs) if attrs else ""
+        raw_sig = _text(node).split("{")[0].strip()
+        sig = f"{attrs_str} {raw_sig}".strip() if attrs_str else raw_sig
+        results.append(
+            Symbol(
+                name=name,
+                kind="constructor",
+                file=file,
+                line_start=node.start_point[0] + 1,
+                line_end=node.end_point[0] + 1,
+                language="csharp",
+                signature=sig,
+            )
+        )
         body = _first_child_of_type(node, "block")
         if body:
             _walk(body, results, file, name)

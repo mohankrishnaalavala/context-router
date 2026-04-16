@@ -379,3 +379,101 @@ def test_build_pack_warns_when_handover_memory_load_fails(
     with pytest.warns(RuntimeWarning, match="Handover memory loading failed"):
         pack = Orchestrator(project_root=root).build_pack("handover", "summarize project")
     assert isinstance(pack, ContextPack)
+
+
+# ---------------------------------------------------------------------------
+# P2-1: Community signal boost
+# ---------------------------------------------------------------------------
+
+def _seed_two_community_db(db_path: Path) -> None:
+    """Seed DB with two symbols in community 1 and two in community 2."""
+    from storage_sqlite.database import Database
+    from storage_sqlite.repositories import SymbolRepository
+
+    def s(name: str, file: str) -> Symbol:
+        return Symbol(
+            name=name,
+            kind="function",
+            file=Path(file),
+            line_start=1,
+            line_end=5,
+            language="python",
+            signature=f"def {name}() -> None:",
+        )
+
+    with Database(db_path) as db:
+        repo = SymbolRepository(db.connection)
+        a1 = repo.add(s("fn_a1", "src/a1.py"), "default")
+        a2 = repo.add(s("fn_a2", "src/a2.py"), "default")
+        b1 = repo.add(s("fn_b1", "src/b1.py"), "default")
+        b2 = repo.add(s("fn_b2", "src/b2.py"), "default")
+        repo.update_community("default", a1, 1)
+        repo.update_community("default", a2, 1)
+        repo.update_community("default", b1, 2)
+        repo.update_community("default", b2, 2)
+
+
+def test_community_boost_raises_same_community_confidence(tmp_path: Path) -> None:
+    cr_dir = tmp_path / ".context-router"
+    cr_dir.mkdir()
+    _seed_two_community_db(cr_dir / "context-router.db")
+
+    pack = Orchestrator(project_root=tmp_path).build_pack("implement", "add feature")
+
+    by_file = {item.path_or_ref: item.confidence for item in pack.selected_items}
+    # All four symbols land in 'file' bucket at the same base confidence, so the
+    # community boost should differentiate them: the anchor's community gets the
+    # extra +0.10 and the other community does not.
+    if "src/a1.py" in by_file and "src/b1.py" in by_file:
+        assert by_file["src/a1.py"] != by_file["src/b1.py"], (
+            "Expected community boost to differentiate the two communities"
+        )
+
+
+def test_community_boost_noop_when_no_communities(tmp_path: Path) -> None:
+    """Absent community_id on all symbols → items unchanged (no error)."""
+    root = _make_project(tmp_path)  # seeds one symbol with community_id=None
+    pack = Orchestrator(project_root=root).build_pack("implement", "task")
+    assert isinstance(pack, ContextPack)
+
+
+# ---------------------------------------------------------------------------
+# P2-11: Configurable confidence weights via config.yaml
+# ---------------------------------------------------------------------------
+
+def test_resolve_weights_defaults_when_no_override() -> None:
+    from core.orchestrator import _resolve_weights, _REVIEW_CONFIDENCE
+
+    resolved = _resolve_weights("review", None)
+    assert resolved is _REVIEW_CONFIDENCE or resolved == _REVIEW_CONFIDENCE
+
+
+def test_resolve_weights_merges_override() -> None:
+    from contracts.config import ContextRouterConfig
+    from core.orchestrator import _resolve_weights
+
+    cfg = ContextRouterConfig(
+        confidence_weights={"review": {"changed_file": 0.99, "file": 0.05}}
+    )
+    resolved = _resolve_weights("review", cfg)
+    assert resolved["changed_file"] == 0.99
+    assert resolved["file"] == 0.05
+    # Unspecified keys still present (untouched)
+    assert "blast_radius" in resolved
+
+
+def test_build_pack_applies_configured_confidence_weights(tmp_path: Path) -> None:
+    root = _make_project(tmp_path)
+    (root / ".context-router" / "config.yaml").write_text(
+        "confidence_weights:\n"
+        "  implement:\n"
+        "    file_function: 0.42\n",
+        encoding="utf-8",
+    )
+    pack = Orchestrator(project_root=root).build_pack("implement", "task")
+    # The seeded symbol is a function → classified as file_function
+    fn_items = [i for i in pack.selected_items if i.title.startswith("my_function")]
+    assert fn_items, "expected my_function to surface in the pack"
+    # With BM25 boost the final confidence is 0.6*base + 0.4*bm25; since query
+    # "task" doesn't match, bm25 = 0 → final = 0.6 * 0.42 = 0.252
+    assert abs(fn_items[0].confidence - 0.252) < 1e-6

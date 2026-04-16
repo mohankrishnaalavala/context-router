@@ -100,6 +100,21 @@ def test_all_items_fit_within_budget() -> None:
     assert len(result) == 5
 
 
+def test_knapsack_prefers_many_small_over_one_large() -> None:
+    """Four 400-token 0.7-confidence items should beat one 2000-token 0.9."""
+    items = [_item(source_type="big", confidence=0.9, est_tokens=2000, title="big")]
+    items += [
+        _item(source_type="small", confidence=0.7, est_tokens=400, title=f"s{i}")
+        for i in range(4)
+    ]
+    result = ContextRanker(token_budget=2000).rank(items, "", "review")
+    titles = {i.title for i in result}
+    assert "s0" in titles and "s1" in titles and "s2" in titles and "s3" in titles
+    assert "big" in titles
+    admitted_small_tokens = sum(i.est_tokens for i in result if i.source_type == "small")
+    assert admitted_small_tokens >= 1600
+
+
 def test_query_boost_raises_confidence_for_matching_item() -> None:
     """Items whose title/excerpt contain query tokens get a confidence boost."""
     low_relevance = _item(confidence=0.5, title="unrelated_thing", est_tokens=10)
