@@ -132,6 +132,55 @@ class TestEdgeRepository:
         assert edges == []
 
 
+class TestGetAdjacentFiles:
+    def _seed(self, db: Database):
+        sym_repo = SymbolRepository(db.connection)
+        edge_repo = EdgeRepository(db.connection)
+        repo = "adj_repo"
+        a = sym_repo.add(_sym("fa", file="/src/a.py"), repo)
+        b = sym_repo.add(_sym("fb", file="/src/b.py"), repo)
+        c = sym_repo.add(_sym("fc", file="/src/c.py"), repo)
+        d = sym_repo.add(_sym("fd", file="/src/d.py"), repo)
+        edge_repo.add_raw(repo, a, b, "imports")
+        edge_repo.add_raw(repo, c, a, "calls")
+        edge_repo.add_raw(repo, b, d, "imports")
+        return repo, edge_repo
+
+    def test_returns_outgoing_and_incoming_neighbors(self, db: Database):
+        repo, edge_repo = self._seed(db)
+        result = edge_repo.get_adjacent_files(repo, "/src/a.py")
+        assert set(result) == {"/src/b.py", "/src/c.py"}
+
+    def test_excludes_self(self, db: Database):
+        repo, edge_repo = self._seed(db)
+        result = edge_repo.get_adjacent_files(repo, "/src/a.py")
+        assert "/src/a.py" not in result
+
+    def test_returns_sorted_distinct(self, db: Database):
+        repo, edge_repo = self._seed(db)
+        result = edge_repo.get_adjacent_files(repo, "/src/b.py")
+        assert result == sorted(result)
+        assert len(result) == len(set(result))
+
+    def test_empty_when_no_edges(self, db: Database):
+        edge_repo = EdgeRepository(db.connection)
+        assert edge_repo.get_adjacent_files("empty", "/src/x.py") == []
+
+    def test_uses_indexes(self, db: Database):
+        repo, edge_repo = self._seed(db)
+        plan = db.connection.execute(
+            """EXPLAIN QUERY PLAN
+            SELECT s2.file_path FROM edges e
+            JOIN symbols s1 ON s1.id = e.from_symbol_id
+            JOIN symbols s2 ON s2.id = e.to_symbol_id
+            WHERE e.repo = ? AND s1.file_path = ? AND s2.file_path != ?
+            """,
+            (repo, "/src/a.py", "/src/a.py"),
+        ).fetchall()
+        plan_text = " ".join(str(row["detail"]) for row in plan)
+        assert "idx_edges_repo_from" in plan_text or "idx_edges_repo_to" in plan_text
+
+
 class TestGetCallChainFiles:
     """Tests for EdgeRepository.get_call_chain_files (P5)."""
 

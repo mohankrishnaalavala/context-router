@@ -20,7 +20,50 @@ from mcp_server import tools
 
 
 # ---------------------------------------------------------------------------
-# Tool registry — maps tool name → (handler_fn, description, inputSchema)
+# Shared output schema fragments (reused across several tools)
+# ---------------------------------------------------------------------------
+
+_INDEX_OUTPUT: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": True,
+    "properties": {
+        "files": {"type": "integer", "description": "Files scanned."},
+        "symbols": {"type": "integer", "description": "Symbols written."},
+        "edges": {"type": "integer", "description": "Edges written."},
+        "duration_seconds": {"type": "number", "description": "Elapsed indexer time."},
+        "errors": {"type": "array", "items": {"type": "string"}, "description": "Up to 10 error strings."},
+        "error": {"type": "string", "description": "Top-level error (present only on failure)."},
+    },
+}
+
+_PACK_OUTPUT: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": True,
+    "description": (
+        "Serialised ContextPack. When format='compact' returns {text, has_more, total_items}. "
+        "On failure returns {error: <message>}."
+    ),
+    "properties": {
+        "id": {"type": "string"},
+        "mode": {"type": "string"},
+        "query": {"type": "string"},
+        "selected_items": {
+            "type": "array",
+            "items": {"type": "object", "additionalProperties": True},
+        },
+        "total_est_tokens": {"type": "integer"},
+        "baseline_est_tokens": {"type": "integer"},
+        "reduction_pct": {"type": "number"},
+        "has_more": {"type": "boolean"},
+        "total_items": {"type": "integer"},
+        "text": {"type": "string", "description": "Compact-format body."},
+        "error": {"type": "string"},
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Tool registry — maps tool name → (handler_fn, description, inputSchema, outputSchema)
 # ---------------------------------------------------------------------------
 
 _TOOLS: dict[str, dict[str, Any]] = {
@@ -33,6 +76,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
         ),
         "inputSchema": {
             "type": "object",
+            "required": [],
             "properties": {
                 "project_root": {
                     "type": "string",
@@ -45,6 +89,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": _INDEX_OUTPUT,
     },
     "update_index": {
         "fn": tools.update_index,
@@ -72,6 +117,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": _INDEX_OUTPUT,
     },
     "get_context_pack": {
         "fn": tools.get_context_pack,
@@ -120,6 +166,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": _PACK_OUTPUT,
     },
     "get_context_summary": {
         "fn": tools.get_context_summary,
@@ -148,6 +195,35 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "mode": {"type": "string"},
+                "query": {"type": "string"},
+                "item_count": {"type": "integer"},
+                "total_est_tokens": {"type": "integer"},
+                "baseline_est_tokens": {"type": "integer"},
+                "reduction_pct": {"type": "number"},
+                "top_files": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": True,
+                        "properties": {
+                            "path": {"type": "string"},
+                            "title": {"type": "string"},
+                            "confidence": {"type": "number"},
+                        },
+                    },
+                },
+                "source_type_counts": {
+                    "type": "object",
+                    "additionalProperties": {"type": "integer"},
+                },
+                "error": {"type": "string"},
+            },
+        },
     },
     "get_debug_pack": {
         "fn": tools.get_debug_pack,
@@ -157,6 +233,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
         ),
         "inputSchema": {
             "type": "object",
+            "required": ["query"],
             "properties": {
                 "query": {
                     "type": "string",
@@ -175,6 +252,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": _PACK_OUTPUT,
     },
     "explain_selection": {
         "fn": tools.explain_selection,
@@ -184,11 +262,38 @@ _TOOLS: dict[str, dict[str, Any]] = {
         ),
         "inputSchema": {
             "type": "object",
+            "required": [],
             "properties": {
                 "project_root": {
                     "type": "string",
                     "description": "Absolute path to project root. Auto-detected when omitted.",
                 },
+            },
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "mode": {"type": "string"},
+                "query": {"type": "string"},
+                "total_est_tokens": {"type": "integer"},
+                "baseline_est_tokens": {"type": "integer"},
+                "reduction_pct": {"type": "number"},
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": True,
+                        "properties": {
+                            "title": {"type": "string"},
+                            "source_type": {"type": "string"},
+                            "confidence": {"type": "number"},
+                            "reason": {"type": "string"},
+                            "est_tokens": {"type": "integer"},
+                        },
+                    },
+                },
+                "error": {"type": "string"},
             },
         },
     },
@@ -201,6 +306,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
         ),
         "inputSchema": {
             "type": "object",
+            "required": [],
             "properties": {
                 "query": {
                     "type": "string",
@@ -212,6 +318,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": _PACK_OUTPUT,
     },
     "search_memory": {
         "fn": tools.search_memory,
@@ -230,6 +337,18 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "results": {
+                    "type": "array",
+                    "items": {"type": "object", "additionalProperties": True},
+                    "description": "Matching observations, serialised.",
+                },
+                "error": {"type": "string"},
+            },
+        },
     },
     "get_decisions": {
         "fn": tools.get_decisions,
@@ -239,6 +358,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
         ),
         "inputSchema": {
             "type": "object",
+            "required": [],
             "properties": {
                 "query": {
                     "type": "string",
@@ -248,6 +368,17 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     "type": "string",
                     "description": "Absolute path to project root. Auto-detected when omitted.",
                 },
+            },
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "decisions": {
+                    "type": "array",
+                    "items": {"type": "object", "additionalProperties": True},
+                },
+                "error": {"type": "string"},
             },
         },
     },
@@ -300,6 +431,16 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "saved": {"type": "boolean"},
+                "id": {"type": ["integer", "string"]},
+                "reason": {"type": "string"},
+                "error": {"type": "string"},
+            },
+        },
     },
     "save_decision": {
         "fn": tools.save_decision,
@@ -342,6 +483,15 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     "type": "string",
                     "description": "Absolute path to project root. Auto-detected when omitted.",
                 },
+            },
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "saved": {"type": "boolean"},
+                "id": {"type": "string", "description": "UUID of the saved decision."},
+                "error": {"type": "string"},
             },
         },
     },
@@ -398,6 +548,15 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "recorded": {"type": "boolean"},
+                "id": {"type": "string"},
+                "error": {"type": "string"},
+            },
+        },
     },
     "list_memory": {
         "fn": tools.list_memory,
@@ -408,6 +567,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
         ),
         "inputSchema": {
             "type": "object",
+            "required": [],
             "properties": {
                 "sort": {
                     "type": "string",
@@ -424,6 +584,18 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     "type": "string",
                     "description": "Absolute path to project root. Auto-detected when omitted.",
                 },
+            },
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "observations": {
+                    "type": "array",
+                    "items": {"type": "object", "additionalProperties": True},
+                    "description": "Each item is a serialised Observation with effective_confidence.",
+                },
+                "error": {"type": "string"},
             },
         },
     },
@@ -452,6 +624,16 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 },
             },
         },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "updated": {"type": "boolean"},
+                "superseded": {"type": "string"},
+                "superseded_by": {"type": "string"},
+                "error": {"type": "string"},
+            },
+        },
     },
     "suggest_next_files": {
         "fn": tools.suggest_next_files,
@@ -462,6 +644,7 @@ _TOOLS: dict[str, dict[str, Any]] = {
         ),
         "inputSchema": {
             "type": "object",
+            "required": [],
             "properties": {
                 "pack_id": {
                     "type": "string",
@@ -476,6 +659,24 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     "description": "Max files to return (default 3).",
                     "default": 3,
                 },
+            },
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "suggestions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": True,
+                        "properties": {
+                            "file": {"type": "string"},
+                            "reason": {"type": "string"},
+                        },
+                    },
+                },
+                "error": {"type": "string"},
             },
         },
     },
@@ -528,6 +729,7 @@ def _handle(request: dict) -> dict | None:
                     "name": name,
                     "description": info["description"],
                     "inputSchema": info["inputSchema"],
+                    "outputSchema": info["outputSchema"],
                 }
                 for name, info in _TOOLS.items()
             ]

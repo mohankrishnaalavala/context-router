@@ -700,33 +700,28 @@ class EdgeRepository:
         Useful for blast-radius calculation: given a changed file, this method
         returns all files that import from it or are imported by it.
 
-        Args:
-            repo: Logical repository name.
-            file_path: Path string as stored in the DB.
-
-        Returns:
-            Sorted list of distinct adjacent file path strings, excluding
-            *file_path* itself.
+        Uses a UNION of two indexed paths (``idx_edges_repo_from`` +
+        ``idx_edges_repo_to``) so each side of the edge hits an index
+        directly; the prior OR-joined query could fall back to a scan on
+        large repos.
         """
         rows = self._conn.execute(
             """
-            SELECT DISTINCT s.file_path
-            FROM edges e
-            JOIN symbols s
-              ON s.id = e.from_symbol_id OR s.id = e.to_symbol_id
-            WHERE e.repo = ?
-              AND s.file_path != ?
-              AND (
-                e.from_symbol_id IN (
-                    SELECT id FROM symbols WHERE repo = ? AND file_path = ?
-                )
-                OR e.to_symbol_id IN (
-                    SELECT id FROM symbols WHERE repo = ? AND file_path = ?
-                )
-              )
-            ORDER BY s.file_path
+            SELECT s2.file_path FROM edges e
+            JOIN symbols s1 ON s1.id = e.from_symbol_id
+            JOIN symbols s2 ON s2.id = e.to_symbol_id
+            WHERE e.repo = ? AND s1.file_path = ? AND s2.file_path != ?
+
+            UNION
+
+            SELECT s1.file_path FROM edges e
+            JOIN symbols s1 ON s1.id = e.from_symbol_id
+            JOIN symbols s2 ON s2.id = e.to_symbol_id
+            WHERE e.repo = ? AND s2.file_path = ? AND s1.file_path != ?
+
+            ORDER BY 1
             """,
-            (repo, file_path, repo, file_path, repo, file_path),
+            (repo, file_path, file_path, repo, file_path, file_path),
         ).fetchall()
         return [r["file_path"] for r in rows]
 

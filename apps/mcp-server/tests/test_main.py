@@ -68,6 +68,24 @@ class TestToolsList:
             assert "description" in tool
             assert "inputSchema" in tool
 
+    def test_each_tool_declares_required_array(self):
+        resp = _handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        for tool in resp["result"]["tools"]:
+            schema = tool["inputSchema"]
+            assert "required" in schema, f"{tool['name']} missing required array"
+            assert isinstance(schema["required"], list), (
+                f"{tool['name']} required must be a list"
+            )
+
+    def test_each_tool_has_output_schema(self):
+        resp = _handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        for tool in resp["result"]["tools"]:
+            assert "outputSchema" in tool, f"{tool['name']} missing outputSchema"
+            assert isinstance(tool["outputSchema"], dict)
+            assert tool["outputSchema"].get("type") == "object", (
+                f"{tool['name']} outputSchema must be type=object"
+            )
+
 
 # ---------------------------------------------------------------------------
 # tools/call
