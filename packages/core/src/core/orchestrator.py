@@ -122,6 +122,37 @@ _HANDOVER_CONFIDENCE: dict[str, float] = {
 }
 
 
+_DEFAULT_WEIGHTS: dict[str, dict[str, float]] = {
+    "review": _REVIEW_CONFIDENCE,
+    "implement": _IMPLEMENT_CONFIDENCE,
+    "debug": _DEBUG_CONFIDENCE,
+    "handover": _HANDOVER_CONFIDENCE,
+}
+
+# Community anchor boost (P2-1): items in the same community as the highest
+# -confidence seed item get this additive bump (capped at 1.0).
+_COMMUNITY_BOOST: float = 0.10
+
+
+def _resolve_weights(
+    mode: str, cfg: ContextRouterConfig | None
+) -> dict[str, float]:
+    """Return the mode's confidence dict with any user overrides merged in.
+
+    Hardcoded defaults stay the single source of truth; overrides supply
+    partial replacements. Absent config returns the defaults verbatim.
+    """
+    defaults = _DEFAULT_WEIGHTS.get(mode, {})
+    if cfg is None or not cfg.confidence_weights:
+        return defaults
+    override = cfg.confidence_weights.get(mode) or {}
+    if not override:
+        return defaults
+    merged = dict(defaults)
+    merged.update({k: float(v) for k, v in override.items()})
+    return merged
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -297,7 +328,9 @@ class Orchestrator:
                 feedback_adjustments = {}
 
             candidates = self._build_candidates(
-                mode, sym_repo, edge_repo, runtime_signals=runtime_signals,
+                mode, sym_repo, edge_repo,
+                config=config,
+                runtime_signals=runtime_signals,
                 past_debug_files=past_debug_files,
                 feedback_adjustments=feedback_adjustments,
             )
@@ -385,25 +418,15 @@ class Orchestrator:
         sym_repo: SymbolRepository,
         edge_repo: EdgeRepository,
         repo_name: str = "default",
+        config: ContextRouterConfig | None = None,
         runtime_signals: list[RuntimeSignal] | None = None,
         past_debug_files: set[str] | None = None,
         feedback_adjustments: dict[str, float] | None = None,
     ) -> list[ContextItem]:
         """Fetch and pre-score candidate ContextItems for *mode*.
 
-        Args:
-            mode: Task mode string.
-            sym_repo: Open SymbolRepository.
-            edge_repo: Open EdgeRepository.
-            repo_name: Logical repository name used in DB queries.
-            runtime_signals: Parsed RuntimeSignal objects (debug mode).
-            past_debug_files: File paths from past signals with same error_hash.
-            feedback_adjustments: Per-file confidence deltas from agent feedback.
-
-        Returns:
-            List of ContextItems with source_type and confidence set.
-            Reason strings are intentionally left empty here; the ranker fills
-            them in from the source_type.
+        Reason strings are intentionally left empty here; the ranker fills
+        them in from the source_type.
 
         Raises:
             ValueError: If *mode* is unrecognised.
@@ -411,17 +434,25 @@ class Orchestrator:
         signals = runtime_signals or []
         adj = feedback_adjustments or {}
         past_files = past_debug_files or set()
+        weights = _resolve_weights(mode, config)
 
         if mode == "review":
-            items = self._review_candidates(sym_repo, edge_repo, repo_name)
+            items = self._review_candidates(sym_repo, edge_repo, repo_name, weights)
         elif mode == "implement":
-            items = self._implement_candidates(sym_repo, repo_name)
+            items = self._implement_candidates(sym_repo, repo_name, weights)
         elif mode == "debug":
-            items = self._debug_candidates(sym_repo, edge_repo, repo_name, signals, past_files)
+            items = self._debug_candidates(
+                sym_repo, edge_repo, repo_name, weights, signals, past_files
+            )
         elif mode == "handover":
-            items = self._handover_candidates(sym_repo, edge_repo, repo_name)
+            items = self._handover_candidates(sym_repo, edge_repo, repo_name, weights)
         else:
             raise ValueError(f"Unknown mode: {mode!r}")
+
+        # P2-1: community-cohesion boost — items sharing the anchor's community
+        # get a small additive bump so co-changed files cluster together.
+        if mode != "handover":
+            items = self._apply_community_boost(items, sym_repo, repo_name)
 
         # Apply feedback-based confidence adjustments (Phase 6)
         if adj:
@@ -435,6 +466,51 @@ class Orchestrator:
             ]
         return items
 
+    @staticmethod
+    def _apply_community_boost(
+        items: list[ContextItem],
+        sym_repo: SymbolRepository,
+        repo_name: str,
+    ) -> list[ContextItem]:
+        """Boost candidates sharing a community with the highest-confidence item.
+
+        Anchor is the most confident candidate whose file maps to a known
+        community. When no symbol has a community assigned (e.g. graph not
+        finalized yet), returns *items* unchanged so behavior is additive.
+        """
+        if not items:
+            return items
+        file_to_community: dict[str, int] = {}
+        try:
+            for sym in sym_repo.get_all(repo_name):
+                if sym.community_id is None:
+                    continue
+                key = str(sym.file)
+                if key not in file_to_community:
+                    file_to_community[key] = sym.community_id
+        except Exception:  # noqa: BLE001
+            return items
+        if not file_to_community:
+            return items
+        anchor_community: int | None = None
+        for item in sorted(items, key=lambda i: i.confidence, reverse=True):
+            cid = file_to_community.get(item.path_or_ref)
+            if cid is not None:
+                anchor_community = cid
+                break
+        if anchor_community is None:
+            return items
+        boosted: list[ContextItem] = []
+        for item in items:
+            cid = file_to_community.get(item.path_or_ref)
+            if cid == anchor_community:
+                boosted.append(item.model_copy(update={
+                    "confidence": min(1.0, item.confidence + _COMMUNITY_BOOST)
+                }))
+            else:
+                boosted.append(item)
+        return boosted
+
     # ------------------------------------------------------------------
     # Review mode
     # ------------------------------------------------------------------
@@ -444,6 +520,7 @@ class Orchestrator:
         sym_repo: SymbolRepository,
         edge_repo: EdgeRepository,
         repo_name: str,
+        weights: dict[str, float],
     ) -> list[ContextItem]:
         """Build candidates prioritised for a code-review task."""
         changed_files = self._get_changed_files()
@@ -482,7 +559,7 @@ class Orchestrator:
             else:
                 source_type = "file"
 
-            confidence = _REVIEW_CONFIDENCE[source_type]
+            confidence = weights.get(source_type, _REVIEW_CONFIDENCE[source_type])
             seen_files.add(fp)
             items.append(
                 _make_item(
@@ -563,6 +640,7 @@ class Orchestrator:
         self,
         sym_repo: SymbolRepository,
         repo_name: str,
+        weights: dict[str, float],
     ) -> list[ContextItem]:
         """Build candidates prioritised for a feature-implementation task."""
         all_symbols = sym_repo.get_all(repo_name)
@@ -570,7 +648,9 @@ class Orchestrator:
 
         for sym in all_symbols:
             fp = str(sym.file)
-            source_type, confidence = self._classify_for_implement(sym.name, sym.kind, fp)
+            source_type, confidence = self._classify_for_implement(
+                sym.name, sym.kind, fp, weights
+            )
             items.append(
                 _make_item(
                     sym_name=sym.name,
@@ -587,13 +667,14 @@ class Orchestrator:
 
     @staticmethod
     def _classify_for_implement(
-        name: str, kind: str, file_path: str
+        name: str, kind: str, file_path: str, weights: dict[str, float] | None = None
     ) -> tuple[str, float]:
-        """Classify a symbol for implement-mode scoring.
+        """Classify a symbol for implement-mode scoring."""
+        effective = weights if weights is not None else _IMPLEMENT_CONFIDENCE
 
-        Returns:
-            Tuple of (source_type, confidence).
-        """
+        def w(key: str) -> float:
+            return effective.get(key, _IMPLEMENT_CONFIDENCE[key])
+
         # Entrypoints: well-known function/method names
         if kind in ("function", "method") and _ENTRYPOINT_PATTERN.match(name):
             file_name = Path(file_path).name.lower()
@@ -601,26 +682,24 @@ class Orchestrator:
                 frag in file_name for frag in _NON_ENTRYPOINT_PATH_FRAGMENTS
             )
             if not is_non_entrypoint:
-                return "entrypoint", _IMPLEMENT_CONFIDENCE["entrypoint"]
+                return "entrypoint", w("entrypoint")
 
         # Contracts: files whose path contains model/schema/contract keywords
         fp_lower = file_path.lower()
         if any(fragment in fp_lower for fragment in _CONTRACT_PATH_FRAGMENTS):
-            return "contract", _IMPLEMENT_CONFIDENCE["contract"]
+            return "contract", w("contract")
 
         # Extension points: abstract base classes / protocol classes
         if kind == "class" and _EXTENSION_POINT_PATTERN.search(name):
-            return "extension_point", _IMPLEMENT_CONFIDENCE["extension_point"]
+            return "extension_point", w("extension_point")
 
-        # Other classes
         if kind == "class":
-            return "file", _IMPLEMENT_CONFIDENCE["file_class"]
+            return "file", w("file_class")
 
-        # Other functions/methods
         if kind in ("function", "method"):
-            return "file", _IMPLEMENT_CONFIDENCE["file_function"]
+            return "file", w("file_function")
 
-        return "file", _IMPLEMENT_CONFIDENCE["file"]
+        return "file", w("file")
 
     # ------------------------------------------------------------------
     # Debug mode
@@ -631,6 +710,7 @@ class Orchestrator:
         sym_repo: SymbolRepository,
         edge_repo: EdgeRepository,
         repo_name: str,
+        weights: dict[str, float],
         signals: list[RuntimeSignal],
         past_debug_files: set[str] | None = None,
     ) -> list[ContextItem]:
@@ -676,7 +756,7 @@ class Orchestrator:
                     title=title,
                     excerpt=excerpt,
                     reason="",
-                    confidence=_DEBUG_CONFIDENCE["runtime_signal"],
+                    confidence=weights.get("runtime_signal", _DEBUG_CONFIDENCE["runtime_signal"]),
                     est_tokens=_estimate_item_tokens(title, excerpt),
                 )
             )
@@ -687,22 +767,22 @@ class Orchestrator:
 
             if fp in signal_paths or fname in signal_paths:
                 source_type = "runtime_signal"
-                confidence = _DEBUG_CONFIDENCE["runtime_signal"]
+                confidence = weights.get("runtime_signal", _DEBUG_CONFIDENCE["runtime_signal"])
             elif fp in past_files or fname in past_files:
                 source_type = "past_debug"
-                confidence = _DEBUG_CONFIDENCE.get("past_debug", 0.90)
+                confidence = weights.get("past_debug", _DEBUG_CONFIDENCE.get("past_debug", 0.90))
             elif self._is_test_file(fp):
                 source_type = "failing_test"
-                confidence = _DEBUG_CONFIDENCE["failing_test"]
+                confidence = weights.get("failing_test", _DEBUG_CONFIDENCE["failing_test"])
             elif fp in changed_files:
                 source_type = "changed_file"
-                confidence = _DEBUG_CONFIDENCE["changed_file"]
+                confidence = weights.get("changed_file", _DEBUG_CONFIDENCE["changed_file"])
             elif fp in blast_radius_files:
                 source_type = "blast_radius"
-                confidence = _DEBUG_CONFIDENCE["blast_radius"]
+                confidence = weights.get("blast_radius", _DEBUG_CONFIDENCE["blast_radius"])
             else:
                 source_type = "file"
-                confidence = _DEBUG_CONFIDENCE["file"]
+                confidence = weights.get("file", _DEBUG_CONFIDENCE["file"])
 
             items.append(
                 _make_item(
@@ -763,6 +843,7 @@ class Orchestrator:
         sym_repo: SymbolRepository,
         edge_repo: EdgeRepository,
         repo_name: str,
+        weights: dict[str, float],
     ) -> list[ContextItem]:
         """Build candidates for a project handover pack.
 
@@ -783,13 +864,13 @@ class Orchestrator:
             fp = str(sym.file)
             if fp in changed_files:
                 source_type = "changed_file"
-                confidence = _HANDOVER_CONFIDENCE["changed_file"]
+                confidence = weights.get("changed_file", _HANDOVER_CONFIDENCE["changed_file"])
             elif fp in blast_radius_files:
                 source_type = "blast_radius"
-                confidence = _HANDOVER_CONFIDENCE["blast_radius"]
+                confidence = weights.get("blast_radius", _HANDOVER_CONFIDENCE["blast_radius"])
             else:
                 source_type = "file"
-                confidence = _HANDOVER_CONFIDENCE["file"]
+                confidence = weights.get("file", _HANDOVER_CONFIDENCE["file"])
 
             items.append(
                 _make_item(
@@ -818,7 +899,7 @@ class Orchestrator:
                         excerpt = f"{obs.summary}\nFix: {obs.fix_summary}"
                     # Use freshness-weighted score, capped at the handover base
                     fresh_conf = min(
-                        _HANDOVER_CONFIDENCE["memory"],
+                        weights.get("memory", _HANDOVER_CONFIDENCE["memory"]),
                         max(0.10, score_for_pack(obs)),
                     )
                     mem_title = f"Observation: {obs.summary[:60]}"
@@ -847,7 +928,7 @@ class Orchestrator:
                     _dummy = _Obs(summary="", timestamp=dec.created_at)
                     _dummy = _dummy.model_copy(update={"confidence_score": dec.confidence})
                     dec_fresh = min(
-                        _HANDOVER_CONFIDENCE["decision"],
+                        weights.get("decision", _HANDOVER_CONFIDENCE["decision"]),
                         max(0.10, _cf(_dummy) * dec.confidence),
                     )
                     dec_title = f"Decision: {dec.title[:60]}"
