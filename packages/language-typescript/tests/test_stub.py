@@ -152,3 +152,110 @@ def test_language_is_typescript(tmp_path: Path):
     results = TypeScriptAnalyzer().analyze(f)
     symbols = [r for r in results if isinstance(r, Symbol)]
     assert all(s.language == "typescript" for s in symbols)
+
+
+# ---------------------------------------------------------------------------
+# v3 phase3/edge-kinds-extended: extends / implements / tested_by edges.
+# ---------------------------------------------------------------------------
+
+TS_INHERITANCE = """\
+class Foo extends Base implements IFoo, IBar {}
+interface IRepo extends IService, IWritable {}
+class Bar extends other.module.Base {}
+class Solo {}
+"""
+
+
+@needs_ts
+def test_extends_and_implements_from_class(tmp_path: Path):
+    """``class Foo extends Base implements IFoo, IBar`` emits exactly one
+    extends edge and one implements edge per interface."""
+    f = tmp_path / "Foo.ts"
+    f.write_text(TS_INHERITANCE)
+    results = TypeScriptAnalyzer().analyze(f)
+    extends = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "extends"]
+    impls = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "implements"]
+    ext_pairs = {(e.from_symbol, e.to_symbol) for e in extends}
+    imp_pairs = {(e.from_symbol, e.to_symbol) for e in impls}
+    assert ("Foo", "Base") in ext_pairs
+    assert ("Foo", "IFoo") in imp_pairs
+    assert ("Foo", "IBar") in imp_pairs
+    # Dotted base → leaf identifier
+    assert ("Bar", "Base") in ext_pairs
+    # Solo has no heritage → no edges
+    assert all(src != "Solo" for src, _ in ext_pairs | imp_pairs)
+
+
+@needs_ts
+def test_interface_extends_multiple_super_interfaces(tmp_path: Path):
+    f = tmp_path / "IRepo.ts"
+    f.write_text(TS_INHERITANCE)
+    results = TypeScriptAnalyzer().analyze(f)
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "extends"]
+    pairs = {(e.from_symbol, e.to_symbol) for e in edges}
+    assert ("IRepo", "IService") in pairs
+    assert ("IRepo", "IWritable") in pairs
+
+
+@needs_ts
+def test_tested_by_for_named_test_function(tmp_path: Path):
+    """A ``.test.ts`` file with a named test function calling an imported
+    source symbol emits a tested_by edge from the import → the test fn."""
+    code = """
+import { add, multiply } from './math';
+
+function testAdd() {
+    return add(1, 2);
+}
+
+function testMultiply() {
+    return multiply(3, 4);
+}
+"""
+    f = tmp_path / "math.test.ts"
+    f.write_text(code)
+    results = TypeScriptAnalyzer().analyze(f)
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "tested_by"]
+    pairs = {(e.from_symbol, e.to_symbol) for e in edges}
+    assert ("add", "testAdd") in pairs
+    assert ("multiply", "testMultiply") in pairs
+
+
+@needs_ts
+def test_no_spec_edges_in_plain_source(tmp_path: Path):
+    """Negative: plain source (no heritage, no tests) emits zero of the
+    v3-phase3 edge kinds."""
+    code = """
+function plain() { return 1; }
+class Standalone { value = 42; }
+"""
+    f = tmp_path / "plain.ts"
+    f.write_text(code)
+    results = TypeScriptAnalyzer().analyze(f)
+    spec_edges = [
+        r for r in results
+        if isinstance(r, DependencyEdge)
+        and r.edge_type in {"extends", "implements", "tested_by"}
+    ]
+    assert spec_edges == []
+
+
+@needs_ts
+def test_calls_and_imports_unchanged_after_v3(tmp_path: Path):
+    """Regression: existing calls/imports emission is unchanged."""
+    code = """
+import { helper } from 'lib';
+
+function alpha() {
+    beta();
+}
+
+function beta() { return helper(); }
+"""
+    f = tmp_path / "sample.ts"
+    f.write_text(code)
+    results = TypeScriptAnalyzer().analyze(f)
+    calls = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "calls"]
+    imports = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "imports"]
+    assert any(e.from_symbol == "alpha" and e.to_symbol == "beta" for e in calls)
+    assert any(e.to_symbol == "lib" for e in imports)
