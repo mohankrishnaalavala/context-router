@@ -133,13 +133,20 @@ def test_extracts_using_directives_as_edges(tmp_path: Path):
 
 
 def test_extracts_interface(tmp_path: Path):
+    """Interfaces must be labeled kind='interface' (was kind='class' pre-v3)."""
     f = tmp_path / "IUserService.cs"
     f.write_text(SAMPLE_CS_INTERFACE)
     results = DotnetAnalyzer().analyze(f)
 
+    interfaces = [s for s in results if isinstance(s, Symbol) and s.kind == "interface"]
+    names = {s.name for s in interfaces}
+    assert "IUserService" in names, (
+        f"expected IUserService with kind='interface', got kinds="
+        f"{[(s.name, s.kind) for s in results if isinstance(s, Symbol)]}"
+    )
+    # Negative: the interface must not leak out as kind='class' anymore.
     classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
-    names = {s.name for s in classes}
-    assert "IUserService" in names
+    assert "IUserService" not in {s.name for s in classes}
 
 
 def test_line_numbers_set(tmp_path: Path):
@@ -232,3 +239,61 @@ def test_property_extraction(tmp_path: Path):
     names = {s.name for s in props}
     assert "Host" in names
     assert "Port" in names
+
+
+# ---------------------------------------------------------------------------
+# v3 phase1/interface-kind-label: kind correctness across type declarations.
+# ---------------------------------------------------------------------------
+
+SAMPLE_CS_ALL_KINDS = """\
+namespace MyApp.Domain
+{
+    public class Person { }
+
+    public interface IGreeter
+    {
+        string Greet();
+    }
+
+    public record PersonRecord(string Name, int Age);
+
+    public struct Point
+    {
+        public int X;
+        public int Y;
+    }
+}
+"""
+
+
+def test_kind_labels_class_interface_record_struct(tmp_path: Path):
+    """Each C# type-declaration node-type must map to its matching kind."""
+    f = tmp_path / "AllKinds.cs"
+    f.write_text(SAMPLE_CS_ALL_KINDS)
+    results = DotnetAnalyzer().analyze(f)
+
+    by_name = {
+        s.name: s.kind
+        for s in results
+        if isinstance(s, Symbol) and s.kind in {"class", "interface", "record", "struct"}
+    }
+    assert by_name.get("Person") == "class"
+    assert by_name.get("IGreeter") == "interface"
+    assert by_name.get("PersonRecord") == "record"
+    assert by_name.get("Point") == "struct"
+
+
+def test_plain_class_regression_still_kind_class(tmp_path: Path):
+    """Regression: a plain class in isolation stays kind='class' (unchanged)."""
+    f = tmp_path / "UserService.cs"
+    f.write_text(SAMPLE_CS)  # Only contains a plain class.
+    results = DotnetAnalyzer().analyze(f)
+
+    classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
+    assert {s.name for s in classes} == {"UserService"}
+    # No spurious non-class kinds leak out from a plain-class file.
+    leaked = [
+        s for s in results
+        if isinstance(s, Symbol) and s.kind in {"interface", "record", "struct"}
+    ]
+    assert leaked == []

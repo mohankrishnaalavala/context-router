@@ -129,12 +129,25 @@ def _walk(
         # discover Spring / JPA / JUnit patterns without a hardcoded list.
         annotations = _collect_annotations(node)
         annotation_prefix = " ".join(f"@{a}" for a in annotations)
-        base = "class" if node.type != "interface_declaration" else "interface"
+        # v3 phase1/interface-kind-label: emit the correct kind per node type.
+        # Previously every type declaration was flattened to kind='class',
+        # which broke ranking for Java-heavy repos that distinguish by kind.
+        # Enum extraction is completed more fully in Phase 3
+        # (`enum-symbols-extracted`); the label alone is emitted here.
+        _JAVA_KIND_BY_NODE = {
+            "class_declaration": "class",
+            "interface_declaration": "interface",
+            "enum_declaration": "enum",
+            "annotation_type_declaration": "annotation",
+        }
+        kind = _JAVA_KIND_BY_NODE[node.type]
+        # Signature base word tracks the kind so BM25 / signature display stay honest.
+        base = kind if kind != "annotation" else "@interface"
         signature = f"{annotation_prefix} {base} {name}".strip() if annotation_prefix else f"{base} {name}"
         results.append(
             Symbol(
                 name=name,
-                kind="class",
+                kind=kind,
                 file=file,
                 line_start=node.start_point[0] + 1,
                 line_end=node.end_point[0] + 1,
