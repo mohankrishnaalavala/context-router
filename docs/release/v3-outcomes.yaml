@@ -93,12 +93,16 @@ outcomes:
     severity: P1
     effort: S
     title: "--with-semantic outside implement mode emits a warning"
-    outcome: "Using `--with-semantic` in review/debug/handover prints a warning to stderr and continues"
-    threshold: "stderr contains substring 'no effect in <mode> mode'"
-    negative_case: "--with-semantic in implement mode is silent (normal case)"
+    outcome: "SUPERSEDED in Phase 2 by `semantic-default-with-progress` — the warning was a phase-1 bridge; `--with-semantic` now applies in every mode so no warning is needed."
+    threshold: "N/A (superseded)"
+    negative_case: "N/A (superseded)"
+    status: "superseded"
+    # Verify is kept for historical record; smoke will FAIL this id intentionally
+    # and that is expected. The behavior documented by `semantic-default-with-progress`
+    # is the replacement contract.
     verify:
-      cmd: "uv run context-router pack --mode handover --query 'x' --with-semantic --project-root ${bulletproof_react} 2>&1 1>/dev/null"
-      expected_stdout_contains: "no effect in handover"
+      cmd: "echo 'SUPERSEDED by semantic-default-with-progress (Phase 2)'"
+      expected_stdout_contains: "SUPERSEDED by semantic-default-with-progress"
 
   - id: contracts-boost-single-repo
     severity: P1
