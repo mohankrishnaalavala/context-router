@@ -9,6 +9,101 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [2.0.0] — 2026-04-16
+
+Phase P3 — enhancement ideas. Six P3 items shipped across four independent
+work lanes (PRs #29, #30, #31, #32) merged to `main` in a single release cut.
+
+Major version bump reflects new public surface: the MCP server gains a
+`resources` capability and progress notifications; the CLI gains
+`--with-semantic` and `workspace detect-links`; `Orchestrator.build_pack`
+gains three new optional kwargs. Existing callers are unchanged — defaults
+are safe.
+
+### Added
+
+- **P3-1 — Orchestrator-level TTLCache for pack results**
+  (`packages/core/src/core/orchestrator.py`, `packages/ranking/src/ranking/ranker.py`).
+  `Orchestrator.build_pack` now caches the ranked `ContextPack` in a
+  `cachetools.TTLCache(maxsize=100, ttl=300)` keyed on
+  `(repo_id, mode, sha256(query), budget, use_embeddings, items_hash)`.
+  `repo_id` is derived from the SQLite DB mtime so `build_index` /
+  `update_index` naturally invalidates entries. An `RLock` guards mutations
+  and `invalidate_cache()` is exposed as an escape hatch. The in-ranker
+  BM25 corpus cache is preserved — the new cache sits above it and
+  short-circuits the entire pipeline on repeat calls.
+- **P3-2 — `--with-semantic` CLI flag with rich progress bar**
+  (`apps/cli/src/cli/commands/pack.py`, `packages/ranking/src/ranking/ranker.py`).
+  `context-router pack --with-semantic` enables `all-MiniLM-L6-v2` semantic
+  ranking. First run downloads the model (~33 MB) with a `rich.progress.Progress`
+  spinner; the progress bar auto-suppresses when the model is already
+  cached. `--no-progress` disables rendering for CI. MCP parity:
+  `get_context_pack` input schema gains a matching `use_embeddings` flag
+  and always calls `build_pack(progress=False)` so JSON-RPC stdio frames
+  are never corrupted.
+- **P3-3 — Cross-language contracts extractor** (new package
+  `packages/contracts-extractor/`, storage migration `0011_contracts.sql`,
+  `ContractRepository`, `WorkspaceDescriptor.contract_links`,
+  `workspace detect-links` CLI subcommand). Walks a repo and emits
+  signature-level `ApiEndpoint` / `GrpcService` / `GraphqlOperation`
+  records. `detect_contract_links(repos)` scans non-producer repos for
+  HTTP-client calls matching each endpoint path template and infers
+  `ContractLink(kind="consumes")` edges. `workspace_orchestrator` boosts
+  items on the producer side of a consumes edge by +0.05.
+- **P3-4 (part 1) — Function-level call graph foundation**
+  (`packages/storage-sqlite/src/storage_sqlite/repositories.py`, migration
+  `0010_edges_repo_type_index.sql`, `contracts.interfaces.SymbolRef`).
+  New `EdgeRepository.get_call_chain_symbols(repo, symbol_id, max_depth)`
+  returns `SymbolRef` per reachable callee with minimum hop depth. The
+  existing `get_call_chain_files` is kept as a back-compat wrapper.
+  Migration 0010 adds `idx_edges_repo_type` — fixes a full-table-scan
+  hotspot identified in the performance review.
+- **P3-5 — MCP progress notifications**
+  (`apps/mcp-server/src/mcp_server/main.py`, `tools.py`,
+  `Orchestrator.build_pack`). `tools/call get_context_pack` now honours an
+  optional `progressToken`. When supplied, `notifications/progress` is
+  emitted at three fixed milestones (candidates → ranked → serialized)
+  plus per-1,000-token chunk updates for packs larger than 2,000 tokens.
+  A new `_notify()` helper writes JSON-RPC notifications to stdout under
+  the same mutex as `_send()`.
+- **P3-6 — MCP resources capability** (new files `resources.py`,
+  `pack_store.py`). The `initialize` response now advertises
+  `resources: { listChanged: true }`. `resources/list` and `resources/read`
+  expose previously built packs via `context-router://packs/<uuid>`.
+  `PackStore` persists to `.context-router/packs/<uuid>.json` + an index
+  with LRU retention (last 20 packs). `notifications/resources/list_changed`
+  fires after any pack-building tool succeeds.
+
+### Changed
+
+- `Orchestrator.build_pack` gains three new optional kwargs:
+  `use_embeddings: bool = False` (P3-2), `progress: bool = True`
+  (transport safety toggle), `download_progress_cb: Callable[[str], None]`
+  (rich spinner for model download), and `progress_cb: Callable[[str, int, int], None]`
+  (pack-build progress for MCP). All default to safe values; existing
+  callers require no changes.
+- `WorkspaceDescriptor` gains a `contract_links: list[ContractLink]` field.
+  The legacy `links: dict[str, list[str]]` shape is unchanged and
+  existing `workspace.yaml` files round-trip as before.
+- MCP `get_context_pack` input schema adds `use_embeddings` (boolean) and
+  `progressToken` (string | integer) — both optional and additive.
+
+### New dependencies
+
+- `cachetools>=5.3` (core, cli) — bounded TTL cache for pack results.
+- `rich>=13.0` (cli) — progress spinner for model download.
+
+### Deferred follow-ups
+
+- **P3-4 part 2** — entrypoint registry, reachability analysis, dead-code
+  detection, `context-router audit --dead-code` CLI. The storage foundation
+  lands here; the analytical layer is a follow-up PR.
+- **ADR** — "Contract extraction scope = signatures only" was planned but
+  not filed with this release. Rationale is referenced in the Lane D PR
+  body and will be written up into `.handover/context/decisions.md`.
+
+---
+
 ## [0.7.0] — 2026-04-16
 
 Phase P2 — quality improvements and broader language coverage. 13 P2 items
