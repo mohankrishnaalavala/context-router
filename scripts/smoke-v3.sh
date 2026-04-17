@@ -36,6 +36,21 @@ fi
 # ──────────────────── custom check functions ────────────────────
 # One per outcome whose verify.cmd delegates here. Each prints PASS/FAIL lines.
 
+_check_pack-dedup-at-orchestrator() {
+  local fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
+  [[ -d "${fixture}" ]] || { echo "FAIL pack-dedup-at-orchestrator: fixture missing at ${fixture}"; return 1; }
+  local out
+  out="$(uv run context-router pack --mode implement --query 'add pagination' --project-root "${fixture}" --json 2>/dev/null)" || { echo "FAIL pack-dedup-at-orchestrator: --json not supported or command errored"; return 1; }
+  local dup
+  dup="$(echo "${out}" | python3 -c "import json,sys; p=json.load(sys.stdin); items=p.get('items',[]); keys=[(i.get('title','').strip(), i.get('path_or_ref','').strip().lstrip('./').lower()) for i in items]; print(len(keys)-len(set(keys)))")"
+  if [[ "${dup}" == "0" ]]; then
+    echo "PASS pack-dedup-at-orchestrator (0 duplicate keys in pack.items)"
+  else
+    echo "FAIL pack-dedup-at-orchestrator (${dup} duplicate (title,path) pairs in JSON pack)"
+    return 1
+  fi
+}
+
 _check_pack-cache-persists-cli() {
   # Two identical CLI pack runs; assert run2 < 0.5 * run1 wall time.
   local fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"

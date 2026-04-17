@@ -41,6 +41,17 @@ outcomes:
       cmd: "uv run context-router --version"
       expected_stdout_contains: "context-router 3."
 
+  - id: pack-dedup-at-orchestrator
+    severity: P1
+    effort: S
+    title: "Pack dedup happens in build_pack, not only in CLI render"
+    outcome: "MCP get_context_pack, explain last-pack, and pack --json all return the same deduped pack that the CLI table shows"
+    threshold: "pack_from_mcp == pack_from_cli_json — item list has no duplicate (title, path_or_ref) pairs regardless of consumer"
+    negative_case: "dedup count surfaced on ContextPack.metadata for consumers that want to display it"
+    verify:
+      cmd: "scripts/smoke-v3.sh check pack-dedup-at-orchestrator"
+      expected_stdout_contains: "PASS pack-dedup-at-orchestrator"
+
   - id: pack-table-dedup
     severity: P0
     effort: S

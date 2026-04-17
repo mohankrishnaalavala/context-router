@@ -18,7 +18,7 @@
 | Phase | Outcomes | Done / Total | Target |
 |---|---|---|---|
 | 0 · Scaffolding | docs/release, ship-check skill, smoke script | ✅ 1/1 | 2026-04-17 |
-| 1 · First impressions | cli-version, dedup, interface-kind, semantic-warning, ci-develop | 🟨 3/5 | 2026-04-24 |
+| 1 · First impressions | cli-version, dedup, interface-kind, semantic-warning, ci-develop | ✅ 5/5 (re-review pending) | 2026-04-17 |
 | 2 · Speed & discoverability | cache persistence, proactive embeddings, semantic default, contracts boost | ⬜ 0/4 | 2026-05-01 |
 | 3 · CRG-parity intelligence | edge kinds, enums, hub/bridge, minimal-context, call-chain, risk, untested | ⬜ 0/7 | 2026-05-15 |
 | 4 · Advanced features + MCP polish | flow-level, wiki, streaming, coupling, mimeType, serverInfo, ci95 | ⬜ 0/7 | 2026-05-29 |
@@ -43,8 +43,8 @@ Goal: a first-time user does not see an obvious bug in the first 60 seconds.
 | id | sev | effort | status | branch | PR | owner |
 |---|---|---|---|---|---|---|
 | `cli-version-flag` | P0 | S | ✅* | `phase1/cli-version-flag` | #38 (merged) | agent-A |
-| `pack-table-dedup` | P0 | S | ⬜ | `phase1/pack-table-dedup` | — | agent-B |
-| `interface-kind-label` | P0 | S | ⬜ | `phase1/interface-kind-label` | — | agent-C |
+| `pack-table-dedup` | P0 | S | ✅ | `phase1/pack-table-dedup` | #39 (merged) | agent-B |
+| `interface-kind-label` | P0 | S | ✅ | `phase1/interface-kind-label` | #40 (merged) | agent-C |
 | `with-semantic-warns-outside-implement` | P1 | S | ✅ | `phase1/with-semantic-warns` | #37 (merged) | agent-D |
 | `benchmark-develop-ci` | P1 | S | ✅ | `phase1/benchmark-develop-ci` | #36 (merged) | agent-E |
 

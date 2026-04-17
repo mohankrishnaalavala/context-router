@@ -62,6 +62,10 @@ class ContextPack(BaseModel):
     # Pagination fields (populated when page_size > 0 is requested)
     has_more: bool = False
     total_items: int = 0  # 0 = pagination not used
+    # v3 phase-1 follow-up: number of duplicate (title, path_or_ref) items
+    # removed in the orchestrator before rendering / serialization. Surfaced
+    # so CLI / MCP consumers can display "(N duplicate(s) hidden)".
+    duplicates_hidden: int = 0
 
     def to_compact_text(self) -> str:
         """Return a compact plain-text representation of the pack.
