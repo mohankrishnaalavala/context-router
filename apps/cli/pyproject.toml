@@ -57,6 +57,7 @@ packages = ["src/cli"]
 "../../packages/runtime/src/runtime"           = "runtime"
 "../../packages/ranking/src/ranking"           = "ranking"
 "../../packages/workspace/src/workspace"       = "workspace"
+"../../packages/contracts-extractor/src/contracts_extractor" = "contracts_extractor"
 "../../packages/benchmark/src/benchmark"       = "benchmark"
 "../../packages/language-python/src/language_python" = "language_python"
 "../../packages/language-yaml/src/language_yaml"     = "language_yaml"

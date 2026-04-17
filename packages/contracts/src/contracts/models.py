@@ -166,9 +166,26 @@ class RepoDescriptor(BaseModel):
     dirty: bool = False
 
 
+class ContractLink(BaseModel):
+    """A cross-repo link inferred from a real service contract.
+
+    Kind ``consumes`` means ``from_repo`` calls an endpoint/rpc/operation
+    that ``to_repo`` exposes.  The ``endpoint`` dict carries a small
+    signature fingerprint — e.g. ``{"method": "GET", "path": "/users/{id}"}``
+    for OpenAPI, ``{"service": "Greeter", "rpc": "Say"}`` for gRPC, or
+    ``{"name": "user", "kind": "query"}`` for GraphQL.
+    """
+
+    from_repo: str
+    to_repo: str
+    kind: Literal["consumes"] = "consumes"
+    endpoint: dict = Field(default_factory=dict)
+
+
 class WorkspaceDescriptor(BaseModel):
     """Describes a multi-repo workspace."""
 
     name: str = "default"
     repos: list[RepoDescriptor] = Field(default_factory=list)
     links: dict[str, list[str]] = Field(default_factory=dict)
+    contract_links: list[ContractLink] = Field(default_factory=list)

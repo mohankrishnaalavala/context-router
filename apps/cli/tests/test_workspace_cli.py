@@ -221,3 +221,83 @@ class TestWorkspacePack:
         data = json.loads(result.output)
         assert data["mode"] == "review"
         assert "selected_items" in data
+
+
+# ---------------------------------------------------------------------------
+# workspace detect-links
+# ---------------------------------------------------------------------------
+
+OPENAPI = """\
+openapi: 3.0.3
+info: { title: svc-a, version: "1.0.0" }
+paths:
+  /users/{id}:
+    get:
+      operationId: getUserById
+      responses: { "200": { description: OK } }
+"""
+
+
+class TestWorkspaceDetectLinks:
+    def test_no_workspace_exits_1(self, tmp_path):
+        result = _cr("workspace", "detect-links", "--root", str(tmp_path))
+        assert result.exit_code == 1
+
+    def test_empty_workspace_prints_none(self, tmp_path):
+        _cr("workspace", "init", "--root", str(tmp_path))
+        result = _cr("workspace", "detect-links", "--root", str(tmp_path))
+        assert result.exit_code == 0
+        assert "No cross-repo links" in result.output
+
+    def test_discovers_contract_consumes_link(self, tmp_path):
+        repo_a = tmp_path / "svc-a"
+        repo_a.mkdir()
+        (repo_a / "openapi.yaml").write_text(OPENAPI)
+
+        repo_b = tmp_path / "svc-b"
+        repo_b.mkdir()
+        (repo_b / "client.py").write_text(
+            'import requests\n\ndef f():\n    return requests.get("/users/1")\n'
+        )
+
+        _cr("workspace", "init", "--root", str(tmp_path))
+        _cr(
+            "workspace", "repo", "add", "svc-a", str(repo_a),
+            "--root", str(tmp_path), "--no-detect-links",
+        )
+        _cr(
+            "workspace", "repo", "add", "svc-b", str(repo_b),
+            "--root", str(tmp_path), "--no-detect-links",
+        )
+
+        result = _cr(
+            "workspace", "detect-links",
+            "--root", str(tmp_path),
+            "--json",
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        cl = data["contract_links"]
+        assert len(cl) == 1
+        assert cl[0]["from_repo"] == "svc-b"
+        assert cl[0]["to_repo"] == "svc-a"
+        assert cl[0]["kind"] == "consumes"
+        assert cl[0]["endpoint"]["method"] == "GET"
+        assert cl[0]["endpoint"]["path"] == "/users/{id}"
+
+    def test_human_readable_output(self, tmp_path):
+        repo_a = tmp_path / "svc-a"
+        repo_a.mkdir()
+        (repo_a / "openapi.yaml").write_text(OPENAPI)
+        repo_b = tmp_path / "svc-b"
+        repo_b.mkdir()
+        (repo_b / "c.py").write_text('requests.get("/users/1")\n')
+        _cr("workspace", "init", "--root", str(tmp_path))
+        _cr("workspace", "repo", "add", "svc-a", str(repo_a),
+            "--root", str(tmp_path), "--no-detect-links")
+        _cr("workspace", "repo", "add", "svc-b", str(repo_b),
+            "--root", str(tmp_path), "--no-detect-links")
+        result = _cr("workspace", "detect-links", "--root", str(tmp_path))
+        assert result.exit_code == 0
+        assert "svc-b -> svc-a" in result.output
+        assert "/users/{id}" in result.output

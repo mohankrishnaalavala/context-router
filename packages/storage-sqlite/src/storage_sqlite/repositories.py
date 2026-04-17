@@ -1100,3 +1100,145 @@ class PackFeedbackRepository:
             files_read=json.loads(files_read_raw or "[]"),
             timestamp=datetime.fromisoformat(row["timestamp"]),
         )
+
+
+class ContractRepository:
+    """Typed access to the service-contract tables (migration 0011).
+
+    Signatures only — we store the shape needed to infer cross-repo links
+    (method+path, service+rpc, operation name+kind) and nothing else.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection.
+
+        Args:
+            conn: An open sqlite3.Connection (caller owns lifetime).
+        """
+        self._conn = conn
+
+    # ------------------------------------------------------------------
+    # API endpoints (OpenAPI)
+    # ------------------------------------------------------------------
+
+    def upsert_api_endpoint(
+        self,
+        repo: str,
+        method: str,
+        path: str,
+        operation_id: str = "",
+        source_file: str = "",
+        line: int = 0,
+    ) -> None:
+        """Insert or replace a single API endpoint row.
+
+        Uniqueness is on ``(repo, method, path)``.
+        """
+        self._conn.execute(
+            """
+            INSERT INTO api_endpoints
+                (repo, method, path, operation_id, source_file, line)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(repo, method, path) DO UPDATE SET
+                operation_id = excluded.operation_id,
+                source_file  = excluded.source_file,
+                line         = excluded.line
+            """,
+            (repo, method.upper(), path, operation_id, source_file, line),
+        )
+        self._conn.commit()
+
+    def list_api_endpoints(self, repo: str) -> list[dict]:
+        """List every API endpoint row for *repo*, sorted by method+path."""
+        rows = self._conn.execute(
+            """
+            SELECT method, path, operation_id, source_file, line
+            FROM api_endpoints
+            WHERE repo = ?
+            ORDER BY method, path
+            """,
+            (repo,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # gRPC services
+    # ------------------------------------------------------------------
+
+    def upsert_grpc(
+        self,
+        repo: str,
+        service: str,
+        rpc: str,
+        request_type: str = "",
+        response_type: str = "",
+        source_file: str = "",
+        line: int = 0,
+    ) -> None:
+        """Insert or replace a single gRPC service/rpc row."""
+        self._conn.execute(
+            """
+            INSERT INTO grpc_services
+                (repo, service, rpc, request_type, response_type, source_file, line)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(repo, service, rpc) DO UPDATE SET
+                request_type  = excluded.request_type,
+                response_type = excluded.response_type,
+                source_file   = excluded.source_file,
+                line          = excluded.line
+            """,
+            (repo, service, rpc, request_type, response_type, source_file, line),
+        )
+        self._conn.commit()
+
+    def list_grpc(self, repo: str) -> list[dict]:
+        """List every gRPC row for *repo*, sorted by service+rpc."""
+        rows = self._conn.execute(
+            """
+            SELECT service, rpc, request_type, response_type, source_file, line
+            FROM grpc_services
+            WHERE repo = ?
+            ORDER BY service, rpc
+            """,
+            (repo,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # GraphQL operations
+    # ------------------------------------------------------------------
+
+    def upsert_graphql(
+        self,
+        repo: str,
+        name: str,
+        kind: str,
+        source_file: str = "",
+        line: int = 0,
+    ) -> None:
+        """Insert or replace a single GraphQL operation row."""
+        self._conn.execute(
+            """
+            INSERT INTO graphql_operations
+                (repo, name, kind, source_file, line)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo, name, kind) DO UPDATE SET
+                source_file = excluded.source_file,
+                line        = excluded.line
+            """,
+            (repo, name, kind, source_file, line),
+        )
+        self._conn.commit()
+
+    def list_graphql(self, repo: str) -> list[dict]:
+        """List every GraphQL operation row for *repo*."""
+        rows = self._conn.execute(
+            """
+            SELECT name, kind, source_file, line
+            FROM graphql_operations
+            WHERE repo = ?
+            ORDER BY kind, name
+            """,
+            (repo,),
+        ).fetchall()
+        return [dict(r) for r in rows]

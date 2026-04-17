@@ -292,3 +292,87 @@ def workspace_pack(
         title = item.title[:44]
         source = item.source_type[:17]
         typer.echo(f"{title:<45} {source:<18} {item.confidence:>5.2f} {item.est_tokens:>6}")
+
+
+# ---------------------------------------------------------------------------
+# workspace detect-links
+# ---------------------------------------------------------------------------
+
+@workspace_app.command("detect-links")
+def workspace_detect_links(
+    root: Annotated[
+        str,
+        typer.Option("--root", help="Workspace root directory."),
+    ] = "",
+    persist: Annotated[
+        bool,
+        typer.Option(
+            "--persist/--no-persist",
+            help="Write detected contract links back into workspace.yaml.",
+        ),
+    ] = False,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Discover cross-repo links.
+
+    Prints both the Python-import links (legacy shape) and the contract-based
+    ``consumes`` links (OpenAPI today; protobuf / GraphQL scheduled).
+
+    Exit codes:
+      0 — success
+      1 — workspace.yaml not found
+    """
+    from workspace import WorkspaceLoader, detect_contract_links, detect_links
+
+    r = _root_path(root)
+    ws = _load_or_die(r)
+
+    import_links = detect_links(ws.repos)
+    contract_links = detect_contract_links(ws.repos)
+
+    if persist:
+        updated = ws.model_copy(update={
+            "links": {
+                **dict(ws.links),
+                **{k: sorted(set(ws.links.get(k, [])) | set(v))
+                   for k, v in import_links.items()},
+            },
+            "contract_links": contract_links,
+        })
+        WorkspaceLoader.save(r, updated)
+
+    if json_output:
+        typer.echo(json.dumps({
+            "import_links": import_links,
+            "contract_links": [
+                {
+                    "from_repo": cl.from_repo,
+                    "to_repo": cl.to_repo,
+                    "kind": cl.kind,
+                    "endpoint": cl.endpoint,
+                }
+                for cl in contract_links
+            ],
+        }, indent=2))
+        return
+
+    if not import_links and not contract_links:
+        typer.echo("No cross-repo links discovered.")
+        return
+
+    if import_links:
+        typer.echo("Import links (Python):")
+        for src, targets in sorted(import_links.items()):
+            for tgt in targets:
+                typer.echo(f"  {src} -> {tgt}")
+
+    if contract_links:
+        typer.echo("\nContract links (consumes):")
+        for cl in contract_links:
+            ep = cl.endpoint
+            detail = ""
+            if ep.get("method") and ep.get("path"):
+                detail = f"  [{ep['method']} {ep['path']}]"
+            elif ep.get("service") and ep.get("rpc"):
+                detail = f"  [{ep['service']}/{ep['rpc']}]"
+            typer.echo(f"  {cl.from_repo} -> {cl.to_repo}{detail}")
