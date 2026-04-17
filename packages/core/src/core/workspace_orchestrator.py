@@ -14,13 +14,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from contracts.config import load_config
-from contracts.models import ContextItem, ContextPack
+from contracts.models import ContextItem, ContextPack, ContractLink
 from ranking import ContextRanker
 
 from core.orchestrator import Orchestrator, _find_project_root
 
 # How much to boost items in repos that are directly linked from another
 _LINK_BOOST = 0.10
+# Smaller boost for items on the other side of a contract "consumes" edge —
+# tighter evidence than a hand-written link, but narrower scope.
+_CONTRACT_BOOST = 0.05
 _MAX_CONFIDENCE = 0.95
 
 # Mode fields used for ContextPack type narrowing
@@ -55,6 +58,37 @@ def _boost_linked_items(
     for item in items:
         if item.repo in linked_repos:
             new_conf = min(_MAX_CONFIDENCE, item.confidence + _LINK_BOOST)
+            item = item.model_copy(update={"confidence": new_conf})
+        boosted.append(item)
+    return boosted
+
+
+def _boost_contract_linked_items(
+    items: list[ContextItem],
+    contract_links: list[ContractLink],
+) -> list[ContextItem]:
+    """Return a new list where items on the other side of a ``consumes``
+    contract edge get a small confidence boost.
+
+    A consumer repo's items are NOT boosted (they already own the call site);
+    we only boost the producer repo's items so the consumer sees the contract
+    it depends on.
+
+    Args:
+        items: Flat list of all ContextItems from all repos.
+        contract_links: ``WorkspaceDescriptor.contract_links``.
+
+    Returns:
+        New list with updated confidence scores.
+    """
+    producers: set[str] = {cl.to_repo for cl in contract_links if cl.kind == "consumes"}
+    if not producers:
+        return items
+
+    boosted: list[ContextItem] = []
+    for item in items:
+        if item.repo in producers:
+            new_conf = min(_MAX_CONFIDENCE, item.confidence + _CONTRACT_BOOST)
             item = item.model_copy(update={"confidence": new_conf})
         boosted.append(item)
     return boosted
@@ -138,8 +172,10 @@ class WorkspaceOrchestrator:
                 labelled = _prefix_title(item, repo.name)
                 all_items.append(labelled)
 
-        # Apply cross-repo link boost
+        # Apply cross-repo link boost (hand-written links)
         all_items = _boost_linked_items(all_items, ws.links)
+        # Apply contract-derived link boost (auto-discovered consumes edges)
+        all_items = _boost_contract_linked_items(all_items, ws.contract_links)
 
         # Re-rank across all repos within the combined token budget
         ranker = ContextRanker(token_budget=config.token_budget)

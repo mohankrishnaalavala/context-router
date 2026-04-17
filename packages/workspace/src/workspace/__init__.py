@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from workspace.link_detector import detect_links
+from workspace.link_detector import detect_contract_links, detect_links
 from workspace.loader import WorkspaceLoader
 from workspace.registry import RepoRegistry
 
-__all__ = ["WorkspaceLoader", "RepoRegistry", "detect_links"]
+__all__ = [
+    "WorkspaceLoader",
+    "RepoRegistry",
+    "detect_links",
+    "detect_contract_links",
+]
