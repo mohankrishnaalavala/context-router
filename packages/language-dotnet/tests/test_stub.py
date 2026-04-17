@@ -297,3 +297,115 @@ def test_plain_class_regression_still_kind_class(tmp_path: Path):
         if isinstance(s, Symbol) and s.kind in {"interface", "record", "struct"}
     ]
     assert leaked == []
+
+
+# ---------------------------------------------------------------------------
+# v3 phase3/edge-kinds-extended: extends / implements / tested_by edges.
+# ---------------------------------------------------------------------------
+
+SAMPLE_CS_INHERITANCE = """\
+namespace App
+{
+    public class Dog : Animal, ITrainable, IFeedable
+    {
+        public void Bark() { }
+    }
+
+    public interface IRepo : IService, IWritable { }
+
+    public record Rec(string Name) : BaseRec, IRec;
+
+    public class Orphan : IStandalone { }
+}
+"""
+
+
+def test_extends_edge_from_class(tmp_path: Path):
+    f = tmp_path / "Dog.cs"
+    f.write_text(SAMPLE_CS_INHERITANCE)
+    results = DotnetAnalyzer().analyze(f)
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "extends"]
+    pairs = {(e.from_symbol, e.to_symbol) for e in edges}
+    assert ("Dog", "Animal") in pairs, f"expected Dog->Animal extends, got {pairs}"
+    assert ("Rec", "BaseRec") in pairs, f"expected Rec->BaseRec extends, got {pairs}"
+
+
+def test_implements_edges_from_class_and_record(tmp_path: Path):
+    f = tmp_path / "Dog.cs"
+    f.write_text(SAMPLE_CS_INHERITANCE)
+    results = DotnetAnalyzer().analyze(f)
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "implements"]
+    pairs = {(e.from_symbol, e.to_symbol) for e in edges}
+    assert ("Dog", "ITrainable") in pairs
+    assert ("Dog", "IFeedable") in pairs
+    assert ("Rec", "IRec") in pairs
+    # Orphan : IStandalone → no base class (all start with I), so just implements.
+    assert ("Orphan", "IStandalone") in pairs
+
+
+def test_interface_extends_yields_extends_edges(tmp_path: Path):
+    f = tmp_path / "IRepo.cs"
+    f.write_text(SAMPLE_CS_INHERITANCE)
+    results = DotnetAnalyzer().analyze(f)
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "extends"]
+    pairs = {(e.from_symbol, e.to_symbol) for e in edges}
+    assert ("IRepo", "IService") in pairs
+    assert ("IRepo", "IWritable") in pairs
+
+
+SAMPLE_CS_TEST = """\
+namespace App.Tests
+{
+    public class UserServiceTests
+    {
+        [Fact]
+        public void FindOne_WithValidId_ReturnsUser() { }
+
+        [Theory]
+        public void FindAll_WithFilters_ReturnsMatches() { }
+
+        [SetUp]
+        public void Setup() { }
+    }
+}
+"""
+
+
+def test_tested_by_edges_in_test_file(tmp_path: Path):
+    """A C# test file ``FooTests.cs`` emits tested_by edges from ``Foo``
+    (the inferred SUT) to each method with a test attribute."""
+    f = tmp_path / "UserServiceTests.cs"
+    f.write_text(SAMPLE_CS_TEST)
+    results = DotnetAnalyzer().analyze(f)
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "tested_by"]
+    pairs = {(e.from_symbol, e.to_symbol) for e in edges}
+    assert ("UserService", "FindOne_WithValidId_ReturnsUser") in pairs
+    assert ("UserService", "FindAll_WithFilters_ReturnsMatches") in pairs
+    # [SetUp] is not a test attribute — no tested_by for Setup.
+    assert ("UserService", "Setup") not in pairs
+
+
+def test_no_inheritance_or_tested_by_in_plain_class(tmp_path: Path):
+    """Negative: a plain class with no base list yields zero spec edges."""
+    f = tmp_path / "UserService.cs"
+    f.write_text(SAMPLE_CS)
+    results = DotnetAnalyzer().analyze(f)
+    spec_edges = [
+        r for r in results
+        if isinstance(r, DependencyEdge)
+        and r.edge_type in {"extends", "implements", "tested_by"}
+    ]
+    assert spec_edges == []
+
+
+def test_calls_and_imports_unchanged_after_v3(tmp_path: Path):
+    """Regression: ``calls`` and ``imports`` emission is unchanged."""
+    f = tmp_path / "OrderService.cs"
+    f.write_text(SAMPLE_CS_WITH_CALLS)
+    results = DotnetAnalyzer().analyze(f)
+    calls = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "calls"]
+    imports = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "imports"]
+    # ValidateUser + BuildOrder = 2 method calls captured.
+    assert len(calls) >= 2
+    # using System; → 1 import edge.
+    assert len(imports) >= 1

@@ -226,3 +226,53 @@ def test_line_numbers_nonzero_for_workflow(tmp_path: Path):
 
     workflows = [s for s in results if isinstance(s, Symbol) and s.kind == "github_actions_workflow"]
     assert workflows[0].line_start > 0
+
+
+# ---------------------------------------------------------------------------
+# v3 phase3/edge-kinds-extended: YAML must NOT emit any of the new edge kinds
+# — it is explicitly out of scope (no classes, no tests).  This is the
+# "negative case" required by the outcome spec.
+# ---------------------------------------------------------------------------
+
+_NO_INHERITANCE_EDGE_KINDS = {"extends", "implements", "tested_by"}
+
+
+def test_k8s_manifest_emits_no_inheritance_edges(tmp_path: Path):
+    """Kubernetes manifests must not emit ``extends`` / ``implements`` /
+    ``tested_by`` — these are code-structural edges not applicable to YAML."""
+    from contracts.interfaces import DependencyEdge
+
+    f = tmp_path / "deploy.yaml"
+    f.write_text(K8S_DEPLOYMENT)
+    results = YamlAnalyzer().analyze(f)
+    edges = [
+        r for r in results
+        if isinstance(r, DependencyEdge) and r.edge_type in _NO_INHERITANCE_EDGE_KINDS
+    ]
+    assert edges == []
+
+
+def test_github_actions_emits_no_inheritance_edges(tmp_path: Path):
+    from contracts.interfaces import DependencyEdge
+
+    f = tmp_path / "ci.yaml"
+    f.write_text(GITHUB_ACTIONS)
+    results = YamlAnalyzer().analyze(f)
+    edges = [
+        r for r in results
+        if isinstance(r, DependencyEdge) and r.edge_type in _NO_INHERITANCE_EDGE_KINDS
+    ]
+    assert edges == []
+
+
+def test_generic_yaml_emits_no_inheritance_edges(tmp_path: Path):
+    from contracts.interfaces import DependencyEdge
+
+    f = tmp_path / "config.yaml"
+    f.write_text("key1: value1\nkey2:\n  nested: 42\n")
+    results = YamlAnalyzer().analyze(f)
+    edges = [
+        r for r in results
+        if isinstance(r, DependencyEdge) and r.edge_type in _NO_INHERITANCE_EDGE_KINDS
+    ]
+    assert edges == []

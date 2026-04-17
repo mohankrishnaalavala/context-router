@@ -1,12 +1,18 @@
 """context-router-language-dotnet: C#/.NET language analyzer plugin.
 
-Uses tree-sitter to extract namespaces, classes, methods, properties, and
-call edges from C# source files. ASP.NET and test framework attributes are
-detected and tagged.
+Uses tree-sitter to extract namespaces, classes, methods, properties, call
+edges, and inheritance / test-linkage edges from C# source files.  ASP.NET
+and test framework attributes are detected and tagged.
+
+v3 phase3/edge-kinds-extended: emits ``extends`` (class/record → base
+class), ``implements`` (class/record → interface), and ``tested_by``
+(source method → test method) edges to match the CRG edge-type
+vocabulary and unlock downstream ranking / audit features.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import tree_sitter_c_sharp as tscs
@@ -32,6 +38,40 @@ _DOTNET_BUILTIN_NAMES: frozenset[str] = frozenset({
     "Task", "Run", "WhenAll", "WhenAny", "FromResult",
     "Assert", "Equal", "NotEqual", "True", "False", "NotNull", "Null",
 })
+
+
+def _is_test_file(file: Path) -> bool:
+    """Return True if *file* looks like a C# test file by naming convention."""
+    stem = file.stem
+    return (
+        stem.endswith("Tests")
+        or stem.endswith("Test")
+        or stem.endswith("Spec")
+        or stem.startswith("Test")
+    )
+
+
+def _sut_class_from_test_stem(stem: str) -> str | None:
+    """Return the inferred class-under-test name for a C# test file stem.
+
+    Examples:
+      ``UsersControllerTests`` → ``UsersController``
+      ``OrderServiceTest`` → ``OrderService``
+      ``TestOrderService`` → ``OrderService``
+      ``OrderServiceSpec`` → ``OrderService``
+    """
+    for suffix in ("Tests", "Test", "Spec"):
+        if stem.endswith(suffix) and len(stem) > len(suffix):
+            return stem[: -len(suffix)]
+    # xUnit-style prefix: TestFoo → Foo
+    if stem.startswith("Test") and len(stem) > 4 and stem[4].isupper():
+        return stem[4:]
+    return None
+
+
+def _looks_like_interface_name(name: str) -> bool:
+    """C# convention: interface names start with uppercase ``I`` + uppercase letter."""
+    return len(name) >= 2 and name[0] == "I" and name[1].isupper()
 
 
 def _text(node: Node) -> str:
@@ -67,23 +107,133 @@ def _extract_invocation_name(node: Node) -> str:
 
 
 def _collect_attributes(node: Node) -> list[str]:
-    """Return attribute names from attribute_list siblings before node."""
+    """Return attribute names attached to *node*.
+
+    Handles two grammar shapes:
+      1. ``attribute_list`` as a direct child of the declaration (current
+         tree-sitter-c-sharp versions).
+      2. ``attribute_list`` as a preceding sibling (older grammar variants).
+    Emits each identifier from ``[A, B(args)]`` style attribute groups.
+    """
     attrs: list[str] = []
-    if node.parent is None:
-        return attrs
-    siblings = node.parent.children
-    try:
-        idx = siblings.index(node)
-    except ValueError:
-        return attrs
-    for sib in siblings[:idx]:
-        if sib.type == "attribute_list":
-            for attr in sib.children:
-                if attr.type == "attribute":
-                    name_node = _first_child_of_type(attr, "identifier", "qualified_name")
-                    if name_node:
-                        attrs.append(_text(name_node))
-    return attrs
+
+    def _scan_attribute_list(al: Node) -> None:
+        for attr in al.children:
+            if attr.type == "attribute":
+                name_node = _first_child_of_type(attr, "identifier", "qualified_name")
+                if name_node:
+                    attrs.append(_text(name_node))
+
+    # Direct children (modern grammar)
+    for child in node.children:
+        if child.type == "attribute_list":
+            _scan_attribute_list(child)
+
+    # Preceding siblings (older grammar)
+    if node.parent is not None:
+        siblings = node.parent.children
+        try:
+            idx = siblings.index(node)
+        except ValueError:
+            idx = -1
+        for sib in siblings[:idx]:
+            if sib.type == "attribute_list":
+                _scan_attribute_list(sib)
+
+    # Dedupe preserving order
+    seen: set[str] = set()
+    result: list[str] = []
+    for a in attrs:
+        if a not in seen:
+            seen.add(a)
+            result.append(a)
+    return result
+
+
+def _base_list_names(node: Node) -> list[str]:
+    """Return the identifier names in a C# ``base_list``.
+
+    Generic types like ``JpaRepository<X, Y>`` become ``JpaRepository`` (the
+    type_arguments subtree is skipped).  Separator tokens (``:``, ``,``) and
+    whitespace are ignored.
+    """
+    names: list[str] = []
+    for child in node.children:
+        if child.type == "identifier":
+            names.append(_text(child))
+        elif child.type == "qualified_name":
+            # Namespace.Foo → leaf Foo
+            leaf = _text(child).split(".")[-1].strip()
+            if leaf:
+                names.append(leaf)
+        elif child.type == "generic_name":
+            ident = _first_child_of_type(child, "identifier")
+            if ident:
+                names.append(_text(ident))
+    return names
+
+
+def _emit_inheritance_edges(
+    node: Node,
+    class_name: str,
+    results: list[Symbol | DependencyEdge],
+) -> None:
+    """Emit ``extends`` / ``implements`` edges for a C# type declaration.
+
+    C# ``base_list`` does not syntactically distinguish the base class from
+    implemented interfaces — the base class (if any) must come first.  We use
+    two heuristics in order:
+
+    1. For ``interface_declaration``: every entry is a super-interface →
+       ``extends``.
+    2. For ``class_declaration`` / ``record_declaration`` / ``struct``:
+       the first non-``I[A-Z]*`` identifier is the base class → ``extends``.
+       All others → ``implements``.  If every entry matches the interface
+       naming pattern (``IFoo``), there is no base class: all become
+       ``implements``.
+    """
+    base_list = _first_child_of_type(node, "base_list")
+    if not base_list:
+        return
+    names = _base_list_names(base_list)
+    if not names:
+        return
+
+    if node.type == "interface_declaration":
+        for n in names:
+            results.append(
+                DependencyEdge(
+                    from_symbol=class_name,
+                    to_symbol=n,
+                    edge_type="extends",
+                )
+            )
+        return
+
+    # class / record / struct
+    extends_candidate: str | None = None
+    implements_list: list[str] = []
+    if not _looks_like_interface_name(names[0]):
+        extends_candidate = names[0]
+        implements_list = names[1:]
+    else:
+        implements_list = names
+    if extends_candidate is not None:
+        results.append(
+            DependencyEdge(
+                from_symbol=class_name,
+                to_symbol=extends_candidate,
+                edge_type="extends",
+            )
+        )
+    for n in implements_list:
+        results.append(
+            DependencyEdge(
+                from_symbol=class_name,
+                to_symbol=n,
+                edge_type="implements",
+            )
+        )
 
 
 def _walk(
@@ -91,8 +241,15 @@ def _walk(
     results: list[Symbol | DependencyEdge],
     file: Path,
     current_method: str | None = None,
+    current_class: str | None = None,
+    sut_name: str | None = None,
+    has_emitted_test_edge: list[bool] | None = None,
 ) -> None:
-    """Recursively walk the C# AST and collect symbols and edges."""
+    """Recursively walk the C# AST and collect symbols and edges.
+
+    ``sut_name`` is the inferred class-under-test when *file* is a test
+    file; used to emit ``tested_by`` edges from SUT → test methods.
+    """
 
     if node.type == "namespace_declaration":
         name_node = _first_child_of_type(node, "identifier", "qualified_name")
@@ -110,7 +267,15 @@ def _walk(
         )
         body = _first_child_of_type(node, "declaration_list")
         if body:
-            _walk(body, results, file, current_method)
+            _walk(
+                body,
+                results,
+                file,
+                current_method,
+                current_class=current_class,
+                sut_name=sut_name,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node.type in ("class_declaration", "interface_declaration",
@@ -146,9 +311,26 @@ def _walk(
                 signature=signature,
             )
         )
+        # v3 phase3/edge-kinds-extended: emit inheritance edges.  ``struct``
+        # types technically can implement interfaces but not inherit, so only
+        # ``class``/``record``/``interface`` are covered.  For ``struct`` we
+        # still emit ``implements`` via the shared helper (first entry is
+        # treated as extends iff it doesn't look like an interface, which is
+        # conservative — structs cannot extend in C#, so this is rare).
+        if node.type in ("class_declaration", "interface_declaration",
+                         "record_declaration", "struct_declaration"):
+            _emit_inheritance_edges(node, name, results)
         body = _first_child_of_type(node, "declaration_list")
         if body:
-            _walk(body, results, file, current_method)
+            _walk(
+                body,
+                results,
+                file,
+                current_method,
+                current_class=name,
+                sut_name=sut_name,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node.type == "method_declaration":
@@ -172,10 +354,35 @@ def _walk(
                 signature=sig,
             )
         )
+        # v3 phase3/edge-kinds-extended: emit ``tested_by`` when this method
+        # is a test method ([Fact] / [Test] / [Theory] / [TestMethod] /
+        # [TestCase]) inside a test file with a resolvable SUT.
+        if (
+            sut_name is not None
+            and current_class is not None
+            and any(a in _TEST_ATTRIBUTES for a in attrs)
+        ):
+            results.append(
+                DependencyEdge(
+                    from_symbol=sut_name,
+                    to_symbol=name,
+                    edge_type="tested_by",
+                )
+            )
+            if has_emitted_test_edge is not None:
+                has_emitted_test_edge[0] = True
         # Recurse into method body with this method as context
         body = _first_child_of_type(node, "block")
         if body:
-            _walk(body, results, file, name)
+            _walk(
+                body,
+                results,
+                file,
+                current_method=name,
+                current_class=current_class,
+                sut_name=sut_name,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node.type == "constructor_declaration":
@@ -198,7 +405,15 @@ def _walk(
         )
         body = _first_child_of_type(node, "block")
         if body:
-            _walk(body, results, file, name)
+            _walk(
+                body,
+                results,
+                file,
+                current_method=name,
+                current_class=current_class,
+                sut_name=sut_name,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node.type == "property_declaration":
@@ -247,11 +462,27 @@ def _walk(
             )
         # Recurse for nested invocations
         for child in node.children:
-            _walk(child, results, file, current_method)
+            _walk(
+                child,
+                results,
+                file,
+                current_method,
+                current_class=current_class,
+                sut_name=sut_name,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     for child in node.children:
-        _walk(child, results, file, current_method)
+        _walk(
+            child,
+            results,
+            file,
+            current_method,
+            current_class=current_class,
+            sut_name=sut_name,
+            has_emitted_test_edge=has_emitted_test_edge,
+        )
 
 
 class DotnetAnalyzer:
@@ -278,5 +509,26 @@ class DotnetAnalyzer:
 
         tree = _PARSER.parse(source)
         results: list[Symbol | DependencyEdge] = []
-        _walk(tree.root_node, results, path)
+
+        # v3 phase3/edge-kinds-extended: infer the SUT for test files.
+        sut_name: str | None = None
+        if _is_test_file(path):
+            sut_name = _sut_class_from_test_stem(path.stem)
+        has_emitted_test_edge: list[bool] = [False]
+
+        _walk(
+            tree.root_node,
+            results,
+            path,
+            sut_name=sut_name,
+            has_emitted_test_edge=has_emitted_test_edge,
+        )
+
+        # Silent-failure rule: test file but no SUT resolved → debug note.
+        if _is_test_file(path) and not has_emitted_test_edge[0]:
+            print(
+                f"[language-dotnet] debug: could not resolve SUT for test file {path}",
+                file=sys.stderr,
+            )
+
         return results
