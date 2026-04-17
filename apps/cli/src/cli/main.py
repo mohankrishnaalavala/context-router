@@ -10,6 +10,7 @@ from importlib import metadata
 
 import typer
 
+from cli.commands.audit import audit_app
 from cli.commands.benchmark import benchmark_app
 from cli.commands.decisions import decisions_app
 from cli.commands.embed import embed_app
@@ -93,6 +94,7 @@ app.add_typer(workspace_app, name="workspace")
 app.add_typer(setup_app, name="setup")
 app.add_typer(mcp_app, name="mcp")
 app.add_typer(graph_app, name="graph")
+app.add_typer(audit_app, name="audit")
 
 if __name__ == "__main__":
     app()
