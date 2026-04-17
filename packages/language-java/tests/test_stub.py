@@ -184,3 +184,57 @@ def test_call_edges_have_method_as_source(tmp_path: Path):
     sources = {e.from_symbol for e in call_edges}
     # Call edges originate from method names, not file paths
     assert "processOrder" in sources
+
+
+# ---------------------------------------------------------------------------
+# v3 phase1/interface-kind-label: kind correctness across type declarations.
+# ---------------------------------------------------------------------------
+
+SAMPLE_JAVA_ALL_KINDS = """\
+package com.example;
+
+public class Person {
+    private String name;
+}
+
+interface Greeter {
+    String greet();
+}
+
+enum Status {
+    ACTIVE,
+    INACTIVE
+}
+"""
+
+
+def test_kind_labels_class_interface_enum(tmp_path: Path):
+    """Each Java type-declaration node-type must map to its matching kind."""
+    f = tmp_path / "AllKinds.java"
+    f.write_text(SAMPLE_JAVA_ALL_KINDS)
+    results = JavaAnalyzer().analyze(f)
+
+    by_name = {
+        s.name: s.kind
+        for s in results
+        if isinstance(s, Symbol) and s.kind in {"class", "interface", "enum"}
+    }
+    assert by_name.get("Person") == "class"
+    assert by_name.get("Greeter") == "interface"
+    assert by_name.get("Status") == "enum"
+
+
+def test_plain_class_regression_still_kind_class(tmp_path: Path):
+    """Regression: a plain class in isolation stays kind='class' (unchanged)."""
+    f = tmp_path / "UserService.java"
+    f.write_text(SAMPLE_JAVA)  # Only contains a plain class.
+    results = JavaAnalyzer().analyze(f)
+
+    classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
+    assert "UserService" in {s.name for s in classes}
+    # No spurious non-class kinds leak out from a plain-class file.
+    leaked = [
+        s for s in results
+        if isinstance(s, Symbol) and s.kind in {"interface", "enum"}
+    ]
+    assert leaked == []

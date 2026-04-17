@@ -121,14 +121,24 @@ def _walk(
         tags: list[str] = []
         if any(a in _ASPNET_ATTRIBUTES for a in attrs):
             tags.append("controller")
-        kind_word = node.type.split("_")[0]
+        # v3 phase1/interface-kind-label: emit the correct kind per node type.
+        # Previously every type declaration was flattened to kind='class',
+        # which hid interfaces and records from kind-based queries / ranking.
+        _DOTNET_KIND_BY_NODE = {
+            "class_declaration": "class",
+            "interface_declaration": "interface",
+            "struct_declaration": "struct",
+            "record_declaration": "record",
+        }
+        kind = _DOTNET_KIND_BY_NODE[node.type]
+        kind_word = kind  # Signature keyword mirrors the emitted kind.
         # Store attributes in signature for visibility
         attrs_str = ", ".join(f"[{a}]" for a in attrs) if attrs else ""
         signature = f"{attrs_str} {kind_word} {name}".strip() if attrs_str else f"{kind_word} {name}"
         results.append(
             Symbol(
                 name=name,
-                kind="class",
+                kind=kind,
                 file=file,
                 line_start=node.start_point[0] + 1,
                 line_end=node.end_point[0] + 1,
