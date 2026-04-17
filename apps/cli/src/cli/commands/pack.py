@@ -283,6 +283,11 @@ def _print_pack(pack: object) -> None:  # type: ignore[type-arg]
             f"{item.est_tokens:>{col_widths[3]},}"
         )
 
-    if dropped > 0:
-        noun = "duplicate" if dropped == 1 else "duplicates"
-        typer.echo(f"({dropped} {noun} hidden)")
+    # Prefer the authoritative count from the orchestrator (v3 phase-1
+    # follow-up) so MCP + CLI + --json all agree on the same total. The
+    # local `dropped` counter is a defensive fallback if something bypasses
+    # orchestrator dedup; in normal flow it is 0 because items arrive unique.
+    total_hidden = max(dropped, getattr(pack, "duplicates_hidden", 0))
+    if total_hidden > 0:
+        noun = "duplicate" if total_hidden == 1 else "duplicates"
+        typer.echo(f"({total_hidden} {noun} hidden)")

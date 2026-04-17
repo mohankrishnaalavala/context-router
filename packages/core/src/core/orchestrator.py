@@ -41,6 +41,29 @@ from storage_sqlite.repositories import EdgeRepository, SymbolRepository
 _METADATA_OVERHEAD_TOKENS: int = 40
 
 
+def _dedup_ranked(items: list[ContextItem]) -> tuple[list[ContextItem], int]:
+    """Remove duplicate (title, path_or_ref) items from a ranked list.
+
+    Keeps the first occurrence (highest-confidence after sort) and drops
+    later duplicates. Returns the deduped list and the count dropped so
+    callers can surface "N duplicates hidden" to users.
+
+    v3 phase-1 follow-up: dedup lives here so MCP, explain last-pack, and
+    --json consumers see the same deduped pack the CLI table shows.
+    """
+    seen: set[tuple[str, str]] = set()
+    out: list[ContextItem] = []
+    dropped = 0
+    for item in items:
+        key = (item.title.strip(), item.path_or_ref.strip().lstrip("./").lower())
+        if key in seen:
+            dropped += 1
+            continue
+        seen.add(key)
+        out.append(item)
+    return out, dropped
+
+
 def _estimate_item_tokens(title: str, excerpt: str) -> int:
     """Estimate token cost of a ContextItem including JSON metadata overhead."""
     return estimate_tokens(title + " " + excerpt) + _METADATA_OVERHEAD_TOKENS
@@ -473,6 +496,7 @@ class Orchestrator:
                 progress_cb=effective_cb,
             )
             all_ranked = ranker.rank(candidates, query, mode)
+            all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
             total_items_count = len(all_ranked)
 
             if progress_cb is not None:
@@ -509,6 +533,7 @@ class Orchestrator:
             reduction_pct=reduction,
             has_more=has_more,
             total_items=total_items_count if page_size > 0 else 0,
+            duplicates_hidden=_dup_dropped,
         )
 
         last_pack_path = self._root / ".context-router" / "last-pack.json"
