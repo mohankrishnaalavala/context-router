@@ -126,8 +126,27 @@ _check_mcp-pack-streams-large() {
 }
 
 _check_semantic-default-with-progress() {
-  echo "FAIL semantic-default-with-progress: check handler not implemented yet"
-  return 1
+  local fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
+  [[ -d "${fixture}" ]] || { echo "FAIL semantic-default-with-progress: fixture missing at ${fixture}"; return 1; }
+  # The phase-2 outcome's threshold only holds when the semantic model
+  # can actually load. Verify the extra is present so a missing dep can't
+  # produce an identical-output "pass" and doesn't read like a silent
+  # no-op. The ranker itself warns to stderr in the same scenario (see
+  # the CLAUDE.md silent-failure rule); this check surfaces the cause
+  # at the ship-check layer too.
+  if ! uv run python -c "import sentence_transformers" >/dev/null 2>&1; then
+    echo "FAIL semantic-default-with-progress: sentence-transformers not installed (pip install 'context-router-cli[semantic]')"
+    return 1
+  fi
+  local out_with out_without
+  out_with="$(uv run context-router pack --mode handover --query 'pagination' --with-semantic --no-progress --project-root "${fixture}" 2>/dev/null | head -20)"
+  out_without="$(uv run context-router pack --mode handover --query 'pagination' --no-progress --project-root "${fixture}" 2>/dev/null | head -20)"
+  if [[ "${out_with}" != "${out_without}" ]]; then
+    echo "PASS semantic-default-with-progress (handover-mode ranking differs with vs without --with-semantic)"
+  else
+    echo "FAIL semantic-default-with-progress: handover-mode output identical with/without --with-semantic"
+    return 1
+  fi
 }
 
 # ──────────────────── registry driver ────────────────────
