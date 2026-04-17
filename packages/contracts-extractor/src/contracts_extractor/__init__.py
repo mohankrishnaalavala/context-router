@@ -9,6 +9,10 @@ detection.  It does NOT validate requests/responses — see the ADR
 from __future__ import annotations
 
 from contracts_extractor.extractor import extract_contracts
+from contracts_extractor.matching import (
+    compile_endpoint_pattern,
+    file_references_endpoint,
+)
 from contracts_extractor.models import (
     ApiEndpoint,
     Contract,
@@ -23,5 +27,7 @@ __all__ = [
     "GrpcRpc",
     "GrpcService",
     "GraphqlOperation",
+    "compile_endpoint_pattern",
     "extract_contracts",
+    "file_references_endpoint",
 ]

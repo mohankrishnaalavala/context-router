@@ -25,6 +25,11 @@ class CapabilitiesConfig(BaseModel):
     # P3-2: opt-in semantic ranking (sentence-transformers). The CLI's
     # ``--with-semantic`` flag takes precedence over this config value.
     embeddings_enabled: bool = False
+    # Phase-2: contracts-consumer boost in single-repo packs. Items
+    # whose source file references an OpenAPI endpoint declared in the
+    # same repo get +0.10 confidence (clamped at 0.95). On by default;
+    # set to false to disable (e.g. for ranking A/B comparisons).
+    contracts_boost: bool = True
 
 
 class ContextRouterConfig(BaseModel):
