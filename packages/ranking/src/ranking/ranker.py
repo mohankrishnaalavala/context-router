@@ -14,15 +14,20 @@ only for:
 from __future__ import annotations
 
 import math
+import os
 import re
 import threading
 from collections import Counter as _Counter
-from typing import Any
+from pathlib import Path
+from typing import Any, Callable
 
 from contracts.models import ContextItem
 
 _EMBED_MODEL: object | None = None
 _EMBED_LOCK = threading.Lock()
+
+# Default model used for semantic ranking.
+_EMBED_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
 
 class _BM25Scorer:
@@ -77,8 +82,40 @@ class _BM25Scorer:
         return total
 
 
-def _get_embed_model() -> object:
-    """Lazy-load the sentence-transformers model; returns False if unavailable."""
+def _embed_model_is_cached(model_name: str = _EMBED_MODEL_NAME) -> bool:
+    """Return True if the Hugging Face model directory for *model_name* exists.
+
+    We detect "already downloaded" by looking for the expected model directory
+    under the Hugging Face hub cache. This lets callers skip a progress bar on
+    subsequent runs. The check is a conservative existence test — if the
+    directory exists but is partial, ``SentenceTransformer`` will re-download
+    only the missing blobs anyway.
+    """
+    base = os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")
+    candidates: list[Path] = []
+    if base:
+        candidates.append(Path(base) / "hub" / f"models--sentence-transformers--{model_name}")
+        candidates.append(Path(base) / f"models--sentence-transformers--{model_name}")
+    candidates.append(
+        Path.home()
+        / ".cache"
+        / "huggingface"
+        / "hub"
+        / f"models--sentence-transformers--{model_name}"
+    )
+    return any(p.exists() for p in candidates)
+
+
+def _get_embed_model(
+    progress_cb: Callable[[str], None] | None = None,
+) -> object:
+    """Lazy-load the sentence-transformers model; returns False if unavailable.
+
+    Args:
+        progress_cb: Optional callable invoked with status messages during
+            model download (e.g. "Downloading all-MiniLM-L6-v2 (~33 MB)…").
+            Called only on the first load (when the model isn't cached).
+    """
     global _EMBED_MODEL
     if _EMBED_MODEL is not None:
         return _EMBED_MODEL
@@ -86,7 +123,19 @@ def _get_embed_model() -> object:
         if _EMBED_MODEL is None:
             try:
                 from sentence_transformers import SentenceTransformer  # type: ignore[import]
-                _EMBED_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+                if progress_cb is not None and not _embed_model_is_cached():
+                    try:
+                        progress_cb(
+                            f"Downloading {_EMBED_MODEL_NAME} (~33 MB)… this happens only once."
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass  # progress is best-effort
+                _EMBED_MODEL = SentenceTransformer(_EMBED_MODEL_NAME)
+                if progress_cb is not None:
+                    try:
+                        progress_cb("Model ready.")
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:
                 _EMBED_MODEL = False  # sentinel: embeddings unavailable
     return _EMBED_MODEL
@@ -134,7 +183,12 @@ class ContextRanker:
             Pass 0 to disable budget enforcement (return all items sorted).
     """
 
-    def __init__(self, token_budget: int = 8_000, use_embeddings: bool = False) -> None:
+    def __init__(
+        self,
+        token_budget: int = 8_000,
+        use_embeddings: bool = False,
+        progress_cb: Callable[[str], None] | None = None,
+    ) -> None:
         """Initialise the ranker with a token budget.
 
         Args:
@@ -143,9 +197,14 @@ class ContextRanker:
             use_embeddings: If True, apply semantic similarity boosting via
                 sentence-transformers (requires ``pip install sentence-transformers``).
                 Defaults to False to avoid the model download on first run.
+            progress_cb: Optional callback invoked with status messages during
+                first-time model download (see :func:`_get_embed_model`).
+                Used by the CLI to render a rich progress bar; must be None
+                on MCP stdio transport to avoid corrupting JSON-RPC frames.
         """
         self._budget = token_budget
         self._use_embeddings = use_embeddings
+        self._progress_cb = progress_cb
         # P1-6: BM25 corpus cache — maps items_key -> _BM25Scorer
         # Bounded at 5 entries to avoid unbounded memory growth.
         self._bm25_cache: dict[int, Any] = {}
@@ -206,7 +265,7 @@ class ContextRanker:
         """
         if not query or not items:
             return items
-        model = _get_embed_model()
+        model = _get_embed_model(progress_cb=self._progress_cb)
         if not model:
             return items
         try:
