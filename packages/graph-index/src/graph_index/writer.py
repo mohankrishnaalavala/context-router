@@ -79,9 +79,47 @@ class SymbolWriter:
                 id_map[sym.name] = sym_id
 
         # Pass 2: resolve edges and bulk-insert those we can resolve.
-        # Supports cross-file edges where from_symbol is a file path and
-        # to_symbol is a symbol name in another file.
+        # Supports cross-file edges where the source or target is a symbol
+        # name in another file.  The writer also resolves a file-path
+        # source (used for ``imports`` edges whose from_symbol is the file).
         resolved: list[tuple[DependencyEdge, int, int]] = []
+        # v3 phase3/edge-kinds-extended: inheritance edges often point at
+        # external framework types (``Serializable``, ``JpaRepository``,
+        # ``WebMvcConfigurer``) that are not defined in-project.  Rather
+        # than dropping the edge and losing the signal, we materialize a
+        # lightweight ``external`` symbol stub for the target the first
+        # time it is referenced.  This matches code-review-graph's
+        # convention of surfacing every referenced type as a node and
+        # unlocks downstream ranking (hub-bridge, TESTED_BY coverage).
+        _INHERITANCE_KINDS = {"extends", "implements"}
+        external_id_cache: dict[str, int] = {}
+
+        def _materialize_external(name: str) -> int | None:
+            """Return a symbol id for an external inheritance target.
+
+            Idempotent per (repo, name): creates the stub only on the
+            first miss, reuses thereafter.  Kind is ``external`` so it
+            cannot collide with analyzer-emitted kinds.
+            """
+            if not name or name in external_id_cache:
+                return external_id_cache.get(name)
+            existing = self._sym_repo.get_id_by_name(repo, name)
+            if existing is not None:
+                external_id_cache[name] = existing
+                return existing
+            stub = Symbol(
+                name=name,
+                kind="external",
+                file=Path("<external>"),
+                line_start=0,
+                line_end=0,
+                language="external",
+                signature=f"external {name}",
+            )
+            sid = self._sym_repo.add(stub, repo)
+            external_id_cache[name] = sid
+            return sid
+
         for edge in edges:
             from_id = id_map.get(edge.from_symbol)
             to_id = id_map.get(edge.to_symbol)
@@ -90,9 +128,23 @@ class SymbolWriter:
             if from_id is None and ("/" in edge.from_symbol or "\\" in edge.from_symbol):
                 from_id = self._sym_repo.get_id_for_file(repo, edge.from_symbol)
 
+            # Cross-file resolution: from_symbol may be a name defined in
+            # another file (used by extends / implements / tested_by where
+            # the analyzer cannot know the target symbol's file at parse
+            # time — the source class of a ``tested_by`` edge often lives
+            # in a different file than the test class).
+            if from_id is None:
+                from_id = self._sym_repo.get_id_by_name(repo, edge.from_symbol)
+
             # Cross-file resolution: to_symbol may be a name in another file
             if to_id is None:
                 to_id = self._sym_repo.get_id_by_name(repo, edge.to_symbol)
+
+            # External-target fallback for inheritance edges only (NOT for
+            # ``calls`` / ``imports`` / ``tested_by`` — those stay strict
+            # so spurious edges cannot flood the graph).
+            if to_id is None and edge.edge_type in _INHERITANCE_KINDS:
+                to_id = _materialize_external(edge.to_symbol)
 
             if from_id is not None and to_id is not None:
                 resolved.append((edge, from_id, to_id))
