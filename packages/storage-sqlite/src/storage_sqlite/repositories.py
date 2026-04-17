@@ -11,7 +11,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from contracts.interfaces import DependencyEdge, Symbol
+from contracts.interfaces import DependencyEdge, Symbol, SymbolRef
 from contracts.models import Decision, Observation, PackFeedback, RuntimeSignal
 
 
@@ -782,6 +782,74 @@ class EdgeRepository:
                 queue.append((callee_id, depth + 1))
 
         return list(result_files.items())
+
+    def get_call_chain_symbols(
+        self,
+        repo: str,
+        from_symbol_id: int,
+        max_depth: int = 3,
+    ) -> list[SymbolRef]:
+        """Symbol-level BFS over ``calls`` edges from *from_symbol_id*.
+
+        Returns one :class:`SymbolRef` per reachable callee with ``depth`` set
+        to the minimum hop distance from the seed.  The seed itself is not
+        included in the result.
+
+        Args:
+            repo: Logical repository name.
+            from_symbol_id: Seed symbol id.
+            max_depth: Maximum number of call-chain hops (1 = direct callees).
+
+        Returns:
+            List of SymbolRef, each at its minimum hop depth.  Order is
+            BFS-insertion (approximately shortest-path-first).
+        """
+        seed_row = self._conn.execute(
+            "SELECT id FROM symbols WHERE id=? AND repo=?",
+            (from_symbol_id, repo),
+        ).fetchone()
+        if not seed_row:
+            return []
+
+        visited: set[int] = {from_symbol_id}
+        queue: list[tuple[int, int]] = [(from_symbol_id, 0)]
+        result: list[SymbolRef] = []
+
+        while queue:
+            curr_id, depth = queue.pop(0)
+            if depth >= max_depth:
+                continue
+            rows = self._conn.execute(
+                "SELECT to_symbol_id FROM edges "
+                "WHERE repo=? AND from_symbol_id=? AND edge_type='calls'",
+                (repo, curr_id),
+            ).fetchall()
+            for row in rows:
+                callee_id = row[0]
+                if callee_id in visited:
+                    continue
+                visited.add(callee_id)
+                meta = self._conn.execute(
+                    "SELECT name, kind, file_path, language, line_start, line_end "
+                    "FROM symbols WHERE id=?",
+                    (callee_id,),
+                ).fetchone()
+                if meta:
+                    result.append(
+                        SymbolRef(
+                            id=callee_id,
+                            name=meta[0],
+                            kind=meta[1],
+                            file=Path(meta[2]),
+                            language=meta[3] or "",
+                            line_start=meta[4] or 0,
+                            line_end=meta[5] or 0,
+                            depth=depth + 1,
+                        )
+                    )
+                queue.append((callee_id, depth + 1))
+
+        return result
 
     def add_raw(self, repo: str, from_id: int, to_id: int, edge_type: str) -> None:
         """Insert an edge directly by integer symbol ids without name resolution."""

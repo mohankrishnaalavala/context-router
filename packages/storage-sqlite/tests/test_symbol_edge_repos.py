@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from contracts.interfaces import DependencyEdge, Symbol
+from contracts.interfaces import DependencyEdge, Symbol, SymbolRef
 from storage_sqlite.database import Database
 from storage_sqlite.repositories import EdgeRepository, SymbolRepository
 
@@ -266,3 +266,107 @@ class TestGetCallChainFiles:
 
         result = edge_repo.get_call_chain_files(repo, "/src/p.py", max_depth=3)
         assert result == []
+
+
+class TestGetCallChainSymbols:
+    """Tests for EdgeRepository.get_call_chain_symbols (Lane C — P3-4)."""
+
+    def _seed_chain(self, db: Database) -> dict[str, int]:
+        """Seed a.func_a -> b.func_b -> c.func_c -> d.func_d."""
+        sym_repo = SymbolRepository(db.connection)
+        edge_repo = EdgeRepository(db.connection)
+        repo = "chain_sym_repo"
+        a = sym_repo.add(_sym("func_a", file="/src/a.py"), repo)
+        b = sym_repo.add(_sym("func_b", file="/src/b.py"), repo)
+        c = sym_repo.add(_sym("func_c", file="/src/c.py"), repo)
+        d = sym_repo.add(_sym("func_d", file="/src/d.py"), repo)
+        edge_repo.add_raw(repo, a, b, "calls")
+        edge_repo.add_raw(repo, b, c, "calls")
+        edge_repo.add_raw(repo, c, d, "calls")
+        return {"a": a, "b": b, "c": c, "d": d}
+
+    def test_returns_symbolref_not_filepath(self, db: Database) -> None:
+        ids = self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        result = edge_repo.get_call_chain_symbols(
+            "chain_sym_repo", ids["a"], max_depth=3
+        )
+        # At minimum the downstream callees should be present — not raw paths.
+        assert all(isinstance(r, SymbolRef) for r in result)
+        names = {r.name for r in result}
+        assert "func_b" in names
+        assert "func_c" in names
+        assert "func_d" in names
+
+    def test_excludes_seed_symbol(self, db: Database) -> None:
+        ids = self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        result = edge_repo.get_call_chain_symbols(
+            "chain_sym_repo", ids["a"], max_depth=3
+        )
+        assert not any(r.id == ids["a"] for r in result)
+
+    def test_depth_limited(self, db: Database) -> None:
+        ids = self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        result = edge_repo.get_call_chain_symbols(
+            "chain_sym_repo", ids["a"], max_depth=1
+        )
+        names = {r.name for r in result}
+        # depth=1: only direct callee func_b is reached
+        assert names == {"func_b"}
+
+    def test_depth_field_set_correctly(self, db: Database) -> None:
+        ids = self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        result = edge_repo.get_call_chain_symbols(
+            "chain_sym_repo", ids["a"], max_depth=3
+        )
+        by_name = {r.name: r.depth for r in result}
+        assert by_name["func_b"] == 1
+        assert by_name["func_c"] == 2
+        assert by_name["func_d"] == 3
+
+    def test_cycle_terminates(self, db: Database) -> None:
+        """Cycles in the symbol graph must not loop forever."""
+        sym_repo = SymbolRepository(db.connection)
+        edge_repo = EdgeRepository(db.connection)
+        repo = "cycle_sym_repo"
+        x = sym_repo.add(_sym("func_x", file="/src/x.py"), repo)
+        y = sym_repo.add(_sym("func_y", file="/src/y.py"), repo)
+        edge_repo.add_raw(repo, x, y, "calls")
+        edge_repo.add_raw(repo, y, x, "calls")
+
+        result = edge_repo.get_call_chain_symbols(repo, x, max_depth=10)
+        # Only y should appear (x is the seed and is excluded); no duplicates.
+        ids_seen = [r.id for r in result]
+        assert ids_seen == list({*ids_seen})
+        assert x not in ids_seen
+
+    def test_non_calls_edges_not_traversed(self, db: Database) -> None:
+        sym_repo = SymbolRepository(db.connection)
+        edge_repo = EdgeRepository(db.connection)
+        repo = "import_sym_repo"
+        p = sym_repo.add(_sym("func_p", file="/src/p.py"), repo)
+        q = sym_repo.add(_sym("func_q", file="/src/q.py"), repo)
+        edge_repo.add_raw(repo, p, q, "imports")
+
+        result = edge_repo.get_call_chain_symbols(repo, p, max_depth=3)
+        assert result == []
+
+    def test_missing_seed_returns_empty(self, db: Database) -> None:
+        edge_repo = EdgeRepository(db.connection)
+        assert edge_repo.get_call_chain_symbols("missing", 99999, max_depth=3) == []
+
+    def test_file_level_wrapper_still_works(self, db: Database) -> None:
+        """Existing get_call_chain_files call site should keep working as before."""
+        self._seed_chain(db)
+        edge_repo = EdgeRepository(db.connection)
+        # Back-compat: get_call_chain_files still returns (path, depth) tuples.
+        result = edge_repo.get_call_chain_files(
+            "chain_sym_repo", "/src/a.py", max_depth=3
+        )
+        files = {f for f, _ in result}
+        assert "/src/b.py" in files
+        assert "/src/c.py" in files
+        assert "/src/d.py" in files
