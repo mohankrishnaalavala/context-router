@@ -40,7 +40,7 @@ class TestPing:
 # ---------------------------------------------------------------------------
 
 class TestToolsList:
-    def test_returns_all_fifteen_tools(self):
+    def test_returns_all_sixteen_tools(self):
         resp = _handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
         names = {t["name"] for t in resp["result"]["tools"]}
         assert names == {
@@ -49,6 +49,7 @@ class TestToolsList:
             "get_context_pack",
             "get_context_summary",
             "get_debug_pack",
+            "get_minimal_context",
             "explain_selection",
             "generate_handover",
             "search_memory",

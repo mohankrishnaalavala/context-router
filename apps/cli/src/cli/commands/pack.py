@@ -8,7 +8,7 @@ import typer
 
 pack_app = typer.Typer(help="Generate a ranked context pack for a task.")
 
-_VALID_MODES = ("review", "debug", "implement", "handover")
+_VALID_MODES = ("review", "debug", "implement", "handover", "minimal")
 
 
 _VALID_FORMATS = ("json", "compact", "table")
@@ -18,7 +18,10 @@ _VALID_FORMATS = ("json", "compact", "table")
 def pack(
     mode: Annotated[
         str,
-        typer.Option("--mode", "-m", help="Task mode: review|debug|implement|handover."),
+        typer.Option(
+            "--mode", "-m",
+            help="Task mode: review|debug|implement|handover|minimal.",
+        ),
     ],
     query: Annotated[
         str,
@@ -76,13 +79,23 @@ def pack(
             help="Show a progress bar for first-time model download.",
         ),
     ] = True,
+    max_tokens: Annotated[
+        int,
+        typer.Option(
+            "--max-tokens",
+            help=(
+                "Override the ranker's token budget for this call. "
+                "Minimal mode defaults to 800 when this flag is omitted."
+            ),
+        ),
+    ] = 0,
 ) -> None:
     """Generate a context pack for the given task MODE.
 
     Exit codes:
       0 — success
       1 — no index found (run 'context-router index' first)
-      2 — invalid mode argument
+      2 — invalid mode / empty query for minimal mode
     """
     if mode not in _VALID_MODES:
         typer.echo(
@@ -91,9 +104,17 @@ def pack(
         )
         raise typer.Exit(code=2)
 
+    # Silent-failure rule: minimal mode requires a non-empty query so the
+    # suggested next-tool hint and ranked items are meaningful.
+    if mode == "minimal" and not query.strip():
+        typer.echo(
+            "Error: --query is required for --mode minimal (cannot be empty).",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
     from pathlib import Path
 
-    from core.orchestrator import Orchestrator  # local import — keeps CLI startup fast
 
     root = Path(project_root) if project_root else None
     err_path = Path(error_file) if error_file else None
@@ -107,6 +128,7 @@ def pack(
             page_size=page_size,
             use_embeddings=use_embeddings,
             show_progress=show_progress,
+            max_tokens=max_tokens,
         )
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
@@ -116,7 +138,15 @@ def pack(
     effective_format = "json" if json_output else format
 
     if effective_format == "json":
-        typer.echo(result.model_dump_json(indent=2))
+        import json as _json
+
+        payload = result.model_dump(mode="json")
+        # Back-compat alias: downstream tooling (smoke scripts, jq recipes in
+        # docs/release/v3-outcomes.yaml) expects a top-level ``items`` key in
+        # addition to the canonical ``selected_items``. Adding the alias here
+        # keeps the Pydantic contract untouched.
+        payload["items"] = payload.get("selected_items", [])
+        typer.echo(_json.dumps(payload, indent=2))
         return
 
     if effective_format == "compact":
@@ -136,6 +166,7 @@ def _run_build_pack(
     page_size: int,
     use_embeddings: bool,
     show_progress: bool,
+    max_tokens: int = 0,
 ):
     """Call Orchestrator.build_pack with an optional rich progress bar.
 
@@ -161,6 +192,9 @@ def _run_build_pack(
         except Exception:  # noqa: BLE001
             needs_progress = show_progress
 
+    # Treat 0/unset as "no override"; otherwise forward caller's cap.
+    token_budget_override = max_tokens if max_tokens and max_tokens > 0 else None
+
     if not needs_progress:
         return orch.build_pack(
             mode,
@@ -170,6 +204,7 @@ def _run_build_pack(
             page_size=page_size,
             use_embeddings=use_embeddings,
             progress=False,
+            token_budget=token_budget_override,
         )
 
     # First-time semantic run — wrap with rich progress.
@@ -200,6 +235,7 @@ def _run_build_pack(
             use_embeddings=use_embeddings,
             progress=True,
             download_progress_cb=_cb,
+            token_budget=token_budget_override,
         )
 
 

@@ -8,14 +8,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 
 def _utcnow() -> datetime:
     """Return the current UTC time as a timezone-aware datetime."""
     return datetime.now(UTC)
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class ContextItem(BaseModel):
@@ -52,7 +52,7 @@ class ContextPack(BaseModel):
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    mode: Literal["review", "debug", "implement", "handover"]
+    mode: Literal["review", "debug", "implement", "handover", "minimal"]
     query: str
     selected_items: list[ContextItem] = Field(default_factory=list)
     total_est_tokens: int = 0
@@ -66,6 +66,8 @@ class ContextPack(BaseModel):
     # removed in the orchestrator before rendering / serialization. Surfaced
     # so CLI / MCP consumers can display "(N duplicate(s) hidden)".
     duplicates_hidden: int = 0
+    # Arbitrary mode-specific hints (e.g. next_tool_suggestion for minimal mode).
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     def to_compact_text(self) -> str:
         """Return a compact plain-text representation of the pack.
