@@ -300,6 +300,52 @@ def test_plain_class_regression_still_kind_class(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
+# v3 phase3/enum-symbols-extracted: C# enums must emit kind='enum'.
+# ---------------------------------------------------------------------------
+
+SAMPLE_CS_ENUM = """\
+namespace MyApp.Models
+{
+    public enum Priority { Low, Medium, High }
+
+    public class Task
+    {
+        public string Title { get; set; }
+        public Priority Level { get; set; }
+    }
+}
+"""
+
+
+def test_extracts_enum_declaration(tmp_path: Path):
+    """C# enums must be labeled kind='enum' (Phase 3 outcome)."""
+    f = tmp_path / "Priority.cs"
+    f.write_text(SAMPLE_CS_ENUM)
+    results = DotnetAnalyzer().analyze(f)
+
+    enums = [s for s in results if isinstance(s, Symbol) and s.kind == "enum"]
+    names = {s.name for s in enums}
+    assert "Priority" in names, (
+        f"expected Priority with kind='enum', got kinds="
+        f"{[(s.name, s.kind) for s in results if isinstance(s, Symbol)]}"
+    )
+    # Negative: the enum must not leak out as kind='class'.
+    classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
+    assert "Priority" not in {s.name for s in classes}
+    # The sibling class must still be kind='class' (non-enum types unaffected).
+    assert "Task" in {s.name for s in classes}
+
+
+def test_enum_only_file_emits_single_enum_symbol(tmp_path: Path):
+    """Regression: a file with just an enum produces one kind='enum' symbol."""
+    f = tmp_path / "Color.cs"
+    f.write_text("public enum Color { Red, Green, Blue }\n")
+    results = DotnetAnalyzer().analyze(f)
+    kinds = [s.kind for s in results if isinstance(s, Symbol) and s.name == "Color"]
+    assert kinds == ["enum"], f"expected ['enum'], got {kinds}"
+
+
+# ---------------------------------------------------------------------------
 # v3 phase3/edge-kinds-extended: extends / implements / tested_by edges.
 # ---------------------------------------------------------------------------
 
