@@ -26,15 +26,16 @@ AI coding agents work best with focused, relevant context rather than entire cod
 | **Language support** | Python (full), TypeScript/JS (full), YAML (k8s/Helm/GHA), Java (full), .NET/C# (full) |
 | **Edge types** | `imports`, `calls` (function-level), `tested_by`, `needs` (GHA), community links |
 | **Task modes** | `review`, `implement`, `debug`, `handover` |
-| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional semantic boost, community-cohesion boost (+0.10 for same-cluster candidates), per-project `confidence_weights` overrides in `.context-router/config.yaml` |
+| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional `--with-semantic` semantic boost (all-MiniLM-L6-v2), community-cohesion boost (+0.10 for same-cluster candidates), per-project `confidence_weights` overrides in `.context-router/config.yaml` |
+| **Pack cache** | Orchestrator-level 5-minute TTLCache of fully ranked packs — identical repeat calls skip candidate-building and ranking entirely; invalidated on `build_index` / `update_index` via DB mtime |
 | **Token budget** | Value-per-token knapsack admission + hard cap with per-source-type guarantee; dynamic scaling for small repos |
 | **Memory** | Persistent observations (FTS), ADRs, freshness scoring, `memory export`, `decisions export` |
 | **Feedback loop** | `feedback record/stats/list` — per-file confidence adjustments; `--files-read` tracks actual file consumption for read-coverage analytics |
 | **Debug memory** | `error_hash` deduplication, `top_frames` extraction, `past_debug` recall (same error = boosts prior fix files) |
-| **Multi-repo** | Workspace YAML, cross-repo link detection, unified ranked pack |
+| **Multi-repo** | Workspace YAML, cross-repo link detection from Python imports **and** real OpenAPI/protobuf/GraphQL signatures via `workspace detect-links`, unified ranked pack with contract-edge boost |
 | **Graph viz** | Interactive D3.js HTML — color by kind or community cluster |
-| **Call flow analysis** | Debug mode walks `calls` edges up to 3 hops; `call_chain` items surfaced with decaying confidence (0.45 → 0.315 → 0.22) |
-| **MCP server** | **15 tools** over stdio JSON-RPC 2.0 with validated `inputSchema.required` and `outputSchema` on every tool; compatible with Claude Code, Cursor, Windsurf |
+| **Call flow analysis** | Symbol-level `EdgeRepository.get_call_chain_symbols` (BFS with per-hop depth); debug mode walks `calls` edges up to 3 hops and surfaces `call_chain` items with decaying confidence (0.45 → 0.315 → 0.22) |
+| **MCP server** | **15 tools** over stdio JSON-RPC 2.0 with validated `inputSchema.required` and `outputSchema` on every tool; `resources` capability for addressable pack history (`context-router://packs/<uuid>`); `notifications/progress` for large packs; compatible with Claude Code, Cursor, Windsurf |
 | **Agent adapters** | Claude system prompt, Copilot instructions, Codex task prompt |
 | **Benchmarks** | Generic 20-task suite plus language-specific suites (React, Spring Boot, ASP.NET Core — `--task-suite` flag), 3 baselines, external repo testing, Markdown report with 95% CIs |
 
@@ -484,7 +485,10 @@ Start the context-router MCP server over stdio JSON-RPC 2.0, exposing all tools 
 context-router mcp
 ```
 
-**Available MCP tools (13 total):**
+**Available MCP tools (15 total):**
+
+In v2.0, the server also declares a `resources` capability — previously built packs are addressable as `context-router://packs/<uuid>` via `resources/list` and `resources/read`. `tools/call get_context_pack` accepts an optional `progressToken` to receive `notifications/progress` while a large pack is built.
+
 
 | Tool | What it does |
 |---|---|
@@ -788,8 +792,10 @@ See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown
 | **Phase 7** — Distribution + DX | ✅ complete | `setup` command (auto-configure Claude/Copilot/Cursor/Windsurf/Codex), Homebrew tap, tiktoken estimation, quality benchmark metrics, additive query boost |
 | **Phase P1** — Production quality (v0.6) | ✅ complete | MCP protocol compliance (JSON-RPC errors), `suggest_next_files` 15th tool, multi-run benchmarks w/ CIs, feedback-loop file boost, BM25 memory search, CONTRIBUTING.md |
 | **Phase P2** — Ranking and coverage (v0.7) | ✅ complete | Community-cohesion boost, value-per-token knapsack budget, `.context-router/config.yaml` `confidence_weights`, Java/C# constructor extraction, broad Java annotation surface, TypeScript enums + decorators, per-language benchmark suites (`--task-suite`), MCP `required`/`outputSchema` on all 15 tools, indexed `get_adjacent_files` UNION rewrite |
+| **Phase P3** — Enhancement ideas (v2.0) | ✅ complete | Orchestrator-level TTLCache for pack results (P3-1), `--with-semantic` CLI opt-in with rich progress bar (P3-2), cross-language contracts extractor (OpenAPI/protobuf/GraphQL) + `workspace detect-links` + `consumes` contract edges (P3-3), symbol-level call-chain query + `edges(repo, edge_type)` index (P3-4 part 1), MCP progress notifications for large packs (P3-5), MCP `resources` capability with URI-addressable pack history (P3-6) |
 | **Phase 8** — Astro/Vue/Svelte | planned | Single-file component analyzers for modern frontend repos |
-| **Phase 9** — Semantic ranking | planned | sentence-transformers embedding index for query-to-symbol similarity |
+| **Phase 9** — Semantic ranking | planned | sentence-transformers embedding index for query-to-symbol similarity (foundation landed in v2.0 as opt-in `--with-semantic` boost) |
+| **P3-4 part 2** — Dead-code audit | planned | Entrypoint registry, reachability analysis, `context-router audit --dead-code` CLI on top of the v2.0 symbol-level call-chain |
 
 ---
 
