@@ -8,7 +8,6 @@ clients built against older schemas stay compatible.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 
@@ -32,8 +31,8 @@ def build_index(project_root: str = "", repo_name: str = "default") -> dict:
     Returns:
         Dict with keys: files, symbols, edges, duration_seconds, errors.
     """
-    from core.orchestrator import _find_project_root
     from contracts.config import load_config
+    from core.orchestrator import _find_project_root
     from core.plugin_loader import PluginLoader
     from graph_index.indexer import Indexer
     from storage_sqlite.database import Database
@@ -76,8 +75,8 @@ def update_index(
     Returns:
         Dict with keys: files, symbols, edges, duration_seconds, errors.
     """
-    from core.orchestrator import _find_project_root
     from contracts.config import load_config
+    from core.orchestrator import _find_project_root
     from core.plugin_loader import PluginLoader
     from graph_index.indexer import Indexer
     from storage_sqlite.database import Database
@@ -117,6 +116,7 @@ def get_context_pack(
     format: str = "json",
     page: int = 0,
     page_size: int = 0,
+    progress_cb=None,
 ) -> dict:
     """Generate a ranked context pack.
 
@@ -128,13 +128,16 @@ def get_context_pack(
             (path:title:excerpt lines, lower token overhead for agent consumption).
         page: Zero-based page index (used with page_size for incremental loading).
         page_size: Items per page. 0 = no pagination (return all ranked items).
+        progress_cb: Optional ``(stage, progress, total)`` callable invoked at
+            build milestones.  Supplied by the MCP dispatcher when the caller
+            sends a ``progressToken``; normal CLI callers leave this ``None``.
 
     Returns:
         Serialised ContextPack as a dict, or {"text": ...} when format="compact".
     """
     try:
         pack = _orchestrator(project_root).build_pack(
-            mode, query, page=page, page_size=page_size
+            mode, query, page=page, page_size=page_size, progress_cb=progress_cb,
         )
         if format == "compact":
             return {"text": pack.to_compact_text(), "has_more": pack.has_more, "total_items": pack.total_items}
@@ -311,8 +314,8 @@ def suggest_next_files(
         if pack_id:
             # Try to load by pack_id via the storage layer
             try:
-                from storage_sqlite.database import Database
                 from contracts.models import ContextPack
+                from storage_sqlite.database import Database
                 with Database(db_path) as db:
                     row = db.connection.execute(
                         "SELECT payload FROM context_packs WHERE id = ?", (pack_id,)
@@ -489,8 +492,8 @@ def save_observation(
     Returns:
         Dict with ``saved`` bool and ``id`` (row ID) or ``reason`` when skipped.
     """
-    from core.orchestrator import _find_project_root
     from contracts.models import Observation
+    from core.orchestrator import _find_project_root
     from memory.capture import capture_observation
     from memory.store import ObservationStore
     from storage_sqlite.database import Database
@@ -545,8 +548,8 @@ def save_decision(
     Returns:
         Dict with ``saved`` bool and ``id`` (UUID string).
     """
-    from core.orchestrator import _find_project_root
     from contracts.models import Decision
+    from core.orchestrator import _find_project_root
     from memory.store import DecisionStore
     from storage_sqlite.database import Database
 
@@ -626,8 +629,8 @@ def record_feedback(
     Returns:
         Dict with ``recorded`` bool and ``id`` (UUID string).
     """
-    from core.orchestrator import _find_project_root
     from contracts.models import PackFeedback
+    from core.orchestrator import _find_project_root
     from memory.store import FeedbackStore
     from storage_sqlite.database import Database
 

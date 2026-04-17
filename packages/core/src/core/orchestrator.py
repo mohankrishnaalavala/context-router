@@ -19,6 +19,7 @@ from __future__ import annotations
 import re
 import warnings
 from pathlib import Path
+from typing import Callable
 
 from contracts.config import ContextRouterConfig, load_config
 from contracts.models import ContextItem, ContextPack, RuntimeSignal
@@ -240,6 +241,7 @@ class Orchestrator:
         error_file: Path | None = None,
         page: int = 0,
         page_size: int = 0,
+        progress_cb: "Callable[[str, int, int], None] | None" = None,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -335,6 +337,12 @@ class Orchestrator:
                 feedback_adjustments=feedback_adjustments,
             )
 
+            if progress_cb is not None:
+                try:
+                    progress_cb("candidates", 1, 3)
+                except Exception:  # noqa: BLE001 — progress is best-effort
+                    pass
+
             # Boost items whose file matches a filename mentioned in the query
             query_filenames = {
                 m.lower() for m in _QUERY_FILENAME_RE.findall(query)
@@ -359,6 +367,12 @@ class Orchestrator:
             ranker = ContextRanker(token_budget=effective_budget)
             all_ranked = ranker.rank(candidates, query, mode)
             total_items_count = len(all_ranked)
+
+            if progress_cb is not None:
+                try:
+                    progress_cb("ranked", 2, 3)
+                except Exception:  # noqa: BLE001 — progress is best-effort
+                    pass
 
             # P1-8: record_access for each item in the final pack (best-effort)
             for item in all_ranked:
@@ -393,7 +407,56 @@ class Orchestrator:
         last_pack_path = self._root / ".context-router" / "last-pack.json"
         last_pack_path.write_text(pack.model_dump_json(indent=2))
 
+        # Emit intermediate chunk progress for large packs so UIs can render a
+        # live bar while the serialised payload is persisted downstream.
+        if progress_cb is not None and total > 2_000:
+            try:
+                for emitted in range(0, total, 1_000):
+                    progress_cb("serializing", emitted, total)
+            except Exception:  # noqa: BLE001
+                pass
+        if progress_cb is not None:
+            try:
+                progress_cb("serialized", 3, 3)
+            except Exception:  # noqa: BLE001
+                pass
+
+        # Persist to the pack registry so MCP `resources/list` can surface it.
+        try:
+            from core.pack_store import PackStore
+            PackStore(self._root).save(pack)
+        except Exception as exc:  # noqa: BLE001 — best-effort registry write
+            _warn_optional_subsystem_failure(
+                "Pack registry persistence",
+                "the pack will not appear in MCP resources/list until the next successful build",
+                exc,
+            )
+
         return pack
+
+    def list_packs(self) -> list[dict]:
+        """Return registry entries for all stored packs, newest first.
+
+        Returns:
+            A list of ``{uuid, mode, query, created_at, tokens}`` dicts.
+            Empty when no packs have been built yet.
+        """
+        from core.pack_store import PackStore
+        return list(PackStore(self._root).list())
+
+    def get_pack(self, uuid: str) -> ContextPack | None:
+        """Return the stored :class:`ContextPack` with ``id == uuid``, or ``None``."""
+        from core.pack_store import PackStore
+        return PackStore(self._root).get(uuid)
+
+    def get_pack_raw(self, uuid: str) -> str | None:
+        """Return the stored pack's raw JSON text, byte-for-byte.
+
+        Used by the MCP ``resources/read`` handler to keep the response
+        identical to ``last-pack.json``.
+        """
+        from core.pack_store import PackStore
+        return PackStore(self._root).read_raw(uuid)
 
     def last_pack(self) -> ContextPack | None:
         """Return the most recently generated ContextPack, or None.
@@ -923,8 +986,8 @@ class Orchestrator:
                     if dec.decision:
                         excerpt = f"{dec.title}\n{dec.decision}"
                     # Fresh decisions get full confidence; older ones decay slightly
-                    from memory.freshness import compute_freshness as _cf
                     from contracts.models import Observation as _Obs
+                    from memory.freshness import compute_freshness as _cf
                     _dummy = _Obs(summary="", timestamp=dec.created_at)
                     _dummy = _dummy.model_copy(update={"confidence_score": dec.confidence})
                     dec_fresh = min(
