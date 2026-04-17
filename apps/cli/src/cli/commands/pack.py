@@ -203,8 +203,46 @@ def _run_build_pack(
         )
 
 
+def _dedup_key(title: str, path_or_ref: str) -> tuple[str, str]:
+    """Build the exact-match dedup key for a pack row.
+
+    The pack table only renders ``title``, ``source_type``, ``confidence``,
+    and ``est_tokens`` — the full ``path_or_ref`` column is not shown, so
+    two rows with the same title but different parent directories look
+    identical to the user (this is the v2.0.0 "Pagination printed 3x" bug).
+
+    We key on ``(title, basename(path_or_ref))`` which:
+
+    * collapses duplicates the user actually sees as duplicates (same symbol
+      + same file name rendered in the title),
+    * preserves distinct rows where either the symbol name OR the file name
+      differs — the "different parents should NOT dedup" rule holds because
+      the parent is already embedded in the title parenthetical.
+
+    Path normalisation is limited to stripping whitespace and a leading
+    ``./`` — we never lower-case anything because symbol names and
+    file paths are case-sensitive.
+    """
+    title_norm = title.strip()
+    path_norm = path_or_ref.strip()
+    if path_norm.startswith("./"):
+        path_norm = path_norm[2:]
+    # Use basename: the rendered title already embeds the file's basename,
+    # so this is the smallest key that matches user-visible row identity.
+    base_norm = path_norm.rsplit("/", 1)[-1] if path_norm else ""
+    return (title_norm, base_norm)
+
+
 def _print_pack(pack: object) -> None:  # type: ignore[type-arg]
-    """Print a human-readable summary of a ContextPack."""
+    """Print a human-readable summary of a ContextPack.
+
+    Deduplicates rows by exact (title, path_or_ref) key at the render layer.
+    The ranker may legitimately emit multiple items that reduce to the same
+    (title, path) when rendered; collapsing them here keeps the human table
+    readable. When any rows are suppressed, a non-silent
+    "(N duplicate(s) hidden)" note is printed so users know it happened —
+    silent failure is a bug per the project quality gate.
+    """
     from contracts.models import ContextPack  # local import
 
     assert isinstance(pack, ContextPack)
@@ -229,7 +267,14 @@ def _print_pack(pack: object) -> None:  # type: ignore[type-arg]
     typer.echo(header)
     typer.echo("-" * (sum(col_widths) + 6))
 
+    seen: set[tuple[str, str]] = set()
+    dropped = 0
     for item in pack.selected_items:
+        key = _dedup_key(item.title, item.path_or_ref)
+        if key in seen:
+            dropped += 1
+            continue
+        seen.add(key)
         title = item.title[: col_widths[0] - 1] if len(item.title) >= col_widths[0] else item.title
         typer.echo(
             f"{title:<{col_widths[0]}}  "
@@ -237,3 +282,7 @@ def _print_pack(pack: object) -> None:  # type: ignore[type-arg]
             f"{item.confidence:>{col_widths[2]}.2f}  "
             f"{item.est_tokens:>{col_widths[3]},}"
         )
+
+    if dropped > 0:
+        noun = "duplicate" if dropped == 1 else "duplicates"
+        typer.echo(f"({dropped} {noun} hidden)")
