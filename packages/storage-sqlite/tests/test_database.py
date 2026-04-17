@@ -26,20 +26,20 @@ def db(tmp_path: Path) -> Database:
 class TestDatabase:
     def test_schema_version_is_1_after_init(self, db: Database):
         row = db.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 9
+        assert row[0] == 10
 
     def test_initialize_is_idempotent(self, tmp_path: Path):
         database = Database(tmp_path / "idempotent.db")
         database.initialize()
         database.initialize()
         row = database.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 9
+        assert row[0] == 10
         database.close()
 
     def test_context_manager(self, tmp_path: Path):
         with Database(tmp_path / "ctx.db") as db:
             row = db.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-            assert row[0] == 9
+            assert row[0] == 10
 
     def test_p0_indexes_exist_after_init(self, db: Database):
         expected = {
@@ -58,6 +58,26 @@ class TestDatabase:
             tuple(expected),
         ).fetchall()
         assert {row["name"] for row in rows} == expected
+
+    def test_edges_repo_type_index_exists(self, db: Database):
+        """Migration 0010 (Lane C) must add idx_edges_repo_type.
+
+        PRAGMA index_list returns all indexes attached to a table;
+        the new composite index speeds up BFS call-chain queries that
+        filter by (repo, edge_type='calls').
+        """
+        rows = db.connection.execute(
+            "PRAGMA index_list('edges')"
+        ).fetchall()
+        names = {row["name"] for row in rows}
+        assert "idx_edges_repo_type" in names
+
+    def test_edges_repo_type_index_covers_columns(self, db: Database):
+        """The new composite index must actually cover (repo, edge_type)."""
+        cols = db.connection.execute(
+            "PRAGMA index_info('idx_edges_repo_type')"
+        ).fetchall()
+        assert [c["name"] for c in cols] == ["repo", "edge_type"]
 
     def test_connection_raises_before_initialize(self, tmp_path: Path):
         database = Database(tmp_path / "uninitialized.db")
