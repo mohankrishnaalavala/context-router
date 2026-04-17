@@ -1,11 +1,17 @@
 """context-router-language-python: Python language analyzer plugin.
 
-Uses tree-sitter to extract functions, classes, methods, and imports
-from Python source files. Registered as the 'py' analyzer via entry points.
+Uses tree-sitter to extract functions, classes, methods, imports, and
+inheritance / test-linkage edges from Python source files.  Registered
+as the ``py`` analyzer via entry points.
+
+v3 phase3/edge-kinds-extended: emits ``extends`` (class → each base) and
+``tested_by`` (source function → test function via the ``test_foo`` →
+``foo`` naming convention) edges to match the CRG edge-type vocabulary.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import tree_sitter_python as tspython
@@ -15,6 +21,22 @@ from contracts.interfaces import DependencyEdge, Symbol
 
 _LANGUAGE = Language(tspython.language())
 _PARSER = Parser(_LANGUAGE)
+
+
+def _is_test_file(file: Path) -> bool:
+    """Return True if *file* looks like a Python test file by naming convention.
+
+    Matches ``test_*.py``, ``*_test.py``, and anything under a ``tests``
+    directory (the latter is a soft signal — only used for SUT inference,
+    not for emitting spurious edges).
+    """
+    name = file.name
+    if name.startswith("test_") and name.endswith(".py"):
+        return True
+    if name.endswith("_test.py"):
+        return True
+    # Under a tests/ directory
+    return any(part == "tests" or part == "test" for part in file.parts)
 
 
 def _text(node: Node) -> str:
@@ -55,13 +77,46 @@ _BUILTIN_NAMES: frozenset[str] = frozenset({
 })
 
 
+def _extract_python_base_names(arglist: Node) -> list[str]:
+    """Return the base-class identifier names from a Python ``argument_list``.
+
+    Skips keyword arguments (``metaclass=Meta``) so they do NOT show up as
+    ``extends`` edges.  Dotted paths like ``some.module.Base`` contribute
+    only the leaf identifier (``Base``) so the writer can resolve it.
+    """
+    names: list[str] = []
+    for child in arglist.children:
+        if child.type == "identifier":
+            names.append(_text(child))
+        elif child.type == "attribute":
+            # leaf of dotted attribute access
+            last_ident = None
+            for sub in child.children:
+                if sub.type == "identifier":
+                    last_ident = sub
+            if last_ident is not None:
+                names.append(_text(last_ident))
+        # keyword_argument (metaclass=Meta) intentionally ignored
+    return names
+
+
 def _walk(
     node: Node,
     results: list[Symbol | DependencyEdge],
     file: Path,
     current_func: str | None = None,
+    is_test_file: bool = False,
+    non_test_func_names: set[str] | None = None,
+    has_emitted_test_edge: list[bool] | None = None,
 ) -> None:
-    """Recursively walk the AST and collect symbols and edges."""
+    """Recursively walk the AST and collect symbols and edges.
+
+    ``is_test_file``/``non_test_func_names`` — when parsing a single file we
+    only know the current file's function names, so cross-file Python
+    ``tested_by`` linking is completed by the post-indexing
+    ``link_tests`` pass.  In-file linking still happens here so small
+    self-contained test modules get coverage.
+    """
     if node.type == "function_definition":
         name_node = _first_child_of_type(node, "identifier")
         block_node = _first_child_of_type(node, "block")
@@ -81,9 +136,39 @@ def _walk(
                 docstring=docstring,
             )
         )
+        # v3 phase3/edge-kinds-extended: in-file ``tested_by`` for Python.
+        # Handles the tiny fixture pattern where a test function
+        # ``test_foo`` and its SUT ``foo`` both live in the same file.
+        # Cross-file linking happens via the post-indexing ``link_tests``
+        # pass (see graph-index/test_linker.py).
+        if (
+            is_test_file
+            and name.startswith("test_")
+            and len(name) > 5
+            and non_test_func_names is not None
+        ):
+            sut = name[5:]
+            if sut in non_test_func_names:
+                results.append(
+                    DependencyEdge(
+                        from_symbol=sut,
+                        to_symbol=name,
+                        edge_type="tested_by",
+                    )
+                )
+                if has_emitted_test_edge is not None:
+                    has_emitted_test_edge[0] = True
         # Recurse into body with this function as the enclosing scope
         if block_node:
-            _walk(block_node, results, file, current_func=name)
+            _walk(
+                block_node,
+                results,
+                file,
+                current_func=name,
+                is_test_file=is_test_file,
+                non_test_func_names=non_test_func_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return  # Don't double-process function children
 
     if node.type == "class_definition":
@@ -104,8 +189,27 @@ def _walk(
                 docstring=docstring,
             )
         )
+        # v3 phase3/edge-kinds-extended: emit ``extends`` for each base class.
+        arglist = _first_child_of_type(node, "argument_list")
+        if arglist is not None:
+            for base in _extract_python_base_names(arglist):
+                results.append(
+                    DependencyEdge(
+                        from_symbol=name,
+                        to_symbol=base,
+                        edge_type="extends",
+                    )
+                )
         if block_node:
-            _walk(block_node, results, file, current_func=current_func)
+            _walk(
+                block_node,
+                results,
+                file,
+                current_func=current_func,
+                is_test_file=is_test_file,
+                non_test_func_names=non_test_func_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node.type == "call" and current_func is not None:
@@ -128,7 +232,15 @@ def _walk(
             )
         # Recurse for nested calls
         for child in node.children:
-            _walk(child, results, file, current_func)
+            _walk(
+                child,
+                results,
+                file,
+                current_func,
+                is_test_file=is_test_file,
+                non_test_func_names=non_test_func_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node.type == "import_statement":
@@ -191,7 +303,15 @@ def _walk(
 
     # Recurse for all other node types
     for child in node.children:
-        _walk(child, results, file, current_func)
+        _walk(
+            child,
+            results,
+            file,
+            current_func,
+            is_test_file=is_test_file,
+            non_test_func_names=non_test_func_names,
+            has_emitted_test_edge=has_emitted_test_edge,
+        )
 
 
 class PythonAnalyzer:
@@ -217,5 +337,55 @@ class PythonAnalyzer:
 
         tree = _PARSER.parse(source)
         results: list[Symbol | DependencyEdge] = []
-        _walk(tree.root_node, results, path)
+
+        # v3 phase3/edge-kinds-extended: collect non-test function names in
+        # the first pass so in-file ``tested_by`` edges only fire when the
+        # SUT is actually defined in the same module.  Cross-file Python
+        # ``tested_by`` linking runs in the post-indexing ``link_tests`` pass.
+        is_test = _is_test_file(path)
+        non_test_func_names: set[str] = set()
+
+        def _collect_func_names(n: Node) -> None:
+            if n.type == "function_definition":
+                name_node = _first_child_of_type(n, "identifier")
+                if name_node:
+                    fname = _text(name_node)
+                    if not fname.startswith("test_"):
+                        non_test_func_names.add(fname)
+            for c in n.children:
+                _collect_func_names(c)
+
+        if is_test:
+            _collect_func_names(tree.root_node)
+
+        has_emitted_test_edge: list[bool] = [False]
+        _walk(
+            tree.root_node,
+            results,
+            path,
+            is_test_file=is_test,
+            non_test_func_names=non_test_func_names,
+            has_emitted_test_edge=has_emitted_test_edge,
+        )
+
+        # Silent-failure rule: a test file that found no in-file tested_by
+        # link is expected when the SUT lives in another module — the
+        # post-indexing ``link_tests`` pass covers that case.  We only log
+        # a debug note when the file has test_ functions but NONE of them
+        # have an in-file SUT AND no companion sources at all (purely
+        # informational — the cross-file linker will likely still succeed).
+        if is_test and not has_emitted_test_edge[0]:
+            has_test_funcs = any(
+                isinstance(r, Symbol)
+                and r.kind == "function"
+                and r.name.startswith("test_")
+                for r in results
+            )
+            if has_test_funcs:
+                print(
+                    f"[language-python] debug: no in-file SUT for test file {path} "
+                    f"(cross-file linking handled by post-indexing link_tests)",
+                    file=sys.stderr,
+                )
+
         return results
