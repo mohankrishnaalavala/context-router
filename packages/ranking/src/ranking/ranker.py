@@ -191,6 +191,51 @@ def _tokenize(text: str) -> set[str]:
     return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) >= _MIN_TOKEN_LEN}
 
 
+def _discover_db_path(items: list[ContextItem]) -> Path | None:
+    """Walk up from each item's path_or_ref to find ``.context-router/context-router.db``.
+
+    The orchestrator owns the SQLite connection but does not pass it to
+    the ranker (deliberate — keeps the ranker stateless). To read the
+    persistent embeddings table we re-open a read-only connection by
+    discovering the project root from the first item with a filesystem
+    path that resolves to an existing ``.context-router/`` dir.
+
+    Returns:
+        Resolved path to ``context-router.db`` or ``None`` if discovery
+        fails (e.g. items reference UUIDs / commit SHAs only, or no
+        ``.context-router/`` dir exists above any candidate path).
+    """
+    seen_starts: set[Path] = set()
+    for item in items:
+        ref = item.path_or_ref
+        if not ref:
+            continue
+        try:
+            candidate = Path(ref)
+        except Exception:  # noqa: BLE001
+            continue
+        # Skip non-filesystem refs like UUIDs / commit SHAs.
+        if not candidate.is_absolute() and "/" not in ref and "\\" not in ref:
+            continue
+        try:
+            start = candidate.resolve().parent if candidate.suffix else candidate.resolve()
+        except Exception:  # noqa: BLE001
+            continue
+        if start in seen_starts:
+            continue
+        seen_starts.add(start)
+        current = start
+        # Cap the walk to avoid touching the whole filesystem on bad input.
+        for _ in range(30):
+            db = current / ".context-router" / "context-router.db"
+            if db.is_file():
+                return db
+            if current.parent == current:
+                break
+            current = current.parent
+    return None
+
+
 class ContextRanker:
     """Sorts and trims ContextItems to fit within a token budget.
 
@@ -226,6 +271,9 @@ class ContextRanker:
         # P1-6: BM25 corpus cache — maps items_key -> _BM25Scorer
         # Bounded at 5 entries to avoid unbounded memory growth.
         self._bm25_cache: dict[int, Any] = {}
+        # v3 phase-2: latch so `embeddings missing for N of M` warns at most
+        # once per rank() call (reset at the start of each semantic boost).
+        self._missing_warn_emitted: bool = False
 
     def rank(
         self,
@@ -287,16 +335,60 @@ class ContextRanker:
         every pack mode (review, debug, implement, handover). Formula:
         ``boost = min(0.15, max(0, sim - 0.3) * 0.3)``. Items with
         similarity <= 0.3 receive no boost.
+
+        v3 phase-2 (outcome ``proactive-embedding-cache``): item vectors
+        are preferentially loaded from the persistent ``embeddings`` table
+        populated by ``context-router embed``. Items without a stored
+        vector fall back to on-the-fly encoding AND a single stderr
+        warning is emitted (per CLAUDE.md silent-failure rule).
         """
         if not query or not items:
             return items
         model = _get_embed_model(progress_cb=self._progress_cb)
         if not model:
             return items
+        # Reset the per-call "missing embeddings" warning latch so each
+        # rank() call is permitted at most one stderr line.
+        self._missing_warn_emitted = False
         try:
-            texts = [f"{i.title} {i.excerpt}" for i in items]
+            import numpy as np  # type: ignore[import]
+
+            # 1. Encode the query once. Query text is user input — never
+            #    cached. (Only the codebase symbols are pre-embedded.)
             query_emb = model.encode([query], normalize_embeddings=True)
-            item_embs = model.encode(texts, normalize_embeddings=True, batch_size=32)
+
+            # 2. Bulk-fetch any pre-computed item vectors from the
+            #    persistent embeddings table.
+            stored = self._fetch_stored_vectors(items)
+
+            # 3. Encode only the items that aren't in the table.
+            missing_idxs = [
+                idx for idx, it in enumerate(items) if id(it) not in stored
+            ]
+            if missing_idxs:
+                missing_texts = [
+                    f"{items[idx].title} {items[idx].excerpt}"
+                    for idx in missing_idxs
+                ]
+                fallback_embs = model.encode(
+                    missing_texts, normalize_embeddings=True, batch_size=32
+                )
+                # Outcome contract: silent fallback is a bug. Warn once.
+                self._warn_missing_embeddings(len(missing_idxs), len(items))
+            else:
+                fallback_embs = np.zeros((0, query_emb.shape[1]), dtype=np.float32)
+
+            # 4. Assemble the per-item embedding matrix in original order.
+            item_embs = np.zeros((len(items), query_emb.shape[1]), dtype=np.float32)
+            fallback_pos = 0
+            for idx, it in enumerate(items):
+                vec = stored.get(id(it))
+                if vec is None:
+                    item_embs[idx] = fallback_embs[fallback_pos]
+                    fallback_pos += 1
+                else:
+                    item_embs[idx] = vec
+
             similarities = (item_embs @ query_emb.T).flatten()
             result = []
             for item, sim in zip(items, similarities):
@@ -310,6 +402,139 @@ class ContextRanker:
             return result
         except Exception:
             return items
+
+    # ------------------------------------------------------------------
+    # Persistent embedding lookup (proactive cache)
+    # ------------------------------------------------------------------
+
+    def _fetch_stored_vectors(
+        self, items: list[ContextItem]
+    ) -> dict[int, Any]:
+        """Return ``{id(item): np.ndarray}`` for items with stored vectors.
+
+        Implementation notes:
+            * Discovers the SQLite database by walking up from the first
+              item with a filesystem-looking ``path_or_ref`` until a
+              ``.context-router/context-router.db`` file appears.
+            * Resolves ``(file_path, name) → symbol_id`` in one query
+              per repo, then bulk-fetches vectors keyed by symbol_id.
+            * Returns ``{}`` on any failure — semantic ranking degrades
+              gracefully via the on-the-fly fallback path.
+        """
+        try:
+            import numpy as np  # type: ignore[import]
+        except Exception:  # noqa: BLE001
+            return {}
+
+        db_path = _discover_db_path(items)
+        if db_path is None:
+            return {}
+
+        try:
+            import sqlite3
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                # Group items by repo so we issue one bulk lookup per repo
+                # (typical pack has only one repo, so this is one query).
+                by_repo: dict[str, list[ContextItem]] = {}
+                for it in items:
+                    by_repo.setdefault(it.repo or "default", []).append(it)
+
+                results: dict[int, Any] = {}
+                for repo_name, group in by_repo.items():
+                    # Build (path, name) → item lookup. The ranker doesn't
+                    # know symbol_ids; we resolve them via the symbols table.
+                    keys: list[tuple[str, str]] = []
+                    item_by_key: dict[tuple[str, str], list[ContextItem]] = {}
+                    for it in group:
+                        # title is "name (filename)"; pull the leading name.
+                        name = it.title.split(" (")[0].strip()
+                        if not name:
+                            continue
+                        key = (it.path_or_ref, name)
+                        keys.append(key)
+                        item_by_key.setdefault(key, []).append(it)
+
+                    if not keys:
+                        continue
+
+                    # Resolve (file_path, name) → symbol_id in one query.
+                    placeholders = ",".join("(?, ?)" for _ in keys)
+                    flat: list[str] = []
+                    for fp, nm in keys:
+                        flat.append(fp)
+                        flat.append(nm)
+                    rows = conn.execute(
+                        f"""
+                        WITH wanted(file_path, name) AS (VALUES {placeholders})
+                        SELECT s.id, s.file_path, s.name
+                        FROM symbols s
+                        JOIN wanted w
+                          ON s.file_path = w.file_path AND s.name = w.name
+                        WHERE s.repo = ?
+                        """,
+                        (*flat, repo_name),
+                    ).fetchall()
+
+                    sid_by_key: dict[tuple[str, str], int] = {}
+                    for r in rows:
+                        sid_by_key[(r["file_path"], r["name"])] = int(r["id"])
+                    if not sid_by_key:
+                        continue
+
+                    # Bulk-fetch vectors for the resolved symbol_ids.
+                    sids = list(sid_by_key.values())
+                    chunk = 500
+                    vec_by_sid: dict[int, bytes] = {}
+                    for start in range(0, len(sids), chunk):
+                        ids_chunk = sids[start : start + chunk]
+                        ph = ",".join("?" * len(ids_chunk))
+                        vrows = conn.execute(
+                            f"""
+                            SELECT symbol_id, vector
+                            FROM embeddings
+                            WHERE repo = ? AND model = ?
+                              AND symbol_id IN ({ph})
+                            """,
+                            (repo_name, _EMBED_MODEL_NAME, *ids_chunk),
+                        ).fetchall()
+                        for vr in vrows:
+                            vec_by_sid[int(vr["symbol_id"])] = bytes(vr["vector"])
+
+                    for key, sid in sid_by_key.items():
+                        blob = vec_by_sid.get(sid)
+                        if blob is None:
+                            continue
+                        arr = np.frombuffer(blob, dtype=np.float32)
+                        for it in item_by_key.get(key, []):
+                            results[id(it)] = arr
+                return results
+            finally:
+                conn.close()
+        except Exception:  # noqa: BLE001
+            # Any DB-side failure → empty mapping; on-the-fly fallback runs.
+            return {}
+
+    def _warn_missing_embeddings(self, missing: int, total: int) -> None:
+        """Emit a one-time stderr warning when items lack stored vectors.
+
+        Per CLAUDE.md's silent-failure rule, the on-the-fly fallback must
+        not be silent. We emit at most one warning per ``rank()`` call.
+        """
+        if self._missing_warn_emitted:
+            return
+        self._missing_warn_emitted = True
+        try:
+            print(
+                f"context-router: embeddings missing for {missing} of {total} "
+                "items — run `context-router embed` to eliminate this cost.",
+                file=sys.stderr,
+            )
+        except Exception:  # noqa: BLE001
+            # Stderr write failure should never break ranking.
+            pass
 
     def _apply_bm25_boost(self, items: list[ContextItem], query_tokens: set[str]) -> list[ContextItem]:
         """Re-score items using BM25 relevance combined with structural confidence.
