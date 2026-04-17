@@ -24,7 +24,10 @@ class _DummyOrchestrator:
         error_file=None,
         page: int = 0,
         page_size: int = 0,
+        use_embeddings: bool = False,
+        progress: bool = True,
         progress_cb=None,
+        download_progress_cb=None,
     ) -> ContextPack:
         # Emit the 3 fixed milestones
         if progress_cb is not None:
