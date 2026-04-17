@@ -1242,3 +1242,107 @@ class ContractRepository:
             (repo,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+class PackCacheRepository:
+    """Typed access to the ``pack_cache`` table (migration 0012).
+
+    Persistent L2 cache for ranked :class:`ContextPack` results. Survives
+    CLI process exits so that the second ``context-router pack`` call with
+    the same inputs skips candidate building and ranking. TTL is enforced
+    on read (default 300s, matching the in-process L1 ``TTLCache``).
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection.
+
+        Args:
+            conn: An open sqlite3.Connection (caller owns lifetime).
+        """
+        self._conn = conn
+
+    def get(
+        self,
+        cache_key: str,
+        repo_id: str,
+        ttl_seconds: float,
+        *,
+        now: float | None = None,
+    ) -> str | None:
+        """Return the cached pack JSON for (cache_key, repo_id) or None.
+
+        Args:
+            cache_key: Stable Python-computed hash of build_pack inputs.
+            repo_id: sha1(db_mtime || repo_name) — changes on re-index.
+            ttl_seconds: Entries older than this are treated as misses.
+            now: Optional unix-epoch override (for tests). Defaults to
+                ``time.time()``.
+
+        Returns:
+            The serialized pack JSON string, or ``None`` on cache miss /
+            expiry. Expired rows are not deleted eagerly; invalidate() or
+            the next insert's ``ON CONFLICT`` clause will reclaim them.
+        """
+        import time
+
+        current = time.time() if now is None else now
+        row = self._conn.execute(
+            """
+            SELECT pack_json, inserted_at
+            FROM pack_cache
+            WHERE cache_key = ? AND repo_id = ?
+            """,
+            (cache_key, repo_id),
+        ).fetchone()
+        if row is None:
+            return None
+        if (current - float(row["inserted_at"])) > ttl_seconds:
+            return None
+        return str(row["pack_json"])
+
+    def put(
+        self,
+        cache_key: str,
+        repo_id: str,
+        pack_json: str,
+        *,
+        now: float | None = None,
+    ) -> None:
+        """Insert-or-replace a cache entry for (cache_key, repo_id).
+
+        Args:
+            cache_key: Stable hash of build_pack inputs.
+            repo_id: sha1(db_mtime || repo_name).
+            pack_json: ``ContextPack.model_dump_json()`` output.
+            now: Optional unix-epoch override (for tests). Defaults to
+                ``time.time()``.
+        """
+        import time
+
+        inserted_at = time.time() if now is None else now
+        self._conn.execute(
+            """
+            INSERT INTO pack_cache (cache_key, repo_id, pack_json, inserted_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(cache_key, repo_id) DO UPDATE SET
+                pack_json   = excluded.pack_json,
+                inserted_at = excluded.inserted_at
+            """,
+            (cache_key, repo_id, pack_json, inserted_at),
+        )
+        self._conn.commit()
+
+    def invalidate_repo(self, repo_id: str) -> int:
+        """Delete every entry for *repo_id*. Returns row count deleted."""
+        cur = self._conn.execute(
+            "DELETE FROM pack_cache WHERE repo_id = ?",
+            (repo_id,),
+        )
+        self._conn.commit()
+        return cur.rowcount or 0
+
+    def invalidate_all(self) -> int:
+        """Delete every entry. Returns row count deleted."""
+        cur = self._conn.execute("DELETE FROM pack_cache")
+        self._conn.commit()
+        return cur.rowcount or 0
