@@ -6,13 +6,10 @@ Covers the `resources/list` and `resources/read` JSON-RPC handlers and the
 
 from __future__ import annotations
 
-import io
 import json
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
-
 from contracts.models import ContextItem, ContextPack
 
 

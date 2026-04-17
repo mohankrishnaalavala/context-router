@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
-
 from contracts.models import ContextItem, ContextPack
 from core.pack_store import PackStore
 
@@ -83,7 +82,9 @@ def _recv_line(proc: subprocess.Popen[str], timeout: float = 5.0) -> dict:
     return json.loads(line.strip())
 
 
-def _recv_until(proc: subprocess.Popen[str], req_id: int, timeout: float = 10.0) -> tuple[list[dict], dict]:
+def _recv_until(
+    proc: subprocess.Popen[str], req_id: int, timeout: float = 10.0,
+) -> tuple[list[dict], dict]:
     """Read lines until a response with ``req_id`` arrives.
 
     Returns ``(notifications, response)``.
@@ -102,13 +103,55 @@ def _recv_until(proc: subprocess.Popen[str], req_id: int, timeout: float = 10.0)
 
 
 class TestInitialize:
-    def test_initialize_declares_resources_capability(self, mcp_proc: subprocess.Popen[str]) -> None:
+    def test_initialize_declares_resources_capability(
+        self, mcp_proc: subprocess.Popen[str],
+    ) -> None:
         _send(mcp_proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
         _, resp = _recv_until(mcp_proc, 1)
         caps = resp["result"]["capabilities"]
         assert "resources" in caps
         assert caps["resources"] == {"listChanged": True}
         assert "tools" in caps
+
+
+class TestProgressNotifications:
+    def test_progress_notifications_precede_response(
+        self, mcp_proc: subprocess.Popen[str], tmp_project_dir: Path
+    ) -> None:
+        """At least one notifications/progress arrives before the tools/call reply."""
+        # Initialize DB in the project dir so build_pack can open it.
+        # We use the Database API directly rather than shelling out to the CLI.
+        (tmp_project_dir / ".context-router").mkdir(exist_ok=True)
+        from storage_sqlite.database import Database
+        db_path = tmp_project_dir / ".context-router" / "context-router.db"
+        if not db_path.exists():
+            db = Database(db_path)
+            db.initialize()
+            db.close()
+
+        # initialize handshake
+        _send(mcp_proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        _recv_until(mcp_proc, 1)
+
+        # Call get_context_pack with progressToken — an empty DB still yields a pack
+        _send(mcp_proc, {
+            "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+            "params": {
+                "name": "get_context_pack",
+                "arguments": {
+                    "mode": "implement",
+                    "query": "test",
+                    "project_root": str(tmp_project_dir),
+                    "progressToken": "e2e",
+                },
+            },
+        })
+        notes, resp = _recv_until(mcp_proc, 5, timeout=30.0)
+        assert resp["result"]["isError"] is False
+        progress_notes = [n for n in notes if n.get("method") == "notifications/progress"]
+        assert progress_notes, f"expected at least one progress notification, got: {notes}"
+        for n in progress_notes:
+            assert n["params"]["progressToken"] == "e2e"
 
 
 class TestResourcesRoundTrip:
