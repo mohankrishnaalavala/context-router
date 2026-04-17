@@ -659,6 +659,72 @@ _TOOLS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "get_call_chain": {
+        "fn": tools.get_call_chain,
+        "description": (
+            "Walk the ``calls`` edges from a seed symbol id and return "
+            "downstream symbols (not file paths). Returns one symbol per "
+            "reachable callee with min-hop depth. ``max_depth=0`` returns "
+            "an empty list, not an error."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["symbol_id"],
+            "properties": {
+                "symbol_id": {
+                    "type": "integer",
+                    "description": "Seed symbol id to walk from.",
+                },
+                "max_depth": {
+                    "type": "integer",
+                    "description": (
+                        "Maximum number of call-chain hops. 0 returns an "
+                        "empty list; 1 = direct callees only."
+                    ),
+                    "default": 3,
+                    "minimum": 0,
+                    "maximum": 10,
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+                "repo_name": {
+                    "type": "string",
+                    "description": "Logical repository name.",
+                    "default": "default",
+                },
+            },
+        },
+        "outputSchema": {
+            "type": "object",
+            "additionalProperties": True,
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "description": (
+                        "Downstream symbols, each with keys id, name, kind, "
+                        "file, language, line_start, line_end, depth."
+                    ),
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": True,
+                        "properties": {
+                            "id": {"type": "integer"},
+                            "name": {"type": "string"},
+                            "kind": {"type": "string"},
+                            "file": {"type": "string"},
+                            "language": {"type": "string"},
+                            "line_start": {"type": "integer"},
+                            "line_end": {"type": "integer"},
+                            "depth": {"type": "integer"},
+                        },
+                    },
+                },
+                "error": {"type": "string"},
+            },
+        },
+    },
     "suggest_next_files": {
         "fn": tools.suggest_next_files,
         "description": (

@@ -226,6 +226,7 @@ document.getElementById("search").addEventListener("input", e => {
 
 @graph_app.callback(invoke_without_command=True)
 def graph(
+    ctx: typer.Context,
     project_root: Annotated[
         str,
         typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
@@ -244,6 +245,11 @@ def graph(
     ] = False,
 ) -> None:
     """Generate an interactive D3.js force-directed symbol graph as a standalone HTML file."""
+    # When a subcommand (e.g. ``call-chain``) is invoked, Typer still runs the
+    # group callback first.  Skip the HTML-graph work in that case so flags
+    # like --output don't collide with the subcommand's semantics.
+    if ctx.invoked_subcommand is not None:
+        return
     from storage_sqlite.database import Database
     from storage_sqlite.repositories import EdgeRepository, SymbolRepository
 
@@ -336,3 +342,110 @@ def _find_project_root() -> Path:
                 "No .context-router/ found. Run 'context-router init' first."
             )
         current = parent
+
+
+@graph_app.command("call-chain")
+def call_chain(
+    symbol_id: Annotated[
+        int,
+        typer.Option("--symbol-id", help="Seed symbol id to start the call-chain walk from."),
+    ],
+    max_depth: Annotated[
+        int,
+        typer.Option(
+            "--max-depth",
+            help="Maximum number of call-chain hops (0 returns an empty list).",
+        ),
+    ] = 3,
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
+    json_out: Annotated[
+        bool,
+        typer.Option("--json", help="Emit a JSON array of symbol objects instead of a table."),
+    ] = False,
+    repo_name: Annotated[
+        str,
+        typer.Option("--repo-name", help="Logical repository name (default: 'default')."),
+    ] = "default",
+) -> None:
+    """Walk the ``calls`` edges from SYMBOL_ID and print the downstream symbols.
+
+    Output modes:
+      human (default): table with columns id / name / kind / file:line / language / depth
+      --json: JSON array of {id, name, kind, file, language, line_start, line_end, depth}
+
+    ``max_depth=0`` returns an empty list rather than an error — symbol IDs may
+    legitimately not exist, per the project's silent-failure rule.
+    """
+    import json as _json
+    import sys as _sys
+
+    from storage_sqlite.database import Database
+    from storage_sqlite.repositories import EdgeRepository
+
+    root = Path(project_root).resolve() if project_root else _find_project_root()
+    db_path = root / ".context-router" / "context-router.db"
+
+    if not db_path.exists():
+        typer.echo(
+            "No index found. Run 'context-router init' and 'context-router index' first.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    # Negative case: max_depth=0 returns an empty list (not an error).
+    if max_depth <= 0:
+        if json_out:
+            typer.echo("[]")
+        else:
+            typer.echo("(empty — max_depth=0)", err=True)
+        return
+
+    with Database(db_path) as db:
+        edge_repo = EdgeRepository(db.connection)
+        refs = edge_repo.get_call_chain_symbols(
+            repo=repo_name,
+            from_symbol_id=symbol_id,
+            max_depth=max_depth,
+        )
+
+    if not refs:
+        # CLAUDE.md silent-failure rule: emit a stderr debug note so callers
+        # can distinguish "seed absent / no callees" from a real error.
+        print(
+            f"[call-chain] no callees found for symbol_id={symbol_id} "
+            f"in repo={repo_name!r} (seed may not exist or has no outgoing calls edges)",
+            file=_sys.stderr,
+        )
+
+    if json_out:
+        payload = [
+            {
+                "id": r.id,
+                "name": r.name,
+                "kind": r.kind,
+                "file": str(r.file),
+                "language": r.language,
+                "line_start": r.line_start,
+                "line_end": r.line_end,
+                "depth": r.depth,
+            }
+            for r in refs
+        ]
+        typer.echo(_json.dumps(payload))
+        return
+
+    # Human-friendly table
+    if not refs:
+        return
+    header = f"{'id':>6}  {'name':<30}  {'kind':<10}  {'file:line':<40}  {'language':<10}  depth"
+    typer.echo(header)
+    typer.echo("-" * len(header))
+    for r in refs:
+        file_line = f"{r.file}:{r.line_start}"
+        typer.echo(
+            f"{r.id:>6}  {r.name[:30]:<30}  {r.kind[:10]:<10}  "
+            f"{file_line[:40]:<40}  {r.language[:10]:<10}  {r.depth}"
+        )
