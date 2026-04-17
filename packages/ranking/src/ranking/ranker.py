@@ -16,6 +16,7 @@ from __future__ import annotations
 import math
 import os
 import re
+import sys
 import threading
 from collections import Counter as _Counter
 from pathlib import Path
@@ -242,7 +243,19 @@ class ContextRanker:
         annotated = [self._annotate(item) for item in items]
         boosted = self._apply_bm25_boost(annotated, query_tokens)
         # P1-7: apply semantic boost only in implement mode to avoid
-        # expensive embedding computation in other modes
+        # expensive embedding computation in other modes.
+        # v3 phase-1 silent-failure fix: when the caller opts into
+        # semantic ranking in a mode where it has no effect, surface a
+        # warning to stderr so the flag is not a silent no-op. This is
+        # emitted once per rank() call, before the mode gate, and uses
+        # sys.stderr directly (not logging) so the CLI's log config
+        # cannot swallow it. MCP stdio transport keeps stderr separate
+        # from the JSON-RPC channel on stdout, so this is safe there too.
+        if self._use_embeddings and mode != "implement":
+            sys.stderr.write(
+                f"warning: --with-semantic has no effect in {mode} mode "
+                f"(only takes effect in 'implement' mode today)\n"
+            )
         if self._use_embeddings and mode == "implement":
             boosted = self._apply_semantic_boost(boosted, query)
         sorted_items = sorted(boosted, key=lambda i: i.confidence, reverse=True)
