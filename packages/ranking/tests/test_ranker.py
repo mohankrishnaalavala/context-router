@@ -316,3 +316,54 @@ def test_call_chain_item_gets_annotated_reason() -> None:
     )
     result = ContextRanker(token_budget=0).rank([item], "", "debug")
     assert result[0].reason == _REASON["call_chain"]
+
+
+# -----------------------------------------------------------------------
+# v3 phase-1: --with-semantic outside implement mode emits a warning
+# (outcome: with-semantic-warns-outside-implement)
+# -----------------------------------------------------------------------
+
+def test_with_semantic_warns_in_handover_mode(capsys) -> None:
+    """use_embeddings=True + mode=handover should warn to stderr."""
+    ranker = ContextRanker(token_budget=1000, use_embeddings=True)
+    ranker.rank([_item()], "q", "handover")
+    captured = capsys.readouterr()
+    assert "no effect in handover" in captured.err
+    assert captured.out == ""
+
+
+def test_with_semantic_silent_in_implement_mode(capsys) -> None:
+    """use_embeddings=True + mode=implement must NOT warn (normal case)."""
+    ranker = ContextRanker(token_budget=1000, use_embeddings=True)
+    ranker.rank([_item()], "q", "implement")
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_without_semantic_silent_in_handover_mode(capsys) -> None:
+    """use_embeddings=False must NOT warn regardless of mode."""
+    ranker = ContextRanker(token_budget=1000, use_embeddings=False)
+    ranker.rank([_item()], "q", "handover")
+    captured = capsys.readouterr()
+    assert captured.err == ""
+
+
+def test_with_semantic_warns_once_per_rank_call(capsys) -> None:
+    """Two sequential rank() calls each emit exactly one warning line.
+
+    Regression guard: the warning must be emitted once per rank() call,
+    not per item and not zero (no over-suppression via a 'warned' flag).
+    """
+    ranker = ContextRanker(token_budget=1000, use_embeddings=True)
+    items = [_item(title="a"), _item(title="b"), _item(title="c")]
+    ranker.rank(items, "q", "review")
+    ranker.rank(items, "q", "review")
+    captured = capsys.readouterr()
+    warning_lines = [
+        line for line in captured.err.splitlines()
+        if "no effect in review" in line
+    ]
+    assert len(warning_lines) == 2, (
+        f"expected exactly 2 warnings (one per rank call), got {len(warning_lines)}: "
+        f"{warning_lines!r}"
+    )
