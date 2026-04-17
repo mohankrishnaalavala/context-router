@@ -10,6 +10,7 @@ members = [
     "context-router-benchmark",
     "context-router-cli",
     "context-router-contracts",
+    "context-router-contracts-extractor",
     "context-router-core",
     "context-router-graph-index",
     "context-router-language-dotnet",
@@ -260,6 +261,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "context-router-contracts-extractor"
+version = "0.7.0"
+source = { editable = "packages/contracts-extractor" }
+dependencies = [
+    { name = "context-router-contracts" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "context-router-contracts", editable = "packages/contracts" },
+    { name = "pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
 name = "context-router-core"
 version = "0.7.0"
 source = { editable = "packages/core" }
@@ -479,10 +495,14 @@ version = "0.7.0"
 source = { editable = "packages/workspace" }
 dependencies = [
     { name = "context-router-contracts" },
+    { name = "context-router-contracts-extractor" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "context-router-contracts", editable = "packages/contracts" }]
+requires-dist = [
+    { name = "context-router-contracts", editable = "packages/contracts" },
+    { name = "context-router-contracts-extractor", editable = "packages/contracts-extractor" },
+]
 
 [[package]]
 name = "coverage"

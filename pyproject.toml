@@ -29,6 +29,7 @@ context-router-memory = { workspace = true }
 context-router-runtime = { workspace = true }
 context-router-ranking = { workspace = true }
 context-router-workspace = { workspace = true }
+context-router-contracts-extractor = { workspace = true }
 context-router-benchmark = { workspace = true }
 context-router-language-python = { workspace = true }
 context-router-language-java = { workspace = true }
@@ -53,6 +54,7 @@ members = [
     "packages/runtime",
     "packages/ranking",
     "packages/workspace",
+    "packages/contracts-extractor",
     "packages/benchmark",
     "packages/language-python",
     "packages/language-java",
