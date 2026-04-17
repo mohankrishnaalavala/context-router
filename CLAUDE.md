@@ -113,3 +113,64 @@ Grep or code-review-graph for task-scoped work.
 ### development flow for each code change
 - before implementation pull code from main to dev
 - push code to dev and create a pr to main and make sure ci checks are green
+
+---
+
+## Feature quality gate (MANDATORY)
+
+> This section is the enforcement contract. v2.0.0 shipped visible P0 bugs with
+> green unit tests because specs measured code, not outcomes. Every feature
+> from v3.0.0 onward MUST pass through this gate. No exceptions.
+
+### Three non-negotiable rules
+
+1. **Outcome-based Definition of Done before any code is written.** Every
+   feature spec copies `docs/release/dod-template.md` verbatim and fills in
+   all four fields (`outcome`, `threshold`, `negative_case`, `verify`).
+   A spec without a filled DoD is not mergeable.
+2. **Silent failure is a bug.** If a flag / mode / tool has no effect in
+   some context, it MUST print a warning to stderr naming the reason. No
+   silent no-ops — code review rejects them on sight, regardless of test
+   coverage.
+3. **Ship-check before "done".** Before opening a PR and before telling the
+   user a feature is complete, invoke the `ship-check` skill (or run the
+   `/ship-check` slash command). Paste the verdict block into the PR body.
+   No verdict, no merge.
+
+### The three source-of-truth documents
+
+| File | Role |
+|---|---|
+| [`docs/release/dod-template.md`](docs/release/dod-template.md) | DoD block every spec copies. |
+| [`docs/release/v3-outcomes.yaml`](docs/release/v3-outcomes.yaml) | Feature-outcome registry. One entry per user-visible surface. |
+| [`scripts/smoke-v3.sh`](scripts/smoke-v3.sh) | Executable gate that reads the registry and verifies each outcome. |
+
+### How to use the gate
+
+- **Starting a feature?** Copy the DoD template into the spec, then add an
+  entry to `v3-outcomes.yaml`. Only then start coding.
+- **Claiming "done"?** Invoke the `ship-check` skill. Paste the verdict.
+- **Finishing a phase?** Run the 7-prompt playbook
+  (`internal_docs/context-router-prompt-playbook.md`) against that phase's
+  diff BEFORE moving on. Do not wait for release time. Reports go to
+  `internal_docs/ship-check/per-phase-reviews/` (gitignored).
+- **Running manually?** Use `/ship-check` (the slash command) or
+  `scripts/smoke-v3.sh report` directly.
+
+### What blocks a merge
+
+- Any P0 outcome in the registry is FAIL → block the release.
+- Any outcome this PR claims to implement is FAIL → block the PR.
+- A new user-visible surface is not in `v3-outcomes.yaml` → block the PR
+  until the entry exists.
+- A flag/mode silent no-op → block the PR until a stderr warning is added.
+
+### Where generated artifacts live
+
+All ship-check outputs (smoke reports, per-phase reviews, diff snapshots) go
+to `internal_docs/ship-check/`, which is gitignored. The policy files
+(`docs/release/`, the skill, the slash command, the script) are tracked.
+
+See [`docs/release/README.md`](docs/release/README.md) for the full flow and
+[`.claude/skills/ship-check/SKILL.md`](.claude/skills/ship-check/SKILL.md)
+for the checklist.
