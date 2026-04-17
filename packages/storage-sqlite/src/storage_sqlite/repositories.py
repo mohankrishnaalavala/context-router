@@ -11,7 +11,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from contracts.interfaces import DependencyEdge, Symbol
+from contracts.interfaces import DependencyEdge, Symbol, SymbolRef
 from contracts.models import Decision, Observation, PackFeedback, RuntimeSignal
 
 
@@ -783,6 +783,74 @@ class EdgeRepository:
 
         return list(result_files.items())
 
+    def get_call_chain_symbols(
+        self,
+        repo: str,
+        from_symbol_id: int,
+        max_depth: int = 3,
+    ) -> list[SymbolRef]:
+        """Symbol-level BFS over ``calls`` edges from *from_symbol_id*.
+
+        Returns one :class:`SymbolRef` per reachable callee with ``depth`` set
+        to the minimum hop distance from the seed.  The seed itself is not
+        included in the result.
+
+        Args:
+            repo: Logical repository name.
+            from_symbol_id: Seed symbol id.
+            max_depth: Maximum number of call-chain hops (1 = direct callees).
+
+        Returns:
+            List of SymbolRef, each at its minimum hop depth.  Order is
+            BFS-insertion (approximately shortest-path-first).
+        """
+        seed_row = self._conn.execute(
+            "SELECT id FROM symbols WHERE id=? AND repo=?",
+            (from_symbol_id, repo),
+        ).fetchone()
+        if not seed_row:
+            return []
+
+        visited: set[int] = {from_symbol_id}
+        queue: list[tuple[int, int]] = [(from_symbol_id, 0)]
+        result: list[SymbolRef] = []
+
+        while queue:
+            curr_id, depth = queue.pop(0)
+            if depth >= max_depth:
+                continue
+            rows = self._conn.execute(
+                "SELECT to_symbol_id FROM edges "
+                "WHERE repo=? AND from_symbol_id=? AND edge_type='calls'",
+                (repo, curr_id),
+            ).fetchall()
+            for row in rows:
+                callee_id = row[0]
+                if callee_id in visited:
+                    continue
+                visited.add(callee_id)
+                meta = self._conn.execute(
+                    "SELECT name, kind, file_path, language, line_start, line_end "
+                    "FROM symbols WHERE id=?",
+                    (callee_id,),
+                ).fetchone()
+                if meta:
+                    result.append(
+                        SymbolRef(
+                            id=callee_id,
+                            name=meta[0],
+                            kind=meta[1],
+                            file=Path(meta[2]),
+                            language=meta[3] or "",
+                            line_start=meta[4] or 0,
+                            line_end=meta[5] or 0,
+                            depth=depth + 1,
+                        )
+                    )
+                queue.append((callee_id, depth + 1))
+
+        return result
+
     def add_raw(self, repo: str, from_id: int, to_id: int, edge_type: str) -> None:
         """Insert an edge directly by integer symbol ids without name resolution."""
         self._conn.execute(
@@ -1032,3 +1100,145 @@ class PackFeedbackRepository:
             files_read=json.loads(files_read_raw or "[]"),
             timestamp=datetime.fromisoformat(row["timestamp"]),
         )
+
+
+class ContractRepository:
+    """Typed access to the service-contract tables (migration 0011).
+
+    Signatures only — we store the shape needed to infer cross-repo links
+    (method+path, service+rpc, operation name+kind) and nothing else.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection.
+
+        Args:
+            conn: An open sqlite3.Connection (caller owns lifetime).
+        """
+        self._conn = conn
+
+    # ------------------------------------------------------------------
+    # API endpoints (OpenAPI)
+    # ------------------------------------------------------------------
+
+    def upsert_api_endpoint(
+        self,
+        repo: str,
+        method: str,
+        path: str,
+        operation_id: str = "",
+        source_file: str = "",
+        line: int = 0,
+    ) -> None:
+        """Insert or replace a single API endpoint row.
+
+        Uniqueness is on ``(repo, method, path)``.
+        """
+        self._conn.execute(
+            """
+            INSERT INTO api_endpoints
+                (repo, method, path, operation_id, source_file, line)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(repo, method, path) DO UPDATE SET
+                operation_id = excluded.operation_id,
+                source_file  = excluded.source_file,
+                line         = excluded.line
+            """,
+            (repo, method.upper(), path, operation_id, source_file, line),
+        )
+        self._conn.commit()
+
+    def list_api_endpoints(self, repo: str) -> list[dict]:
+        """List every API endpoint row for *repo*, sorted by method+path."""
+        rows = self._conn.execute(
+            """
+            SELECT method, path, operation_id, source_file, line
+            FROM api_endpoints
+            WHERE repo = ?
+            ORDER BY method, path
+            """,
+            (repo,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # gRPC services
+    # ------------------------------------------------------------------
+
+    def upsert_grpc(
+        self,
+        repo: str,
+        service: str,
+        rpc: str,
+        request_type: str = "",
+        response_type: str = "",
+        source_file: str = "",
+        line: int = 0,
+    ) -> None:
+        """Insert or replace a single gRPC service/rpc row."""
+        self._conn.execute(
+            """
+            INSERT INTO grpc_services
+                (repo, service, rpc, request_type, response_type, source_file, line)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(repo, service, rpc) DO UPDATE SET
+                request_type  = excluded.request_type,
+                response_type = excluded.response_type,
+                source_file   = excluded.source_file,
+                line          = excluded.line
+            """,
+            (repo, service, rpc, request_type, response_type, source_file, line),
+        )
+        self._conn.commit()
+
+    def list_grpc(self, repo: str) -> list[dict]:
+        """List every gRPC row for *repo*, sorted by service+rpc."""
+        rows = self._conn.execute(
+            """
+            SELECT service, rpc, request_type, response_type, source_file, line
+            FROM grpc_services
+            WHERE repo = ?
+            ORDER BY service, rpc
+            """,
+            (repo,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # GraphQL operations
+    # ------------------------------------------------------------------
+
+    def upsert_graphql(
+        self,
+        repo: str,
+        name: str,
+        kind: str,
+        source_file: str = "",
+        line: int = 0,
+    ) -> None:
+        """Insert or replace a single GraphQL operation row."""
+        self._conn.execute(
+            """
+            INSERT INTO graphql_operations
+                (repo, name, kind, source_file, line)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo, name, kind) DO UPDATE SET
+                source_file = excluded.source_file,
+                line        = excluded.line
+            """,
+            (repo, name, kind, source_file, line),
+        )
+        self._conn.commit()
+
+    def list_graphql(self, repo: str) -> list[dict]:
+        """List every GraphQL operation row for *repo*."""
+        rows = self._conn.execute(
+            """
+            SELECT name, kind, source_file, line
+            FROM graphql_operations
+            WHERE repo = ?
+            ORDER BY kind, name
+            """,
+            (repo,),
+        ).fetchall()
+        return [dict(r) for r in rows]

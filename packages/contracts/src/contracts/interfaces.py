@@ -44,6 +44,26 @@ class DependencyEdge:
     weight: float = 1.0
 
 
+@dataclass
+class SymbolRef:
+    """Lightweight reference to a stored symbol.
+
+    Returned by repository queries that only need enough information to
+    identify the symbol (e.g. reachability / dead-code analysis, call-chain
+    traversal).  Purposefully smaller than ``Symbol`` so call chains don't
+    allocate full signatures/docstrings for every visited node.
+    """
+
+    id: int
+    name: str
+    kind: str
+    file: Path
+    language: str = ""
+    line_start: int = 0
+    line_end: int = 0
+    depth: int = 0  # hop distance from the BFS seed (0 = seed itself)
+
+
 @runtime_checkable
 class LanguageAnalyzer(Protocol):
     """Interface for language-specific code analyzers.

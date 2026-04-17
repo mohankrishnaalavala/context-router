@@ -14,9 +14,15 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from typing import Any
 
 from mcp_server import tools
+
+# Shared mutex guarding stdout writes.  Both _send() and _notify() must
+# acquire this lock so a response and an in-flight notification cannot
+# interleave mid-line in the JSON-RPC stream.
+_write_lock: Any = threading.RLock()
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +169,24 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     "type": "integer",
                     "description": "Items per page. 0 (default) returns all ranked items.",
                     "default": 0,
+                },
+                "use_embeddings": {
+                    "type": "boolean",
+                    "description": (
+                        "Opt into semantic ranking via all-MiniLM-L6-v2. "
+                        "Triggers a ~33 MB model download on first use; "
+                        "subsequent calls are cached. Defaults to false."
+                    ),
+                    "default": False,
+                },
+                "progressToken": {
+                    "type": ["string", "integer"],
+                    "description": (
+                        "Optional token echoed back in notifications/progress "
+                        "params so the client can correlate updates with this "
+                        "tools/call. Notifications are only sent when the built "
+                        "pack exceeds 2,000 tokens."
+                    ),
                 },
             },
         },
@@ -696,9 +720,39 @@ def _err(req_id: Any, code: int, message: str) -> dict:
 
 
 def _send(obj: dict) -> None:
-    """Write a single JSON-RPC response to stdout, flushed immediately."""
-    sys.stdout.write(json.dumps(obj) + "\n")
-    sys.stdout.flush()
+    """Write a single JSON-RPC response to stdout, flushed immediately.
+
+    Mutex-guarded so it cannot interleave with an in-flight ``_notify`` call.
+    """
+    with _write_lock:
+        sys.stdout.write(json.dumps(obj) + "\n")
+        sys.stdout.flush()
+
+
+def _notify(method: str, params: dict) -> None:
+    """Write a JSON-RPC 2.0 notification (no ``id``) to stdout.
+
+    Used for MCP notifications such as ``notifications/progress`` and
+    ``notifications/resources/list_changed``.  Writes are guarded by the
+    same ``_write_lock`` as :func:`_send` to preserve newline-delimited
+    framing on the stdio transport.
+    """
+    with _write_lock:
+        sys.stdout.write(json.dumps({"jsonrpc": "2.0", "method": method, "params": params}) + "\n")
+        sys.stdout.flush()
+
+
+# Tools that accept progress_cb (P3-5) and/or build packs that should trigger
+# a resources/list_changed notification (P3-6).  Kept as module constants so
+# adding a new pack-building tool is a one-line registration.
+_PROGRESS_TOOLS: frozenset[str] = frozenset({
+    "get_context_pack",
+})
+_PACK_BUILDING_TOOLS: frozenset[str] = frozenset({
+    "get_context_pack",
+    "get_debug_pack",
+    "generate_handover",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -718,7 +772,10 @@ def _handle(request: dict) -> dict | None:
     if method == "initialize":
         return _ok(req_id, {
             "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
+            "capabilities": {
+                "tools": {},
+                "resources": {"listChanged": True},
+            },
             "serverInfo": {"name": "context-router", "version": "0.1.0"},
         })
 
@@ -737,14 +794,31 @@ def _handle(request: dict) -> dict | None:
 
     if method == "tools/call":
         tool_name: str = params.get("name", "")
-        arguments: dict = params.get("arguments") or {}
+        arguments: dict = dict(params.get("arguments") or {})
 
         if tool_name not in _TOOLS:
             return _err(req_id, -32601, f"Unknown tool: {tool_name!r}")
 
+        # P3-5: wire optional progress notifications for pack-building tools.
+        # Extract progressToken so the tool fn never sees it (not in its signature).
+        progress_token = arguments.pop("progressToken", None)
+        if progress_token is not None and tool_name in _PROGRESS_TOOLS:
+            def _progress_cb(stage: str, progress: int, total: int) -> None:
+                _notify("notifications/progress", {
+                    "progressToken": progress_token,
+                    "progress": progress,
+                    "total": total,
+                })
+            arguments["progress_cb"] = _progress_cb
+
         try:
             result = _TOOLS[tool_name]["fn"](**arguments)
             is_error = isinstance(result, dict) and "error" in result
+
+            # P3-6: announce newly-registered packs so MCP clients can refresh.
+            if not is_error and tool_name in _PACK_BUILDING_TOOLS:
+                _notify("notifications/resources/list_changed", {})
+
             return _ok(req_id, {
                 "content": [{"type": "text", "text": json.dumps(result, default=str)}],
                 "isError": is_error,
@@ -757,6 +831,29 @@ def _handle(request: dict) -> dict | None:
 
     if method == "ping":
         return _ok(req_id, {})
+
+    if method == "resources/list":
+        from mcp_server import resources as _resources
+        project_root = params.get("project_root") or ""
+        try:
+            return _ok(req_id, _resources.list_resources(project_root or None))
+        except Exception as exc:  # noqa: BLE001
+            return _err(req_id, -32603, f"Internal error: {exc}")
+
+    if method == "resources/read":
+        from mcp_server import resources as _resources
+        uri = params.get("uri", "")
+        project_root = params.get("project_root") or ""
+        if not uri:
+            return _err(req_id, -32602, "Invalid params: 'uri' is required")
+        try:
+            return _ok(req_id, _resources.read_resource(uri, project_root or None))
+        except ValueError as exc:
+            return _err(req_id, -32602, f"Invalid params: {exc}")
+        except FileNotFoundError as exc:
+            return _err(req_id, -32002, f"Resource not found: {exc}")
+        except Exception as exc:  # noqa: BLE001
+            return _err(req_id, -32603, f"Internal error: {exc}")
 
     return _err(req_id, -32601, f"Method not found: {method!r}")
 
