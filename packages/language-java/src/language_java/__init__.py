@@ -1,11 +1,18 @@
 """context-router-language-java: Java language analyzer plugin.
 
-Uses tree-sitter to extract classes, interfaces, methods, imports, and call
-edges from Java source files. Spring annotations are tagged for detection.
+Uses tree-sitter to extract classes, interfaces, methods, imports, call
+edges, and inheritance / test-linkage edges from Java source files.
+Spring annotations are tagged for detection.
+
+v3 phase3/edge-kinds-extended: emits ``extends`` (class→superclass and
+interface→super-interfaces), ``implements`` (class→interface), and
+``tested_by`` (source method → test method) edges to match the CRG
+edge-type vocabulary and unlock downstream ranking / audit features.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import tree_sitter_java as tsjava
@@ -32,6 +39,33 @@ _JAVA_BUILTIN_NAMES: frozenset[str] = frozenset({
     "stream", "collect", "map", "filter", "forEach", "reduce",
     "parseInt", "valueOf", "of", "asList", "toArray",
 })
+
+
+def _is_test_file(file: Path) -> bool:
+    """Return True if *file* looks like a Java test file by naming convention."""
+    stem = file.stem
+    return (
+        stem.endswith("Test")
+        or stem.endswith("Tests")
+        or stem.endswith("IT")
+        or stem.endswith("Spec")
+    )
+
+
+def _sut_class_from_test_stem(stem: str) -> str | None:
+    """Return the inferred class-under-test name from a test file's stem.
+
+    Examples:
+      ``PetControllerTests`` → ``PetController``
+      ``OwnerControllerTest`` → ``OwnerController``
+      ``CrashControllerIntegrationTests`` → ``CrashControllerIntegration``
+      ``I18nPropertiesSyncTest`` → ``I18nPropertiesSync``
+      ``PetClinicIT`` → ``PetClinic``
+    """
+    for suffix in ("Tests", "Test", "IT", "Spec"):
+        if stem.endswith(suffix) and len(stem) > len(suffix):
+            return stem[: -len(suffix)]
+    return None
 
 
 def _text(node: Node) -> str:
@@ -113,13 +147,90 @@ def _extract_javadoc(node: Node) -> str:
     return ""
 
 
+def _extract_type_names(node: Node) -> list[str]:
+    """Return leaf type names from a ``type_list`` / ``super_interfaces`` / etc.
+
+    Walks all descendants, returning each ``type_identifier``'s text.  Generic
+    arguments (``type_arguments``) are skipped so that ``JpaRepository<X, Y>``
+    contributes only ``JpaRepository``.
+    """
+    names: list[str] = []
+
+    def _rec(n: Node) -> None:
+        if n.type == "type_arguments":
+            return  # don't recurse into generic params
+        if n.type == "type_identifier":
+            names.append(_text(n))
+            return
+        for c in n.children:
+            _rec(c)
+
+    _rec(node)
+    return names
+
+
+def _emit_inheritance_edges(
+    node: Node,
+    class_name: str,
+    results: list[Symbol | DependencyEdge],
+) -> None:
+    """Emit ``extends`` / ``implements`` edges for a class/interface declaration.
+
+    * ``class_declaration``: ``superclass`` child → one ``extends`` edge;
+      ``super_interfaces`` child → one ``implements`` edge per interface.
+    * ``interface_declaration``: ``extends_interfaces`` child → one
+      ``extends`` edge per super-interface (interfaces can multi-inherit).
+    """
+    if node.type == "class_declaration":
+        super_node = _first_child_of_type(node, "superclass")
+        if super_node:
+            for parent in _extract_type_names(super_node):
+                results.append(
+                    DependencyEdge(
+                        from_symbol=class_name,
+                        to_symbol=parent,
+                        edge_type="extends",
+                    )
+                )
+        impl_node = _first_child_of_type(node, "super_interfaces")
+        if impl_node:
+            for iface in _extract_type_names(impl_node):
+                results.append(
+                    DependencyEdge(
+                        from_symbol=class_name,
+                        to_symbol=iface,
+                        edge_type="implements",
+                    )
+                )
+    elif node.type == "interface_declaration":
+        ext_node = _first_child_of_type(node, "extends_interfaces")
+        if ext_node:
+            for parent in _extract_type_names(ext_node):
+                results.append(
+                    DependencyEdge(
+                        from_symbol=class_name,
+                        to_symbol=parent,
+                        edge_type="extends",
+                    )
+                )
+
+
 def _walk(
     node: Node,
     results: list[Symbol | DependencyEdge],
     file: Path,
     current_method: str | None = None,
+    current_class: str | None = None,
+    sut_name: str | None = None,
+    has_emitted_test_edge: list[bool] | None = None,
 ) -> None:
-    """Recursively walk the Java AST and collect symbols and edges."""
+    """Recursively walk the Java AST and collect symbols and edges.
+
+    ``sut_name`` is the inferred class-under-test when *file* is a test file.
+    ``has_emitted_test_edge`` is a single-element list used as a mutable flag
+    so nested recursion can record whether any ``tested_by`` edge was emitted
+    for this file (used for the silent-failure debug message).
+    """
 
     if node.type in ("class_declaration", "interface_declaration", "enum_declaration",
                      "annotation_type_declaration"):
@@ -155,10 +266,21 @@ def _walk(
                 signature=signature,
             )
         )
+        # v3 phase3/edge-kinds-extended: emit inheritance edges.
+        if node.type in ("class_declaration", "interface_declaration"):
+            _emit_inheritance_edges(node, name, results)
         body = _first_child_of_type(node, "class_body", "interface_body",
                                      "enum_body", "annotation_type_body")
         if body:
-            _walk(body, results, file, current_method)
+            _walk(
+                body,
+                results,
+                file,
+                current_method,
+                current_class=name,
+                sut_name=sut_name,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node.type in ("method_declaration", "constructor_declaration"):
@@ -182,9 +304,37 @@ def _walk(
                 docstring=docstring,
             )
         )
+        # v3 phase3/edge-kinds-extended: emit ``tested_by`` when inside a test
+        # class whose SUT resolves via naming.  Edge direction: SUT (source) →
+        # test method (target) — matches CRG's TESTED_BY convention.  The test
+        # method must be annotated with @Test (JUnit 4 / 5) to avoid picking
+        # up helper/setup methods like ``@BeforeEach setUp``.
+        if (
+            node.type == "method_declaration"
+            and sut_name is not None
+            and current_class is not None
+            and "Test" in annotations
+        ):
+            results.append(
+                DependencyEdge(
+                    from_symbol=sut_name,
+                    to_symbol=name,
+                    edge_type="tested_by",
+                )
+            )
+            if has_emitted_test_edge is not None:
+                has_emitted_test_edge[0] = True
         body = _first_child_of_type(node, "block", "constructor_body")
         if body:
-            _walk(body, results, file, name)
+            _walk(
+                body,
+                results,
+                file,
+                current_method=name,
+                current_class=current_class,
+                sut_name=sut_name,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node.type == "import_declaration":
@@ -220,11 +370,27 @@ def _walk(
             )
         # Still recurse in case of nested calls
         for child in node.children:
-            _walk(child, results, file, current_method)
+            _walk(
+                child,
+                results,
+                file,
+                current_method,
+                current_class=current_class,
+                sut_name=sut_name,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     for child in node.children:
-        _walk(child, results, file, current_method)
+        _walk(
+            child,
+            results,
+            file,
+            current_method,
+            current_class=current_class,
+            sut_name=sut_name,
+            has_emitted_test_edge=has_emitted_test_edge,
+        )
 
 
 class JavaAnalyzer:
@@ -251,5 +417,30 @@ class JavaAnalyzer:
 
         tree = _PARSER.parse(source)
         results: list[Symbol | DependencyEdge] = []
-        _walk(tree.root_node, results, path)
+
+        # v3 phase3/edge-kinds-extended: infer the class-under-test for test
+        # files so the walker can emit ``tested_by`` edges.  If resolution
+        # fails, record the file for a silent-failure debug note.
+        sut_name: str | None = None
+        if _is_test_file(path):
+            sut_name = _sut_class_from_test_stem(path.stem)
+        has_emitted_test_edge: list[bool] = [False]
+
+        _walk(
+            tree.root_node,
+            results,
+            path,
+            sut_name=sut_name,
+            has_emitted_test_edge=has_emitted_test_edge,
+        )
+
+        # Silent-failure rule: a test file yielded no tested_by edges — log a
+        # debug-level note to stderr so operators can audit the gap.  Not a
+        # warning (low signal), but not silent either.
+        if _is_test_file(path) and not has_emitted_test_edge[0]:
+            print(
+                f"[language-java] debug: could not resolve SUT for test file {path}",
+                file=sys.stderr,
+            )
+
         return results
