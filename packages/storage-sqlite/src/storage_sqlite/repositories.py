@@ -1346,3 +1346,152 @@ class PackCacheRepository:
         cur = self._conn.execute("DELETE FROM pack_cache")
         self._conn.commit()
         return cur.rowcount or 0
+
+
+class EmbeddingRepository:
+    """Typed access to the ``embeddings`` table (migration 0013).
+
+    Persistent vector store for symbol embeddings — populated by
+    ``context-router embed`` and read by the ranker's semantic-boost
+    path so a ``pack --with-semantic`` call avoids re-encoding every
+    candidate. Vectors are stored as packed float32 BLOBs (the
+    ``np.array(...).astype(np.float32).tobytes()`` round trip),
+    which is ~4× cheaper than JSON for 384-dim MiniLM vectors.
+
+    All vectors must be the same length per ``(repo, model)`` pair;
+    callers are responsible for matching the model name across writes
+    and reads. The repo enforces nothing beyond table-level constraints.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection.
+
+        Args:
+            conn: An open sqlite3.Connection (caller owns lifetime).
+        """
+        self._conn = conn
+
+    def upsert_batch(
+        self,
+        repo: str,
+        model: str,
+        rows: list[tuple[int, bytes]],
+        *,
+        now: float | None = None,
+    ) -> int:
+        """Insert-or-replace embeddings for many symbols in one transaction.
+
+        Args:
+            repo: Logical repository name (matches ``symbols.repo``).
+            model: Model identifier (e.g. ``"all-MiniLM-L6-v2"``).
+            rows: Iterable of ``(symbol_id, vector_bytes)`` tuples. Each
+                ``vector_bytes`` value must be a packed float32 array
+                (use ``np.asarray(v, dtype=np.float32).tobytes()``).
+            now: Optional unix-epoch override (defaults to ``time.time()``).
+
+        Returns:
+            Number of rows accepted (equal to ``len(rows)``).
+        """
+        import time
+
+        built_at = time.time() if now is None else now
+        params = [
+            (repo, sid, model, vec, built_at)
+            for sid, vec in rows
+        ]
+        self._conn.executemany(
+            """
+            INSERT INTO embeddings (repo, symbol_id, model, vector, built_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo, symbol_id, model) DO UPDATE SET
+                vector   = excluded.vector,
+                built_at = excluded.built_at
+            """,
+            params,
+        )
+        self._conn.commit()
+        return len(params)
+
+    def get_vector(
+        self, repo: str, symbol_id: int, model: str
+    ) -> bytes | None:
+        """Return the stored vector blob for a single symbol or None."""
+        row = self._conn.execute(
+            """
+            SELECT vector FROM embeddings
+            WHERE repo = ? AND symbol_id = ? AND model = ?
+            """,
+            (repo, symbol_id, model),
+        ).fetchone()
+        if row is None:
+            return None
+        return bytes(row["vector"])
+
+    def bulk_get_vectors(
+        self, repo: str, symbol_ids: list[int], model: str
+    ) -> dict[int, bytes]:
+        """Return a {symbol_id: vector_bytes} mapping for the given ids.
+
+        Symbols without a stored vector are simply absent from the result.
+        Empty input returns an empty dict (no SQL is executed).
+
+        Args:
+            repo: Logical repository name.
+            symbol_ids: Symbol ids to look up.
+            model: Model identifier — only rows matching this model name
+                are returned.
+        """
+        if not symbol_ids:
+            return {}
+        # Chunk to keep the parameter list under SQLite's default 999 limit.
+        # We use 500 to leave headroom for the two leading params.
+        chunk = 500
+        result: dict[int, bytes] = {}
+        for start in range(0, len(symbol_ids), chunk):
+            ids = symbol_ids[start : start + chunk]
+            placeholders = ",".join("?" * len(ids))
+            rows = self._conn.execute(
+                f"""
+                SELECT symbol_id, vector FROM embeddings
+                WHERE repo = ? AND model = ?
+                  AND symbol_id IN ({placeholders})
+                """,
+                (repo, model, *ids),
+            ).fetchall()
+            for r in rows:
+                result[int(r["symbol_id"])] = bytes(r["vector"])
+        return result
+
+    def delete_all_for_repo(self, repo: str, model: str | None = None) -> int:
+        """Delete every embedding row for *repo*. Returns row count deleted.
+
+        Args:
+            repo: Logical repository name.
+            model: If provided, only delete rows for this model name.
+                Otherwise wipe every model for the repo.
+        """
+        if model is None:
+            cur = self._conn.execute(
+                "DELETE FROM embeddings WHERE repo = ?",
+                (repo,),
+            )
+        else:
+            cur = self._conn.execute(
+                "DELETE FROM embeddings WHERE repo = ? AND model = ?",
+                (repo, model),
+            )
+        self._conn.commit()
+        return cur.rowcount or 0
+
+    def count(self, repo: str, model: str | None = None) -> int:
+        """Return the number of stored embeddings for *repo* (and optionally model)."""
+        if model is None:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM embeddings WHERE repo = ?", (repo,)
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM embeddings WHERE repo = ? AND model = ?",
+                (repo, model),
+            ).fetchone()
+        return int(row[0]) if row else 0

@@ -12,6 +12,7 @@ import typer
 
 from cli.commands.benchmark import benchmark_app
 from cli.commands.decisions import decisions_app
+from cli.commands.embed import embed_app
 from cli.commands.explain import explain_app
 from cli.commands.feedback import feedback_app
 from cli.commands.graph import graph_app
@@ -81,6 +82,7 @@ def _root(
 app.add_typer(init_app, name="init")
 app.add_typer(index_app, name="index")
 app.add_typer(watch_app, name="watch")
+app.add_typer(embed_app, name="embed")
 app.add_typer(pack_app, name="pack")
 app.add_typer(explain_app, name="explain")
 app.add_typer(memory_app, name="memory")
