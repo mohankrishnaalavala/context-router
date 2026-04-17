@@ -49,6 +49,7 @@ class TestToolsList:
             "get_context_pack",
             "get_context_summary",
             "get_debug_pack",
+            "get_minimal_context",
             "explain_selection",
             "generate_handover",
             "search_memory",

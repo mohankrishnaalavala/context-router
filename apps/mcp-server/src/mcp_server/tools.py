@@ -260,6 +260,48 @@ def get_debug_pack(
     return result
 
 
+def get_minimal_context(
+    task: str,
+    max_tokens: int = 800,
+    project_root: str = "",
+) -> dict:
+    """Return a token-cheap triage pack (≤5 items) plus a next-tool hint.
+
+    Mirrors the `get_minimal_context` contract shipped by code-review-graph:
+    a small, fixed-budget preview intended to let callers decide whether to
+    escalate to a fuller pack or a debug pack. The returned ContextPack uses
+    ``mode="minimal"`` and surfaces a ``metadata.next_tool_suggestion`` hint
+    derived from the top-ranked items.
+
+    Args:
+        task: Free-text description of the task. Required; empty string is
+            rejected with JSON-RPC error code -32602 (invalid params).
+        max_tokens: Hard cap on the ranker's token budget. Default 800.
+        project_root: Project root. Auto-detected if omitted.
+
+    Returns:
+        Serialised ContextPack dict, or an ``{"error", "code": -32602}``
+        dict when ``task`` is empty/whitespace.
+    """
+    if not task or not task.strip():
+        return {
+            "error": "task cannot be empty",
+            "code": -32602,
+        }
+    try:
+        pack = _orchestrator(project_root).build_pack(
+            mode="minimal",
+            query=task,
+            progress=False,
+            token_budget=int(max_tokens) if max_tokens else 800,
+        )
+    except FileNotFoundError as exc:
+        return {"error": str(exc)}
+    except ValueError as exc:
+        return {"error": str(exc)}
+    return pack.model_dump(mode="json")
+
+
 def explain_selection(project_root: str = "") -> dict:
     """Return the explanation for the last generated context pack.
 

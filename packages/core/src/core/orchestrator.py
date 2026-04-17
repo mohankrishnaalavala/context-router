@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Any, Callable
 
 from cachetools import TTLCache
-
 from contracts.config import ContextRouterConfig, load_config
 from contracts.models import ContextItem, ContextPack, RuntimeSignal
 from graph_index.git_diff import GitDiffParser
@@ -161,6 +160,8 @@ _DEFAULT_WEIGHTS: dict[str, dict[str, float]] = {
     "implement": _IMPLEMENT_CONFIDENCE,
     "debug": _DEBUG_CONFIDENCE,
     "handover": _HANDOVER_CONFIDENCE,
+    # Minimal mode reuses implement weights — see build_pack() minimal branch.
+    "minimal": _IMPLEMENT_CONFIDENCE,
 }
 
 # Community anchor boost (P2-1): items in the same community as the highest
@@ -198,6 +199,50 @@ def _resolve_weights(
     merged = dict(defaults)
     merged.update({k: float(v) for k, v in override.items()})
     return merged
+
+
+def _suggest_next_tool(items: list[ContextItem], query: str) -> str:
+    """Return a short next-tool hint for a minimal-mode pack.
+
+    The heuristic keeps the rule-set intentionally narrow so the suggestion
+    stays predictable:
+
+    * Top item lives under ``tests/`` or filename starts with ``test_``
+      → route the caller to ``get_debug_pack`` (they likely have a failing test).
+    * Majority of items are config/yaml/toml/ini/json → recommend
+      ``get_context_pack(mode='review')`` for deeper review of config shape.
+    * Fallback → recommend ``get_context_pack(mode='implement')`` with the
+      original query so the caller has a single copy-pasteable follow-up.
+    """
+    if not items:
+        return (
+            "run get_context_pack(mode='implement', query=...) for full context"
+        )
+
+    top = items[0]
+    top_path = top.path_or_ref.lower()
+    top_name = Path(top_path).name
+    is_test = (
+        "/tests/" in f"/{top_path}/"
+        or top_name.startswith("test_")
+        or top_name.endswith("_test.py")
+    )
+    if is_test:
+        return "run get_debug_pack to see the failing call chain"
+
+    config_exts = {".yml", ".yaml", ".toml", ".ini", ".json", ".cfg"}
+    config_hits = sum(
+        1 for item in items if Path(item.path_or_ref).suffix.lower() in config_exts
+    )
+    if config_hits >= max(2, len(items) // 2):
+        return "run get_context_pack(mode='review') for deeper review"
+
+    # Echo the caller's query in the fallback so the next call is one-hop away.
+    safe_query = query.strip() or "<task>"
+    return (
+        f"run get_context_pack(mode='implement', query={safe_query!r}) "
+        "for full context"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -466,6 +511,7 @@ class Orchestrator:
         progress: bool = True,
         progress_cb: "Callable[[str, int, int], None] | None" = None,
         download_progress_cb: Callable[[str], None] | None = None,
+        token_budget: int | None = None,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -473,7 +519,10 @@ class Orchestrator:
         ``context-router explain last-pack`` can read it without re-running.
 
         Args:
-            mode: One of "review", "debug", "implement", "handover".
+            mode: One of "review", "debug", "implement", "handover", "minimal".
+                Minimal mode returns a tightly-budgeted (≤800 token) preview
+                with at most 5 items and a ``next_tool_suggestion`` hint under
+                ``pack.metadata`` — it is the CRG-parity triage entry point.
             query: Free-text description of the task.
             error_file: Optional path to an error file (JUnit XML, stack trace,
                 log).  Used by debug mode to parse RuntimeSignals.
@@ -496,6 +545,10 @@ class Orchestrator:
                 by the CLI to a ``rich.progress.Progress`` instance for
                 first-time sentence-transformers model download. Ignored
                 when ``progress=False``.
+            token_budget: Optional per-call override for the ranker's token
+                budget. When ``None`` (default), uses
+                ``config.token_budget``; minimal mode defaults to 800
+                when omitted.
 
         Returns:
             A populated and ranked ContextPack.
@@ -515,6 +568,17 @@ class Orchestrator:
                 "Run 'context-router index' first."
             )
 
+        # Resolve the effective caller-level token budget. `None` means "use
+        # config default" for backward compatibility. Minimal mode is capped
+        # at 800 tokens by default to match the CRG-parity triage contract.
+        if token_budget is None:
+            if mode == "minimal":
+                caller_budget = 800
+            else:
+                caller_budget = int(config.token_budget)
+        else:
+            caller_budget = int(token_budget)
+
         # Cache lookup — identical inputs return the previously built
         # ContextPack without re-running candidate building or ranking.
         # L1 (in-process TTLCache) benefits the long-lived MCP server;
@@ -532,7 +596,7 @@ class Orchestrator:
             repo_id,
             mode,
             query_hash,
-            int(config.token_budget),
+            caller_budget,
             bool(use_embeddings),
             items_hash,
         )
@@ -545,7 +609,7 @@ class Orchestrator:
         cache_key_str = self._cache_key_string(
             mode,
             query_hash,
-            int(config.token_budget),
+            caller_budget,
             bool(use_embeddings),
             items_hash,
         )
@@ -650,6 +714,13 @@ class Orchestrator:
             baseline = sum(c.est_tokens for c in candidates)
             # Always apply at least 50% reduction so small repos benefit too
             effective_budget = min(config.token_budget, max(1000, baseline // 2))
+            # Minimal mode is a cheap triage view — honor the tight caller
+            # budget verbatim (no "at least 1000 tokens" floor) so callers can
+            # actually shrink the pack to fit their prompt window.
+            if mode == "minimal":
+                effective_budget = min(effective_budget, caller_budget)
+            elif token_budget is not None:
+                effective_budget = min(effective_budget, caller_budget)
             ranker = ContextRanker(
                 token_budget=effective_budget,
                 use_embeddings=use_embeddings,
@@ -691,6 +762,15 @@ class Orchestrator:
             page_items = all_ranked
             has_more = False
 
+        # Minimal mode: hard-cap to top-5 items by confidence (ranker already
+        # sorts by confidence desc) and attach a next-tool suggestion so the
+        # caller can escalate to a deeper pack when the preview isn't enough.
+        pack_metadata: dict[str, Any] = {}
+        if mode == "minimal":
+            page_items = page_items[:5]
+            has_more = False
+            pack_metadata["next_tool_suggestion"] = _suggest_next_tool(page_items, query)
+
         total = sum(i.est_tokens for i in page_items)
         reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
 
@@ -704,6 +784,7 @@ class Orchestrator:
             has_more=has_more,
             total_items=total_items_count if page_size > 0 else 0,
             duplicates_hidden=_dup_dropped,
+            metadata=pack_metadata,
         )
 
         last_pack_path = self._root / ".context-router" / "last-pack.json"
@@ -811,6 +892,12 @@ class Orchestrator:
         if mode == "review":
             items = self._review_candidates(sym_repo, edge_repo, repo_name, weights)
         elif mode == "implement":
+            items = self._implement_candidates(sym_repo, repo_name, weights)
+        elif mode == "minimal":
+            # Minimal mode reuses implement candidate selection — the goal is a
+            # cheap triage view ranked by relevance to the task, not a distinct
+            # signal source. The orchestrator later caps to top-5 and emits a
+            # next_tool_suggestion for follow-up.
             items = self._implement_candidates(sym_repo, repo_name, weights)
         elif mode == "debug":
             items = self._debug_candidates(

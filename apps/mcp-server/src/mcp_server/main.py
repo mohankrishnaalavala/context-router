@@ -62,8 +62,20 @@ _PACK_OUTPUT: dict[str, Any] = {
         "reduction_pct": {"type": "number"},
         "has_more": {"type": "boolean"},
         "total_items": {"type": "integer"},
+        "metadata": {
+            "type": "object",
+            "additionalProperties": True,
+            "description": (
+                "Mode-specific hints. Minimal mode sets "
+                "metadata.next_tool_suggestion with a copy-pasteable follow-up."
+            ),
+        },
         "text": {"type": "string", "description": "Compact-format body."},
         "error": {"type": "string"},
+        "code": {
+            "type": "integer",
+            "description": "JSON-RPC error code (e.g. -32602 for empty task).",
+        },
     },
 }
 
@@ -248,6 +260,37 @@ _TOOLS: dict[str, dict[str, Any]] = {
                 "error": {"type": "string"},
             },
         },
+    },
+    "get_minimal_context": {
+        "fn": tools.get_minimal_context,
+        "description": (
+            "Return a token-cheap triage pack (≤5 items, ≤max_tokens budget) "
+            "plus a next-tool hint under metadata.next_tool_suggestion. "
+            "Use this as a first-touch tool before escalating to "
+            "get_context_pack or get_debug_pack."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["task"],
+            "properties": {
+                "task": {
+                    "type": "string",
+                    "description": "Free-text description of the task. Must be non-empty.",
+                    "minLength": 1,
+                },
+                "max_tokens": {
+                    "type": "integer",
+                    "description": "Hard cap on the ranker's token budget.",
+                    "default": 800,
+                    "minimum": 1,
+                },
+                "project_root": {
+                    "type": "string",
+                    "description": "Absolute path to project root. Auto-detected when omitted.",
+                },
+            },
+        },
+        "outputSchema": _PACK_OUTPUT,
     },
     "get_debug_pack": {
         "fn": tools.get_debug_pack,
@@ -817,6 +860,7 @@ _PROGRESS_TOOLS: frozenset[str] = frozenset({
 _PACK_BUILDING_TOOLS: frozenset[str] = frozenset({
     "get_context_pack",
     "get_debug_pack",
+    "get_minimal_context",
     "generate_handover",
 })
 
