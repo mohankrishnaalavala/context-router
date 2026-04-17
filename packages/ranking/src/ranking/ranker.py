@@ -124,6 +124,18 @@ def _get_embed_model(
         if _EMBED_MODEL is None:
             try:
                 from sentence_transformers import SentenceTransformer  # type: ignore[import]
+            except ImportError:
+                # Silent-failure rule: naming the missing dependency is
+                # required so users can recover without guessing.
+                sys.stderr.write(
+                    "warning: --with-semantic requested but the "
+                    "'sentence-transformers' package is not installed; "
+                    "semantic boost disabled. Install with "
+                    "`pip install sentence-transformers` to enable it.\n"
+                )
+                _EMBED_MODEL = False  # sentinel: embeddings unavailable
+                return _EMBED_MODEL
+            try:
                 if progress_cb is not None and not _embed_model_is_cached():
                     try:
                         progress_cb(
@@ -137,7 +149,12 @@ def _get_embed_model(
                         progress_cb("Model ready.")
                     except Exception:  # noqa: BLE001
                         pass
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                sys.stderr.write(
+                    f"warning: --with-semantic could not load "
+                    f"'{_EMBED_MODEL_NAME}' ({type(exc).__name__}: {exc}); "
+                    f"semantic boost disabled for this run.\n"
+                )
                 _EMBED_MODEL = False  # sentinel: embeddings unavailable
     return _EMBED_MODEL
 
@@ -221,8 +238,9 @@ class ContextRanker:
         Steps:
         1. Annotate each item's ``reason`` from its ``source_type``.
         2. Apply query-relevance confidence boost (keyword overlap + BM25).
-        3. For implement mode: optionally apply semantic similarity boost
-           (if use_embeddings=True and a model is available).
+        3. If ``use_embeddings=True``, apply semantic similarity boost in
+           every mode (a model must be available; otherwise the call is a
+           no-op at the boost helper level).
         4. Sort by ``confidence`` descending.
         5. Trim to token budget while keeping at least one item per
            ``source_type`` (so every category of evidence is represented).
@@ -230,8 +248,8 @@ class ContextRanker:
         Args:
             items: Pre-scored ContextItem candidates.
             query: Free-text task description used for relevance boosting.
-            mode: Task mode — "implement" enables semantic boost when
-                use_embeddings=True.
+            mode: Task mode — currently informational. The semantic boost is
+                applied in every mode when ``use_embeddings=True``.
 
         Returns:
             Ranked and budget-enforced list of ContextItems.
@@ -242,21 +260,14 @@ class ContextRanker:
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
         boosted = self._apply_bm25_boost(annotated, query_tokens)
-        # P1-7: apply semantic boost only in implement mode to avoid
-        # expensive embedding computation in other modes.
-        # v3 phase-1 silent-failure fix: when the caller opts into
-        # semantic ranking in a mode where it has no effect, surface a
-        # warning to stderr so the flag is not a silent no-op. This is
-        # emitted once per rank() call, before the mode gate, and uses
-        # sys.stderr directly (not logging) so the CLI's log config
-        # cannot swallow it. MCP stdio transport keeps stderr separate
-        # from the JSON-RPC channel on stdout, so this is safe there too.
-        if self._use_embeddings and mode != "implement":
-            sys.stderr.write(
-                f"warning: --with-semantic has no effect in {mode} mode "
-                f"(only takes effect in 'implement' mode today)\n"
-            )
-        if self._use_embeddings and mode == "implement":
+        # v3 phase-2 (outcome: semantic-default-with-progress): the semantic
+        # boost now applies in every pack mode when ``use_embeddings=True``.
+        # Prior to phase 2 this was gated to ``mode == "implement"`` and a
+        # phase-1 stderr warning fired outside implement mode. That warning
+        # is now obsolete because there is no longer a silent no-op: the
+        # flag takes effect everywhere. ``mode`` is still threaded through
+        # for future per-mode tuning but no longer gates the call.
+        if self._use_embeddings:
             boosted = self._apply_semantic_boost(boosted, query)
         sorted_items = sorted(boosted, key=lambda i: i.confidence, reverse=True)
 
@@ -270,11 +281,12 @@ class ContextRanker:
     # ------------------------------------------------------------------
 
     def _apply_semantic_boost(self, items: list[ContextItem], query: str) -> list[ContextItem]:
-        """Boost implement-mode items using cosine similarity from sentence-transformers.
+        """Boost items using cosine similarity from sentence-transformers.
 
-        Only runs when ``use_embeddings=True``, mode=="implement", and the model
-        is available.  Formula: ``boost = min(0.15, max(0, sim - 0.3) * 0.3)``.
-        Items with similarity <= 0.3 receive no boost.
+        Runs whenever ``use_embeddings=True`` and a model is available — in
+        every pack mode (review, debug, implement, handover). Formula:
+        ``boost = min(0.15, max(0, sim - 0.3) * 0.3)``. Items with
+        similarity <= 0.3 receive no boost.
         """
         if not query or not items:
             return items

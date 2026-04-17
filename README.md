@@ -26,7 +26,7 @@ AI coding agents work best with focused, relevant context rather than entire cod
 | **Language support** | Python (full), TypeScript/JS (full), YAML (k8s/Helm/GHA), Java (full), .NET/C# (full) |
 | **Edge types** | `imports`, `calls` (function-level), `tested_by`, `needs` (GHA), community links |
 | **Task modes** | `review`, `implement`, `debug`, `handover` |
-| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional `--with-semantic` semantic boost (all-MiniLM-L6-v2), community-cohesion boost (+0.10 for same-cluster candidates), per-project `confidence_weights` overrides in `.context-router/config.yaml` |
+| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional `--with-semantic` semantic boost (all-MiniLM-L6-v2; applies in every pack mode — `review`, `debug`, `implement`, `handover`), community-cohesion boost (+0.10 for same-cluster candidates), per-project `confidence_weights` overrides in `.context-router/config.yaml` |
 | **Pack cache** | Orchestrator-level 5-minute TTLCache of fully ranked packs — identical repeat calls skip candidate-building and ranking entirely; invalidated on `build_index` / `update_index` via DB mtime |
 | **Token budget** | Value-per-token knapsack admission + hard cap with per-source-type guarantee; dynamic scaling for small repos |
 | **Memory** | Persistent observations (FTS), ADRs, freshness scoring, `memory export`, `decisions export` |

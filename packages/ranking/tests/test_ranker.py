@@ -319,51 +319,120 @@ def test_call_chain_item_gets_annotated_reason() -> None:
 
 
 # -----------------------------------------------------------------------
-# v3 phase-1: --with-semantic outside implement mode emits a warning
-# (outcome: with-semantic-warns-outside-implement)
+# v3 phase-2: --with-semantic applies in every pack mode
+# (outcome: semantic-default-with-progress)
+#
+# The phase-1 outcome ``with-semantic-warns-outside-implement`` is
+# superseded by phase-2's ``semantic-default-with-progress``: the flag
+# no longer no-ops outside implement mode, so the stderr warning has
+# been removed. The superseded outcome id remains in
+# ``docs/release/v3-outcomes.yaml`` for traceability; the tests below
+# pin the new contract (silent, effective in every mode).
 # -----------------------------------------------------------------------
 
-def test_with_semantic_warns_in_handover_mode(capsys) -> None:
-    """use_embeddings=True + mode=handover should warn to stderr."""
-    ranker = ContextRanker(token_budget=1000, use_embeddings=True)
-    ranker.rank([_item()], "q", "handover")
-    captured = capsys.readouterr()
-    assert "no effect in handover" in captured.err
-    assert captured.out == ""
+def test_with_semantic_is_silent_in_every_mode(capsys) -> None:
+    """use_embeddings=True must not warn in any mode (phase-2 contract).
 
-
-def test_with_semantic_silent_in_implement_mode(capsys) -> None:
-    """use_embeddings=True + mode=implement must NOT warn (normal case)."""
-    ranker = ContextRanker(token_budget=1000, use_embeddings=True)
-    ranker.rank([_item()], "q", "implement")
-    captured = capsys.readouterr()
-    assert captured.err == ""
-
-
-def test_without_semantic_silent_in_handover_mode(capsys) -> None:
-    """use_embeddings=False must NOT warn regardless of mode."""
-    ranker = ContextRanker(token_budget=1000, use_embeddings=False)
-    ranker.rank([_item()], "q", "handover")
-    captured = capsys.readouterr()
-    assert captured.err == ""
-
-
-def test_with_semantic_warns_once_per_rank_call(capsys) -> None:
-    """Two sequential rank() calls each emit exactly one warning line.
-
-    Regression guard: the warning must be emitted once per rank() call,
-    not per item and not zero (no over-suppression via a 'warned' flag).
+    Phase 1 added a stderr warning when --with-semantic had no effect
+    outside implement. Phase 2 removes the mode gate, so the warning is
+    obsolete — the flag now works in every mode and must be silent.
     """
-    ranker = ContextRanker(token_budget=1000, use_embeddings=True)
-    items = [_item(title="a"), _item(title="b"), _item(title="c")]
-    ranker.rank(items, "q", "review")
-    ranker.rank(items, "q", "review")
-    captured = capsys.readouterr()
-    warning_lines = [
-        line for line in captured.err.splitlines()
-        if "no effect in review" in line
+    for mode in ("review", "debug", "implement", "handover"):
+        ranker = ContextRanker(token_budget=1000, use_embeddings=True)
+        ranker.rank([_item()], "q", mode)
+        captured = capsys.readouterr()
+        # Semantic boost is best-effort; if sentence-transformers isn't
+        # installed the import-error path emits a single warning naming
+        # the missing dep. Any "no effect in <mode>" warning is now a
+        # regression against the phase-2 contract.
+        assert f"no effect in {mode}" not in captured.err, (
+            f"phase-2 regression: phase-1 warning still fires in {mode}"
+        )
+
+
+def test_without_semantic_silent_in_every_mode(capsys) -> None:
+    """use_embeddings=False must never warn regardless of mode."""
+    for mode in ("review", "debug", "implement", "handover"):
+        ranker = ContextRanker(token_budget=1000, use_embeddings=False)
+        ranker.rank([_item()], "q", mode)
+        captured = capsys.readouterr()
+        assert captured.err == ""
+
+
+def test_semantic_boost_applied_outside_implement(monkeypatch) -> None:
+    """use_embeddings=True must route through _apply_semantic_boost in
+    every mode, not only implement (phase-2 contract).
+
+    We stub the semantic-boost helper so the test doesn't require
+    sentence-transformers to be installed.
+    """
+    calls: list[str] = []
+
+    def _fake_boost(self, items, query):  # noqa: ANN001
+        calls.append("called")
+        return items
+
+    monkeypatch.setattr(ContextRanker, "_apply_semantic_boost", _fake_boost)
+
+    for mode in ("review", "debug", "implement", "handover"):
+        calls.clear()
+        ContextRanker(token_budget=1000, use_embeddings=True).rank(
+            [_item()], "q", mode
+        )
+        assert calls == ["called"], (
+            f"semantic boost should fire in {mode} mode but did not; "
+            f"this is the phase-2 regression guard"
+        )
+
+
+def test_semantic_boost_not_applied_when_flag_off(monkeypatch) -> None:
+    """use_embeddings=False must never route through _apply_semantic_boost."""
+    calls: list[str] = []
+
+    def _fake_boost(self, items, query):  # noqa: ANN001
+        calls.append("called")
+        return items
+
+    monkeypatch.setattr(ContextRanker, "_apply_semantic_boost", _fake_boost)
+
+    for mode in ("review", "debug", "implement", "handover"):
+        ContextRanker(token_budget=1000, use_embeddings=False).rank(
+            [_item()], "q", mode
+        )
+    assert calls == []
+
+
+def test_semantic_boost_changes_ranking_in_handover(monkeypatch) -> None:
+    """handover mode with use_embeddings=True must produce a different
+    ranking than without — mirrors the smoke check's threshold.
+
+    We stub _apply_semantic_boost to inject a deterministic perturbation
+    so this test doesn't depend on sentence-transformers.
+    """
+    def _stub_boost(self, items, query):  # noqa: ANN001
+        # Flip the top two items' confidence to force a reordering.
+        if len(items) < 2:
+            return items
+        result = list(items)
+        result[0] = result[0].model_copy(update={"confidence": 0.10})
+        result[1] = result[1].model_copy(update={"confidence": 0.90})
+        return result
+
+    monkeypatch.setattr(ContextRanker, "_apply_semantic_boost", _stub_boost)
+
+    items = [
+        _item(confidence=0.80, title="a"),
+        _item(confidence=0.20, title="b"),
     ]
-    assert len(warning_lines) == 2, (
-        f"expected exactly 2 warnings (one per rank call), got {len(warning_lines)}: "
-        f"{warning_lines!r}"
+    without = ContextRanker(token_budget=0, use_embeddings=False).rank(
+        list(items), "q", "handover"
+    )
+    with_sem = ContextRanker(token_budget=0, use_embeddings=True).rank(
+        list(items), "q", "handover"
+    )
+    titles_without = [i.title for i in without]
+    titles_with = [i.title for i in with_sem]
+    assert titles_without != titles_with, (
+        "handover mode ranking with --with-semantic must differ from "
+        "plain ranking (phase-2 outcome threshold)"
     )
