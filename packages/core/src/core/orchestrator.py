@@ -30,7 +30,11 @@ from contracts.models import ContextItem, ContextPack, RuntimeSignal
 from graph_index.git_diff import GitDiffParser
 from ranking import ContextRanker, estimate_tokens
 from storage_sqlite.database import Database
-from storage_sqlite.repositories import EdgeRepository, SymbolRepository
+from storage_sqlite.repositories import (
+    EdgeRepository,
+    PackCacheRepository,
+    SymbolRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Token estimation
@@ -280,15 +284,29 @@ class Orchestrator:
     def _compute_repo_id(self, repo_name: str = "default") -> str:
         """Return a cache-busting repo identifier.
 
-        ``sha1(indexed_at || repo_name)`` — ``indexed_at`` uses the SQLite DB
-        file's mtime, which changes on every ``build_index`` / ``update_index``
-        write, giving us automatic cache invalidation without a migration.
-        Falls back to ``"unindexed"`` if the DB does not yet exist.
+        ``sha1(symbol_shape || repo_name)`` — ``symbol_shape`` is derived
+        from ``(COUNT(*), MAX(id))`` of the ``symbols`` table, which only
+        moves on a real ``build_index`` / ``update_index`` run. (The DB
+        file's mtime would also catch cache writes to ``pack_cache``, which
+        would poison the L2 lookup — symbols-table shape is stable across
+        non-index writes.)
+
+        Falls back to ``"unindexed"`` if the DB does not yet exist or the
+        ``symbols`` table is unavailable.
         """
         db_path = self._root / ".context-router" / "context-router.db"
         try:
-            indexed_at = str(db_path.stat().st_mtime_ns)
-        except OSError:
+            if not db_path.exists():
+                indexed_at = "unindexed"
+            else:
+                import sqlite3
+
+                with sqlite3.connect(db_path) as conn:
+                    row = conn.execute(
+                        "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM symbols"
+                    ).fetchone()
+                indexed_at = f"{row[0]}:{row[1]}" if row else "unindexed"
+        except Exception:  # noqa: BLE001 — be conservative on DB errors
             indexed_at = "unindexed"
         h = hashlib.sha1()
         h.update(indexed_at.encode("utf-8"))
@@ -307,9 +325,116 @@ class Orchestrator:
         return h.hexdigest()
 
     def invalidate_cache(self) -> None:
-        """Drop all cached packs. Call after ``build_index``/``update_index``."""
+        """Drop all cached packs (L1 in-process + L2 SQLite).
+
+        Call after ``build_index``/``update_index``. The L2 ``pack_cache``
+        table is cleared for the current ``repo_id`` (and implicitly
+        invalidated for all future repo_ids by the mtime-derived key
+        rotation). If the SQLite layer is unavailable we emit a stderr
+        warning — per CLAUDE.md, silent failure is a bug.
+        """
         with self._pack_cache_lock:
             self._pack_cache.clear()
+        db_path = self._root / ".context-router" / "context-router.db"
+        if not db_path.exists():
+            return
+        try:
+            with Database(db_path) as db:
+                PackCacheRepository(db.connection).invalidate_all()
+        except Exception as exc:  # noqa: BLE001 — persistent cache is best-effort
+            _warn_optional_subsystem_failure(
+                "Persistent pack cache invalidation",
+                "stale entries in .context-router/context-router.db pack_cache "
+                "may survive until TTL expires",
+                exc,
+            )
+
+    # ------------------------------------------------------------------
+    # Persistent (L2) pack cache helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _cache_key_string(
+        mode: str,
+        query_hash: str,
+        token_budget: int,
+        use_embeddings: bool,
+        items_hash: str,
+    ) -> str:
+        """Fold the cache-key tuple into a stable string for L2 storage.
+
+        Kept separate from the L1 tuple so that the L2 primary-key column
+        stays a single TEXT — the DB does not need to understand the
+        structure, only compare bytes.
+        """
+        h = hashlib.sha1()
+        for part in (
+            mode,
+            query_hash,
+            str(token_budget),
+            "1" if use_embeddings else "0",
+            items_hash,
+        ):
+            h.update(part.encode("utf-8"))
+            h.update(b"|")
+        return h.hexdigest()
+
+    def _l2_get(
+        self, cache_key_str: str, repo_id: str, db_path: Path
+    ) -> ContextPack | None:
+        """Look up the persistent L2 cache; return None on miss or error.
+
+        Warns to stderr (never silently skips) if the DB read fails — this
+        is required by the CLAUDE.md "silent failure is a bug" rule.
+        """
+        try:
+            with Database(db_path) as db:
+                raw = PackCacheRepository(db.connection).get(
+                    cache_key_str,
+                    repo_id,
+                    float(self._PACK_CACHE_TTL_SECONDS),
+                )
+        except Exception as exc:  # noqa: BLE001 — fall back to fresh build
+            _warn_optional_subsystem_failure(
+                "Persistent pack cache read",
+                "falling back to a fresh build; the CLI repeat-call speedup "
+                "will not apply for this invocation",
+                exc,
+            )
+            return None
+        if raw is None:
+            return None
+        try:
+            return ContextPack.model_validate_json(raw)
+        except Exception as exc:  # noqa: BLE001 — schema drift → fresh build
+            _warn_optional_subsystem_failure(
+                "Persistent pack cache deserialize",
+                "schema mismatch likely — rebuilding the pack and overwriting "
+                "the stored row on next cache write",
+                exc,
+            )
+            return None
+
+    def _l2_put(
+        self,
+        cache_key_str: str,
+        repo_id: str,
+        pack: ContextPack,
+        db_path: Path,
+    ) -> None:
+        """Write to the persistent L2 cache. Best-effort; warns on error."""
+        try:
+            with Database(db_path) as db:
+                PackCacheRepository(db.connection).put(
+                    cache_key_str, repo_id, pack.model_dump_json()
+                )
+        except Exception as exc:  # noqa: BLE001 — persistent cache is best-effort
+            _warn_optional_subsystem_failure(
+                "Persistent pack cache write",
+                "CLI repeat-call speedup will not apply across processes until "
+                "a subsequent build succeeds",
+                exc,
+            )
 
     # ------------------------------------------------------------------
     # Public API
@@ -375,16 +500,21 @@ class Orchestrator:
                 "Run 'context-router index' first."
             )
 
-        # P3-1: cache lookup — identical inputs return the previously built
+        # Cache lookup — identical inputs return the previously built
         # ContextPack without re-running candidate building or ranking.
+        # L1 (in-process TTLCache) benefits the long-lived MCP server;
+        # L2 (SQLite-backed, migration 0012) persists across CLI processes
+        # so a second `context-router pack` run for the same query skips
+        # the full pipeline.
         query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
         items_hash = self._compute_items_hash(
             error_file=error_file if error_file is None else str(error_file),
             page=page,
             page_size=page_size,
         )
+        repo_id = self._compute_repo_id()
         cache_key = (
-            self._compute_repo_id(),
+            repo_id,
             mode,
             query_hash,
             int(config.token_budget),
@@ -395,6 +525,21 @@ class Orchestrator:
             cached = self._pack_cache.get(cache_key)
         if cached is not None:
             return cached
+
+        # L2 lookup — persists across CLI invocations.
+        cache_key_str = self._cache_key_string(
+            mode,
+            query_hash,
+            int(config.token_budget),
+            bool(use_embeddings),
+            items_hash,
+        )
+        l2_pack = self._l2_get(cache_key_str, repo_id, db_path)
+        if l2_pack is not None:
+            # Re-hydrate L1 so subsequent same-process calls are fastest.
+            with self._pack_cache_lock:
+                self._pack_cache[cache_key] = l2_pack
+            return l2_pack
 
         # Model-download progress callback for the CLI's rich spinner
         # (disabled for MCP stdio transport, which has progress=False).
@@ -539,9 +684,12 @@ class Orchestrator:
         last_pack_path = self._root / ".context-router" / "last-pack.json"
         last_pack_path.write_text(pack.model_dump_json(indent=2))
 
-        # P3-1: populate the result cache so the next identical call is a hit.
+        # Populate both cache tiers so the next identical call is a hit.
+        # L1 serves same-process (MCP long-lived) callers; L2 persists the
+        # pack to SQLite so a CLI repeat invocation (new process) hits too.
         with self._pack_cache_lock:
             self._pack_cache[cache_key] = pack
+        self._l2_put(cache_key_str, repo_id, pack, db_path)
 
         # Emit intermediate chunk progress for large packs so UIs can render a
         # live bar while the serialised payload is persisted downstream.
