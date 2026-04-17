@@ -16,10 +16,14 @@ and ranking.  CLI/MCP server must only import from core.
 
 from __future__ import annotations
 
+import hashlib
 import re
+import threading
 import warnings
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
+
+from cachetools import TTLCache
 
 from contracts.config import ContextRouterConfig, load_config
 from contracts.models import ContextItem, ContextPack, RuntimeSignal
@@ -222,6 +226,15 @@ class Orchestrator:
             from ``Path.cwd()``.
     """
 
+    # P3-1: Orchestrator-level cache of fully ranked ContextPack results.
+    # Key: (repo_id, mode, sha256(query), budget, use_embeddings, items_hash)
+    # repo_id is derived from the DB file mtime + repo_name so any
+    # ``build_index`` / ``update_index`` write naturally invalidates the
+    # cache. TTL protects against stale results if the index is mutated via
+    # a path we don't see (e.g. another process).
+    _PACK_CACHE_MAXSIZE: int = 100
+    _PACK_CACHE_TTL_SECONDS: int = 300
+
     def __init__(self, project_root: Path | None = None) -> None:
         """Initialise the orchestrator.
 
@@ -229,6 +242,51 @@ class Orchestrator:
             project_root: Optional explicit project root path.
         """
         self._root = project_root or _find_project_root(Path.cwd())
+        # Pack result cache (P3-1). RLock guards mutations — the MCP server
+        # is single-threaded today but the CLI can spawn workers in future.
+        self._pack_cache: TTLCache = TTLCache(
+            maxsize=self._PACK_CACHE_MAXSIZE,
+            ttl=self._PACK_CACHE_TTL_SECONDS,
+        )
+        self._pack_cache_lock = threading.RLock()
+
+    # ------------------------------------------------------------------
+    # Cache helpers (P3-1)
+    # ------------------------------------------------------------------
+
+    def _compute_repo_id(self, repo_name: str = "default") -> str:
+        """Return a cache-busting repo identifier.
+
+        ``sha1(indexed_at || repo_name)`` — ``indexed_at`` uses the SQLite DB
+        file's mtime, which changes on every ``build_index`` / ``update_index``
+        write, giving us automatic cache invalidation without a migration.
+        Falls back to ``"unindexed"`` if the DB does not yet exist.
+        """
+        db_path = self._root / ".context-router" / "context-router.db"
+        try:
+            indexed_at = str(db_path.stat().st_mtime_ns)
+        except OSError:
+            indexed_at = "unindexed"
+        h = hashlib.sha1()
+        h.update(indexed_at.encode("utf-8"))
+        h.update(b"|")
+        h.update(repo_name.encode("utf-8"))
+        return h.hexdigest()
+
+    def _compute_items_hash(self, **parts: Any) -> str:
+        """Hash misc inputs that affect candidate set (error_file, page params)."""
+        h = hashlib.sha1()
+        for key in sorted(parts.keys()):
+            h.update(key.encode("utf-8"))
+            h.update(b"=")
+            h.update(str(parts[key]).encode("utf-8"))
+            h.update(b"|")
+        return h.hexdigest()
+
+    def invalidate_cache(self) -> None:
+        """Drop all cached packs. Call after ``build_index``/``update_index``."""
+        with self._pack_cache_lock:
+            self._pack_cache.clear()
 
     # ------------------------------------------------------------------
     # Public API
@@ -241,7 +299,10 @@ class Orchestrator:
         error_file: Path | None = None,
         page: int = 0,
         page_size: int = 0,
+        use_embeddings: bool = False,
+        progress: bool = True,
         progress_cb: "Callable[[str, int, int], None] | None" = None,
+        download_progress_cb: Callable[[str], None] | None = None,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -257,6 +318,21 @@ class Orchestrator:
                 Ignored when *page_size* is 0.
             page_size: Number of items per page.  0 (default) disables pagination
                 and returns all ranked items.
+            use_embeddings: Opt-in semantic similarity ranking (requires
+                ``sentence-transformers``; triggers a ~33 MB model download
+                on first use). Defaults to False so cold-start callers pay
+                no download or memory cost.
+            progress: Enable the CLI's download-progress rendering. Callers
+                on MCP stdio transport must pass ``progress=False`` so stdout
+                progress writes never corrupt JSON-RPC frames.
+            progress_cb: Pack-build progress callback used by the MCP
+                dispatcher — invoked as ``progress_cb(stage, progress, total)``
+                at candidate / ranked / serialized milestones plus
+                per-1,000-token chunks for packs larger than 2,000 tokens.
+            download_progress_cb: Status callback (single-arg string) bound
+                by the CLI to a ``rich.progress.Progress`` instance for
+                first-time sentence-transformers model download. Ignored
+                when ``progress=False``.
 
         Returns:
             A populated and ranked ContextPack.
@@ -275,6 +351,33 @@ class Orchestrator:
                 f"Index database not found at {db_path}. "
                 "Run 'context-router index' first."
             )
+
+        # P3-1: cache lookup — identical inputs return the previously built
+        # ContextPack without re-running candidate building or ranking.
+        query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
+        items_hash = self._compute_items_hash(
+            error_file=error_file if error_file is None else str(error_file),
+            page=page,
+            page_size=page_size,
+        )
+        cache_key = (
+            self._compute_repo_id(),
+            mode,
+            query_hash,
+            int(config.token_budget),
+            bool(use_embeddings),
+            items_hash,
+        )
+        with self._pack_cache_lock:
+            cached = self._pack_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        # Model-download progress callback for the CLI's rich spinner
+        # (disabled for MCP stdio transport, which has progress=False).
+        effective_cb: Callable[[str], None] | None = (
+            download_progress_cb if (progress and download_progress_cb is not None) else None
+        )
 
         # Parse runtime signals from error file (debug mode)
         runtime_signals: list[RuntimeSignal] = []
@@ -364,7 +467,11 @@ class Orchestrator:
             baseline = sum(c.est_tokens for c in candidates)
             # Always apply at least 50% reduction so small repos benefit too
             effective_budget = min(config.token_budget, max(1000, baseline // 2))
-            ranker = ContextRanker(token_budget=effective_budget)
+            ranker = ContextRanker(
+                token_budget=effective_budget,
+                use_embeddings=use_embeddings,
+                progress_cb=effective_cb,
+            )
             all_ranked = ranker.rank(candidates, query, mode)
             total_items_count = len(all_ranked)
 
@@ -406,6 +513,10 @@ class Orchestrator:
 
         last_pack_path = self._root / ".context-router" / "last-pack.json"
         last_pack_path.write_text(pack.model_dump_json(indent=2))
+
+        # P3-1: populate the result cache so the next identical call is a hit.
+        with self._pack_cache_lock:
+            self._pack_cache[cache_key] = pack
 
         # Emit intermediate chunk progress for large packs so UIs can render a
         # live bar while the serialised payload is persisted downstream.

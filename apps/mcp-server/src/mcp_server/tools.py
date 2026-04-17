@@ -116,6 +116,7 @@ def get_context_pack(
     format: str = "json",
     page: int = 0,
     page_size: int = 0,
+    use_embeddings: bool = False,
     progress_cb=None,
 ) -> dict:
     """Generate a ranked context pack.
@@ -128,6 +129,8 @@ def get_context_pack(
             (path:title:excerpt lines, lower token overhead for agent consumption).
         page: Zero-based page index (used with page_size for incremental loading).
         page_size: Items per page. 0 = no pagination (return all ranked items).
+        use_embeddings: Opt-in semantic ranking (triggers a one-time ~33 MB
+            model download). Defaults to False.
         progress_cb: Optional ``(stage, progress, total)`` callable invoked at
             build milestones.  Supplied by the MCP dispatcher when the caller
             sends a ``progressToken``; normal CLI callers leave this ``None``.
@@ -136,8 +139,16 @@ def get_context_pack(
         Serialised ContextPack as a dict, or {"text": ...} when format="compact".
     """
     try:
+        # progress=False is critical on MCP stdio transport — stdout is
+        # reserved for JSON-RPC frames; any progress output would corrupt it.
         pack = _orchestrator(project_root).build_pack(
-            mode, query, page=page, page_size=page_size, progress_cb=progress_cb,
+            mode,
+            query,
+            page=page,
+            page_size=page_size,
+            use_embeddings=use_embeddings,
+            progress=False,
+            progress_cb=progress_cb,
         )
         if format == "compact":
             return {"text": pack.to_compact_text(), "has_more": pack.has_more, "total_items": pack.total_items}

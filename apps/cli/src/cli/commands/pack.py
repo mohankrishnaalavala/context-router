@@ -59,6 +59,23 @@ def pack(
         int,
         typer.Option("--page-size", help="Items per page. 0 = no pagination (return all items)."),
     ] = 0,
+    use_embeddings: Annotated[
+        bool,
+        typer.Option(
+            "--with-semantic/--no-semantic",
+            help=(
+                "Enable semantic ranking via all-MiniLM-L6-v2 "
+                "(~33 MB download on first use)."
+            ),
+        ),
+    ] = False,
+    show_progress: Annotated[
+        bool,
+        typer.Option(
+            "--progress/--no-progress",
+            help="Show a progress bar for first-time model download.",
+        ),
+    ] = True,
 ) -> None:
     """Generate a context pack for the given task MODE.
 
@@ -81,8 +98,15 @@ def pack(
     root = Path(project_root) if project_root else None
     err_path = Path(error_file) if error_file else None
     try:
-        result = Orchestrator(project_root=root).build_pack(
-            mode, query, error_file=err_path, page=page, page_size=page_size
+        result = _run_build_pack(
+            mode=mode,
+            query=query,
+            root=root,
+            err_path=err_path,
+            page=page,
+            page_size=page_size,
+            use_embeddings=use_embeddings,
+            show_progress=show_progress,
         )
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
@@ -100,6 +124,83 @@ def pack(
         return
 
     _print_pack(result)
+
+
+def _run_build_pack(
+    *,
+    mode: str,
+    query: str,
+    root,  # Path | None
+    err_path,  # Path | None
+    page: int,
+    page_size: int,
+    use_embeddings: bool,
+    show_progress: bool,
+):
+    """Call Orchestrator.build_pack with an optional rich progress bar.
+
+    The progress bar is only rendered when:
+    - ``--with-semantic`` is enabled, AND
+    - ``--progress`` is on (default), AND
+    - the sentence-transformers model is not yet cached on disk.
+
+    Everything else goes through a silent path so interactive CLI usage
+    stays quiet for cached packs and non-semantic mode.
+    """
+    from core.orchestrator import Orchestrator  # local import
+
+    orch = Orchestrator(project_root=root)
+
+    # Check cache eligibility cheaply: if the model is already cached we
+    # skip the progress bar entirely. Non-semantic runs never show it.
+    needs_progress = False
+    if show_progress and use_embeddings:
+        try:
+            from ranking.ranker import _embed_model_is_cached
+            needs_progress = not _embed_model_is_cached()
+        except Exception:  # noqa: BLE001
+            needs_progress = show_progress
+
+    if not needs_progress:
+        return orch.build_pack(
+            mode,
+            query,
+            error_file=err_path,
+            page=page,
+            page_size=page_size,
+            use_embeddings=use_embeddings,
+            progress=False,
+        )
+
+    # First-time semantic run — wrap with rich progress.
+    from rich.progress import (  # type: ignore[import-not-found]
+        Progress,
+        SpinnerColumn,
+        TextColumn,
+        TimeElapsedColumn,
+    )
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        TimeElapsedColumn(),
+        transient=True,
+    ) as progress:
+        task_id = progress.add_task("Preparing semantic ranking…", total=None)
+
+        def _cb(msg: str) -> None:
+            progress.update(task_id, description=msg)
+
+        return orch.build_pack(
+            mode,
+            query,
+            error_file=err_path,
+            page=page,
+            page_size=page_size,
+            use_embeddings=use_embeddings,
+            progress=True,
+            download_progress_cb=_cb,
+        )
 
 
 def _print_pack(pack: object) -> None:  # type: ignore[type-arg]

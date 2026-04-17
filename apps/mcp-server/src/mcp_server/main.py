@@ -170,6 +170,15 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     "description": "Items per page. 0 (default) returns all ranked items.",
                     "default": 0,
                 },
+                "use_embeddings": {
+                    "type": "boolean",
+                    "description": (
+                        "Opt into semantic ranking via all-MiniLM-L6-v2. "
+                        "Triggers a ~33 MB model download on first use; "
+                        "subsequent calls are cached. Defaults to false."
+                    ),
+                    "default": False,
+                },
                 "progressToken": {
                     "type": ["string", "integer"],
                     "description": (

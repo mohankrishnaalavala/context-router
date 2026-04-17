@@ -22,6 +22,9 @@ class CapabilitiesConfig(BaseModel):
     """Feature flags for optional capabilities."""
 
     llm_summarization: bool = False
+    # P3-2: opt-in semantic ranking (sentence-transformers). The CLI's
+    # ``--with-semantic`` flag takes precedence over this config value.
+    embeddings_enabled: bool = False
 
 
 class ContextRouterConfig(BaseModel):
