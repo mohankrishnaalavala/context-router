@@ -18,7 +18,7 @@
 | Phase | Outcomes | Done / Total | Target |
 |---|---|---|---|
 | 0 · Scaffolding | docs/release, ship-check skill, smoke script | ✅ 1/1 | 2026-04-17 |
-| 1 · First impressions | cli-version, dedup, interface-kind, semantic-warning, ci-develop | ⬜ 0/5 | 2026-04-24 |
+| 1 · First impressions | cli-version, dedup, interface-kind, semantic-warning, ci-develop | 🟨 3/5 | 2026-04-24 |
 | 2 · Speed & discoverability | cache persistence, proactive embeddings, semantic default, contracts boost | ⬜ 0/4 | 2026-05-01 |
 | 3 · CRG-parity intelligence | edge kinds, enums, hub/bridge, minimal-context, call-chain, risk, untested | ⬜ 0/7 | 2026-05-15 |
 | 4 · Advanced features + MCP polish | flow-level, wiki, streaming, coupling, mimeType, serverInfo, ci95 | ⬜ 0/7 | 2026-05-29 |
@@ -42,11 +42,11 @@ Goal: a first-time user does not see an obvious bug in the first 60 seconds.
 
 | id | sev | effort | status | branch | PR | owner |
 |---|---|---|---|---|---|---|
-| `cli-version-flag` | P0 | S | ⬜ | `phase1/cli-version-flag` | — | agent-A |
+| `cli-version-flag` | P0 | S | ✅* | `phase1/cli-version-flag` | #38 (merged) | agent-A |
 | `pack-table-dedup` | P0 | S | ⬜ | `phase1/pack-table-dedup` | — | agent-B |
 | `interface-kind-label` | P0 | S | ⬜ | `phase1/interface-kind-label` | — | agent-C |
-| `with-semantic-warns-outside-implement` | P1 | S | ⬜ | `phase1/with-semantic-warns` | — | agent-D |
-| `benchmark-develop-ci` | P1 | S | ⬜ | `phase1/benchmark-develop-ci` | — | agent-E |
+| `with-semantic-warns-outside-implement` | P1 | S | ✅ | `phase1/with-semantic-warns` | #37 (merged) | agent-D |
+| `benchmark-develop-ci` | P1 | S | ✅ | `phase1/benchmark-develop-ci` | #36 (merged) | agent-E |
 
 **Parallelism:** 5 isolated worktrees, zero file overlap. See "Conflict-free file map" below.
 
@@ -152,3 +152,20 @@ Every agent:
 - Phase 1's 5 PRs all target `develop`. The first PR to merge is the new base; the remaining 4 rebase (`git rebase origin/develop`) before CI re-runs.
 - No force-push to `develop` or `main`. Force-push on a feature branch requires an explicit user OK.
 - If a merge conflict appears on rebase, the agent stops and surfaces the conflict — no auto-resolve that silently discards the other side's changes.
+
+## Known gate hazard — editable install staleness
+
+Discovered 2026-04-17 during Phase 1 verification: `uv sync --all-packages`
+installs workspace packages as non-editable copies into
+`.venv/lib/python3.12/site-packages/`, so changes in `packages/<pkg>/src/`
+do NOT reach runtime `uv run context-router` until the package is
+force-reinstalled with `uv pip install -e packages/<pkg> --no-deps`.
+
+This caused agent D's correctly-implemented warning to appear to fail the
+smoke in the coordinator's main checkout (while passing in the agent's
+worktree with a fresh venv).
+
+**Mitigation for Phase 2+ agents:** after `uv sync`, always run
+`uv pip install -e packages/<pkg> --no-deps` for each package touched,
+before invoking `scripts/smoke-v3.sh`. Consider adding an `uv-dev-sync`
+helper script as a Phase 2 follow-up outcome.

@@ -47,9 +47,11 @@ outcomes:
     title: "Pack CLI table shows each symbol at most once"
     outcome: "Running `pack` never prints the same (title, path) row twice"
     threshold: "Pagination row appears exactly once on bulletproof-react query 'add pagination'"
-    negative_case: "dedup is silent; duplicates suppressed are counted in debug output"
+    negative_case: "dedup is suppressed COUNT is surfaced via 'N duplicate(s) hidden' line"
+    # verify.cmd uses an anchored regex so that 'Pagination (' only matches
+    # rows starting with exactly "Pagination (" — not "TablePagination (".
     verify:
-      cmd: "uv run context-router pack --mode implement --query 'add pagination' --project-root ${bulletproof_react} | grep -c 'Pagination ('"
+      cmd: "uv run context-router pack --mode implement --query 'add pagination' --project-root ${bulletproof_react} | grep -cE '^Pagination \\('"
       expected_stdout_contains: "1"
 
   - id: interface-kind-label
