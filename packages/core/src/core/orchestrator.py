@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import sys
 import threading
 import warnings
 from pathlib import Path
@@ -31,6 +32,7 @@ from graph_index.git_diff import GitDiffParser
 from ranking import ContextRanker, estimate_tokens
 from storage_sqlite.database import Database
 from storage_sqlite.repositories import (
+    ContractRepository,
     EdgeRepository,
     PackCacheRepository,
     SymbolRepository,
@@ -164,6 +166,19 @@ _DEFAULT_WEIGHTS: dict[str, dict[str, float]] = {
 # Community anchor boost (P2-1): items in the same community as the highest
 # -confidence seed item get this additive bump (capped at 1.0).
 _COMMUNITY_BOOST: float = 0.10
+
+# Phase-2 contracts-consumer boost: items whose file references an OpenAPI
+# endpoint declared in the same repo get this additive bump (clamped at the
+# same 0.95 ceiling used by ``workspace_orchestrator``). Tightening the cap
+# below 1.0 keeps the absolute "guaranteed-relevant" tier reserved for
+# changed_file / runtime_signal sources.
+_CONTRACTS_BOOST: float = 0.10
+_CONTRACTS_BOOST_MAX_CONFIDENCE: float = 0.95
+
+# Cap on how many bytes we read per candidate file when scanning for
+# endpoint references. Keeps the boost cheap on monorepos with multi-MB
+# generated files (vendored bundles, lock files renamed *.py, etc.).
+_CONTRACTS_FILE_READ_LIMIT: int = 256 * 1024
 
 
 def _resolve_weights(
@@ -642,6 +657,16 @@ class Orchestrator:
             )
             all_ranked = ranker.rank(candidates, query, mode)
             all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
+
+            # Phase-2 contracts boost — applied AFTER ranking + dedup so the
+            # boost lifts items that already survived budget enforcement,
+            # and BEFORE pagination so the boosted item lands in page 0.
+            # Re-sort by confidence to keep highest-confidence first.
+            all_ranked = self._apply_contracts_boost(
+                all_ranked, self._root, repo_name="default", config=config
+            )
+            all_ranked.sort(key=lambda i: i.confidence, reverse=True)
+
             total_items_count = len(all_ranked)
 
             if progress_cb is not None:
@@ -857,6 +882,147 @@ class Orchestrator:
             else:
                 boosted.append(item)
         return boosted
+
+    # ------------------------------------------------------------------
+    # Contracts-consumer boost (Phase 2 — single-repo packs)
+    # ------------------------------------------------------------------
+
+    def _load_repo_endpoint_paths(
+        self, db_path: Path, repo_name: str
+    ) -> list[str]:
+        """Return the distinct OpenAPI endpoint paths declared in *repo_name*.
+
+        Falls back to a one-shot ``extract_contracts(self._root)`` walk when
+        the ``api_endpoints`` table is empty. The single-repo CLI ``index``
+        command does not yet populate this table — running the parser at
+        boost time keeps the feature working for any repo with a static
+        OpenAPI spec, without forcing a re-index.
+
+        Returns a deduplicated list (order preserved); empty when neither
+        the table nor the on-disk walk yields any endpoints.
+        """
+        paths: list[str] = []
+        seen: set[str] = set()
+
+        # Step 1 — preferred source: the persisted api_endpoints table.
+        try:
+            with Database(db_path) as db:
+                rows = ContractRepository(db.connection).list_api_endpoints(repo_name)
+            for row in rows:
+                p = row.get("path") or ""
+                if p and p not in seen:
+                    seen.add(p)
+                    paths.append(p)
+        except Exception as exc:  # noqa: BLE001 — DB read is best-effort
+            _warn_optional_subsystem_failure(
+                "Contracts boost endpoint lookup",
+                "falling back to on-disk OpenAPI extraction for this build",
+                exc,
+            )
+
+        if paths:
+            return paths
+
+        # Step 2 — fallback: parse the repo's OpenAPI specs directly.
+        try:
+            from contracts_extractor import ApiEndpoint, extract_contracts
+            for c in extract_contracts(self._root):
+                if isinstance(c, ApiEndpoint) and c.path and c.path not in seen:
+                    seen.add(c.path)
+                    paths.append(c.path)
+        except Exception as exc:  # noqa: BLE001 — fallback is best-effort
+            _warn_optional_subsystem_failure(
+                "Contracts boost on-disk extraction",
+                "the contracts-consumer boost will be skipped for this build",
+                exc,
+            )
+
+        return paths
+
+    def _apply_contracts_boost(
+        self,
+        items: list[ContextItem],
+        repo_root: Path,
+        repo_name: str = "default",
+        config: ContextRouterConfig | None = None,
+    ) -> list[ContextItem]:
+        """Boost items whose source file consumes a same-repo OpenAPI endpoint.
+
+        Mirrors :func:`workspace_orchestrator._boost_contract_linked_items`
+        for the single-repo case: there is no "other repo" to anchor on, so
+        the producer side IS the same repo. Items receive ``+0.10``
+        confidence (clamped at 0.95) when their file references one of the
+        endpoint paths via a quote-anchored URL literal — see
+        :func:`contracts_extractor.file_references_endpoint` for the regex.
+
+        The boost is a no-op when:
+          * the ``capabilities.contracts_boost`` config flag is False,
+          * the repo declares no API endpoints (logged once to stderr), or
+          * the candidate list is empty.
+
+        Returns a NEW list (originals are immutable per pydantic model_copy);
+        the caller is responsible for re-sorting by confidence if order
+        matters.
+        """
+        if not items:
+            return items
+        if config is not None and not config.capabilities.contracts_boost:
+            return items
+
+        db_path = repo_root / ".context-router" / "context-router.db"
+        endpoint_paths = self._load_repo_endpoint_paths(db_path, repo_name)
+        if not endpoint_paths:
+            # Per CLAUDE.md silent-failure rule, name the no-op explicitly.
+            print(
+                "contracts boost skipped (0 endpoints indexed)",
+                file=sys.stderr,
+            )
+            return items
+
+        from contracts_extractor import file_references_endpoint
+
+        # Cache per-file reads — many candidate items share a file (one per
+        # symbol) and re-reading is the dominant cost.
+        file_text_cache: dict[str, str] = {}
+
+        def _read(path_str: str) -> str:
+            if path_str in file_text_cache:
+                return file_text_cache[path_str]
+            text = ""
+            try:
+                p = Path(path_str)
+                if not p.is_absolute():
+                    p = repo_root / p
+                if p.is_file():
+                    # Read at most _CONTRACTS_FILE_READ_LIMIT bytes; this is
+                    # plenty for the imports-and-handler section that holds
+                    # any URL literal worth matching.
+                    with p.open("rb") as fh:
+                        raw = fh.read(_CONTRACTS_FILE_READ_LIMIT)
+                    text = raw.decode("utf-8", errors="replace")
+            except (OSError, ValueError):
+                text = ""
+            file_text_cache[path_str] = text
+            return text
+
+        out: list[ContextItem] = []
+        for item in items:
+            text = _read(item.path_or_ref)
+            if not text:
+                out.append(item)
+                continue
+            matched = any(
+                file_references_endpoint(text, ep) for ep in endpoint_paths
+            )
+            if matched:
+                new_conf = min(
+                    _CONTRACTS_BOOST_MAX_CONFIDENCE,
+                    item.confidence + _CONTRACTS_BOOST,
+                )
+                out.append(item.model_copy(update={"confidence": new_conf}))
+            else:
+                out.append(item)
+        return out
 
     # ------------------------------------------------------------------
     # Review mode

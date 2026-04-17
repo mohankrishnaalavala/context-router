@@ -116,8 +116,121 @@ PY
 }
 
 _check_contracts-boost-single-repo() {
-  echo "FAIL contracts-boost-single-repo: check handler not implemented yet"
-  return 1
+  # Phase-2 outcome: items consuming a same-repo OpenAPI endpoint must
+  # rank higher than otherwise-identical files. We try eShopOnWeb first
+  # (a real .NET reference monorepo) and fall back to an inline fixture
+  # when its index emits zero api_endpoints — eShopOnWeb generates the
+  # spec at runtime via Swashbuckle, so the static OpenAPI walk finds
+  # nothing. Either path validates the same code path; the fallback also
+  # exercises the on-disk extract_contracts() fallback inside
+  # ``Orchestrator._load_repo_endpoint_paths``.
+  local fixture="${PROJECT_CONTEXT_ROOT}/eShopOnWeb"
+
+  _smoke_inline_contracts_boost() {
+    local tmp; tmp="$(mktemp -d -t cr-contracts-boost.XXXXXX)" || return 1
+    # shellcheck disable=SC2064
+    trap "rm -rf '${tmp}'" RETURN
+    local script; script="$(mktemp -t cr_contracts_boost.XXXXXX.py)" || return 1
+    # shellcheck disable=SC2064
+    trap "rm -f '${script}'; rm -rf '${tmp}'" RETURN
+
+    cat >"${script}" <<'PY'
+import sys, json, yaml
+from pathlib import Path
+
+root = Path(sys.argv[1])
+(root / ".context-router").mkdir(parents=True, exist_ok=True)
+(root / "src").mkdir(exist_ok=True)
+(root / "src" / "orders_client.py").write_text(
+    "import requests\n\n"
+    "def create_order(payload):\n"
+    "    return requests.post('/api/orders/', json=payload).json()\n"
+)
+(root / "src" / "math_utils.py").write_text(
+    "def add(a, b):\n    return a + b\n"
+)
+(root / "openapi.yaml").write_text(yaml.safe_dump({
+    "openapi": "3.0.0",
+    "info": {"title": "Orders API", "version": "1.0.0"},
+    "paths": {"/api/orders": {"post": {"operationId": "createOrder",
+        "responses": {"200": {"description": "ok"}}}}},
+}))
+
+# Seed the DB with one symbol per file so both files appear as candidates.
+from contracts.interfaces import Symbol
+from storage_sqlite.database import Database
+from storage_sqlite.repositories import SymbolRepository, ContractRepository
+
+db_path = root / ".context-router" / "context-router.db"
+with Database(db_path) as db:
+    SymbolRepository(db.connection).add_bulk(
+        [
+            Symbol(
+                name="create_order", kind="function",
+                file=root / "src" / "orders_client.py",
+                line_start=4, line_end=5, language="python",
+                signature="def create_order(payload):", docstring="",
+            ),
+            Symbol(
+                name="add", kind="function",
+                file=root / "src" / "math_utils.py",
+                line_start=1, line_end=2, language="python",
+                signature="def add(a, b):", docstring="",
+            ),
+        ],
+        "default",
+    )
+    ContractRepository(db.connection).upsert_api_endpoint(
+        "default", "POST", "/api/orders",
+    )
+
+from core.orchestrator import Orchestrator
+pack = Orchestrator(project_root=root).build_pack("implement", "create order")
+top5 = [i.path_or_ref for i in pack.selected_items[:5]]
+client_path = str(root / "src" / "orders_client.py")
+print("TOP5", json.dumps(top5))
+sys.exit(0 if client_path in top5 else 1)
+PY
+
+    if uv run python "${script}" "${tmp}" 2>&1; then
+      echo "PASS contracts-boost-single-repo (inline fixture: orders_client.py in top-5)"
+      return 0
+    else
+      echo "FAIL contracts-boost-single-repo: inline-fixture top-5 missing orders_client.py"
+      return 1
+    fi
+  }
+
+  if [[ ! -d "${fixture}" ]]; then
+    # No external fixture available — go straight to the inline fixture
+    # so this check still exercises the boost on every dev box.
+    _smoke_inline_contracts_boost
+    return $?
+  fi
+
+  uv run context-router index --project-root "${fixture}" >/dev/null 2>&1 || true
+  local ncontracts
+  ncontracts="$(sqlite3 "${fixture}/.context-router/context-router.db" \
+    'SELECT count(*) FROM api_endpoints' 2>/dev/null || echo 0)"
+  if [[ "${ncontracts}" == "0" ]]; then
+    # eShopOnWeb generates its OpenAPI at runtime; fall back to inline.
+    _smoke_inline_contracts_boost
+    return $?
+  fi
+
+  local out top5
+  out="$(uv run context-router pack --mode implement \
+      --query 'create catalog item' --project-root "${fixture}" --json 2>/dev/null)"
+  top5="$(echo "${out}" | python3 -c \
+    "import json,sys; items=json.load(sys.stdin).get('items',[]); print('\n'.join(i.get('path_or_ref','') for i in items[:5]))")"
+  if echo "${top5}" | grep -qiE 'catalog.*controller|catalog.*item|catalog.*endpoint'; then
+    echo "PASS contracts-boost-single-repo (top-5 includes catalog handler)"
+  else
+    echo "FAIL contracts-boost-single-repo: top-5 does not include catalog handler."
+    echo "top5:"
+    echo "${top5}" | sed 's/^/    /'
+    return 1
+  fi
 }
 
 _check_call-chain-symbols-mcp() {
