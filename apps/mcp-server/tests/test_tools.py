@@ -329,3 +329,109 @@ class TestSuggestNextFiles:
         )
         # Should return error or empty suggestions — not crash
         assert "error" in result or "suggestions" in result
+
+
+# ---------------------------------------------------------------------------
+# get_call_chain — P3 Lane C Wave 1 (call-chain-symbols-mcp)
+# ---------------------------------------------------------------------------
+
+
+class TestGetCallChain:
+    """Tests for the MCP ``get_call_chain`` tool."""
+
+    @staticmethod
+    def _seed_chain(project_root: Path) -> dict[str, int]:
+        """Seed a func_a->func_b->func_c 'calls' chain in the project DB."""
+        from contracts.interfaces import Symbol
+        from storage_sqlite.database import Database
+        from storage_sqlite.repositories import EdgeRepository, SymbolRepository
+
+        db_path = project_root / ".context-router" / "context-router.db"
+        ids: dict[str, int] = {}
+        with Database(db_path) as db:
+            sym_repo = SymbolRepository(db.connection)
+            edge_repo = EdgeRepository(db.connection)
+            for letter in ("a", "b", "c"):
+                sym = Symbol(
+                    name=f"func_{letter}",
+                    kind="function",
+                    file=Path(f"/src/{letter}.py"),
+                    line_start=1,
+                    line_end=5,
+                    language="python",
+                )
+                ids[letter] = sym_repo.add(sym, "default")
+            edge_repo.add_raw("default", ids["a"], ids["b"], "calls")
+            edge_repo.add_raw("default", ids["b"], ids["c"], "calls")
+        return ids
+
+    def test_returns_items_list_of_symbol_dicts(self, project_root: Path):
+        from mcp_server.tools import get_call_chain
+
+        ids = self._seed_chain(project_root)
+        result = get_call_chain(
+            symbol_id=ids["a"],
+            max_depth=3,
+            project_root=str(project_root),
+        )
+        assert "items" in result
+        assert isinstance(result["items"], list)
+        assert result["items"], "expected non-empty downstream symbol list"
+        item0 = result["items"][0]
+        # Threshold: each item must include the six required keys.
+        for key in ("id", "name", "kind", "file", "language", "line_start"):
+            assert key in item0, f"missing key {key!r} in {item0!r}"
+        # Plus the two extra keys we promised in the schema.
+        assert "line_end" in item0
+        assert "depth" in item0
+
+    def test_item_keys_cover_full_contract(self, project_root: Path):
+        from mcp_server.tools import get_call_chain
+
+        ids = self._seed_chain(project_root)
+        result = get_call_chain(
+            symbol_id=ids["a"], max_depth=3, project_root=str(project_root)
+        )
+        names = {it["name"] for it in result["items"]}
+        assert {"func_b", "func_c"}.issubset(names)
+
+    def test_max_depth_zero_returns_empty_not_error(self, project_root: Path):
+        from mcp_server.tools import get_call_chain
+
+        ids = self._seed_chain(project_root)
+        result = get_call_chain(
+            symbol_id=ids["a"], max_depth=0, project_root=str(project_root)
+        )
+        assert result == {"items": []}
+        assert "error" not in result
+
+    def test_unknown_symbol_id_returns_empty_not_error(self, project_root: Path):
+        from mcp_server.tools import get_call_chain
+
+        self._seed_chain(project_root)
+        result = get_call_chain(
+            symbol_id=99999, max_depth=3, project_root=str(project_root)
+        )
+        assert result["items"] == []
+        assert "error" not in result
+
+    def test_missing_db_returns_error(self, tmp_path: Path):
+        from mcp_server.tools import get_call_chain
+
+        result = get_call_chain(
+            symbol_id=1, max_depth=3, project_root=str(tmp_path)
+        )
+        # No .context-router/context-router.db under a fresh tmp_path.
+        assert "error" in result
+        assert result["items"] == []
+
+    def test_file_field_is_string_not_path(self, project_root: Path):
+        """JSON-RPC cannot serialise ``pathlib.Path`` — must be a string."""
+        from mcp_server.tools import get_call_chain
+
+        ids = self._seed_chain(project_root)
+        result = get_call_chain(
+            symbol_id=ids["a"], max_depth=3, project_root=str(project_root)
+        )
+        for item in result["items"]:
+            assert isinstance(item["file"], str)

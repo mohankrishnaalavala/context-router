@@ -35,7 +35,7 @@ AI coding agents work best with focused, relevant context rather than entire cod
 | **Multi-repo** | Workspace YAML, cross-repo link detection from Python imports **and** real OpenAPI/protobuf/GraphQL signatures via `workspace detect-links`, unified ranked pack with contract-edge boost |
 | **Graph viz** | Interactive D3.js HTML — color by kind or community cluster |
 | **Call flow analysis** | Symbol-level `EdgeRepository.get_call_chain_symbols` (BFS with per-hop depth); debug mode walks `calls` edges up to 3 hops and surfaces `call_chain` items with decaying confidence (0.45 → 0.315 → 0.22) |
-| **MCP server** | **15 tools** over stdio JSON-RPC 2.0 with validated `inputSchema.required` and `outputSchema` on every tool; `resources` capability for addressable pack history (`context-router://packs/<uuid>`); `notifications/progress` for large packs; compatible with Claude Code, Cursor, Windsurf |
+| **MCP server** | **16 tools** over stdio JSON-RPC 2.0 with validated `inputSchema.required` and `outputSchema` on every tool; `resources` capability for addressable pack history (`context-router://packs/<uuid>`); `notifications/progress` for large packs; compatible with Claude Code, Cursor, Windsurf |
 | **Agent adapters** | Claude system prompt, Copilot instructions, Codex task prompt |
 | **Benchmarks** | Generic 20-task suite plus language-specific suites (React, Spring Boot, ASP.NET Core — `--task-suite` flag), 3 baselines, external repo testing, Markdown report with 95% CIs |
 
@@ -430,7 +430,15 @@ uv run context-router graph --output ./docs/graph.html
 
 # Raw JSON for programmatic use
 uv run context-router graph --json
+
+# Walk the `calls` edges from a seed symbol and list downstream symbols
+uv run context-router graph call-chain --symbol-id 42 --max-depth 3 --json
 ```
+
+Use `graph call-chain --symbol-id N [--max-depth 3] [--json]` to BFS the
+`calls` edges from a seed and emit the downstream symbols (id, name, kind,
+file, language, line numbers, hop depth). Same underlying storage method
+that `get_call_chain` exposes via MCP.
 
 ---
 
@@ -485,7 +493,7 @@ Start the context-router MCP server over stdio JSON-RPC 2.0, exposing all tools 
 context-router mcp
 ```
 
-**Available MCP tools (15 total):**
+**Available MCP tools (16 total):**
 
 In v2.0, the server also declares a `resources` capability — previously built packs are addressable as `context-router://packs/<uuid>` via `resources/list` and `resources/read`. `tools/call get_context_pack` accepts an optional `progressToken` to receive `notifications/progress` while a large pack is built.
 
@@ -505,6 +513,7 @@ In v2.0, the server also declares a `resources` capability — previously built 
 | `list_memory` | List observations sorted by freshness score |
 | `mark_decision_superseded` | Link an old decision to its replacement |
 | `record_feedback` | Record agent feedback for a context pack (useful/missing/noisy) |
+| `get_call_chain` | Walk `calls` edges from a seed symbol id and return downstream symbols (id, name, kind, file, language, line_start) — surfaces `EdgeRepository.get_call_chain_symbols` |
 
 ---
 

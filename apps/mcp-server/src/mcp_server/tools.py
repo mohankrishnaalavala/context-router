@@ -744,6 +744,76 @@ def mark_decision_superseded(
     return {"updated": True, "superseded": old_id, "superseded_by": new_id}
 
 
+def get_call_chain(
+    symbol_id: int,
+    max_depth: int = 3,
+    project_root: str = "",
+    repo_name: str = "default",
+) -> dict:
+    """Walk the ``calls`` edges from ``symbol_id`` and return downstream symbols.
+
+    This surfaces ``EdgeRepository.get_call_chain_symbols`` — the storage-layer
+    BFS that returns actual symbol objects (with file, language, line numbers)
+    rather than bare file paths, which is what an AI agent needs when tracing
+    execution flow.
+
+    Args:
+        symbol_id: Seed symbol id to walk from.
+        max_depth: Maximum number of call-chain hops. ``0`` returns an empty
+            list (silent no-op — symbol IDs may legitimately not exist and
+            max_depth=0 is treated as an explicit request for "no hops").
+        project_root: Path to project root. Auto-detected if omitted.
+        repo_name: Logical repository name.
+
+    Returns:
+        Dict with key ``items`` → list of symbol dicts, each with keys
+        ``id``, ``name``, ``kind``, ``file``, ``language``, ``line_start``,
+        ``line_end``, ``depth``.  Returns ``{"items": []}`` for
+        ``max_depth=0`` or an unknown ``symbol_id`` — not an error.
+    """
+    import sys as _sys
+    from dataclasses import asdict
+
+    from core.orchestrator import _find_project_root
+    from storage_sqlite.database import Database
+    from storage_sqlite.repositories import EdgeRepository
+
+    # Negative case: max_depth=0 returns an empty list, not an error.
+    if max_depth <= 0:
+        return {"items": []}
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    db_path = root / ".context-router" / "context-router.db"
+    if not db_path.exists():
+        return {"error": f"Database not found at {db_path}. Run init first.", "items": []}
+
+    with Database(db_path) as db:
+        repo = EdgeRepository(db.connection)
+        refs = repo.get_call_chain_symbols(
+            repo=repo_name,
+            from_symbol_id=symbol_id,
+            max_depth=max_depth,
+        )
+
+    items: list[dict] = []
+    for ref in refs:
+        d = asdict(ref)
+        # dataclasses.asdict keeps Path as-is; JSON-RPC must serialise it.
+        d["file"] = str(ref.file)
+        items.append(d)
+
+    if not items:
+        # CLAUDE.md silent-failure rule: emit a stderr debug note so callers
+        # (and tests) can distinguish "seed absent / no callees" from an error.
+        print(
+            f"[get_call_chain] no callees for symbol_id={symbol_id} "
+            f"in repo={repo_name!r} (seed may not exist or has no outgoing calls edges)",
+            file=_sys.stderr,
+        )
+
+    return {"items": items}
+
+
 def get_decisions(query: str = "", project_root: str = "") -> dict:
     """Search or list stored architectural decisions.
 

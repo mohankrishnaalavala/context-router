@@ -234,8 +234,39 @@ PY
 }
 
 _check_call-chain-symbols-mcp() {
-  echo "FAIL call-chain-symbols-mcp: check handler not implemented yet"
-  return 1
+  # Use this repo as the fixture — it is always present and has a known
+  # call chain.  We only need an indexed DB to read a method/function id
+  # and walk a chain via the CLI front door for get_call_chain_symbols.
+  uv run context-router index --project-root "${REPO_ROOT}" >/dev/null 2>&1
+  local sid
+  sid="$(sqlite3 "${REPO_ROOT}/.context-router/context-router.db" \
+    "SELECT id FROM symbols WHERE kind='method' OR kind='function' LIMIT 1")"
+  if [[ -z "${sid}" ]]; then
+    echo "FAIL call-chain-symbols-mcp: no method/function symbol to test"
+    return 1
+  fi
+  local out
+  out="$(uv run context-router graph call-chain --project-root "${REPO_ROOT}" \
+           --symbol-id "${sid}" --max-depth 3 --json 2>/dev/null)"
+  local check
+  check="$(echo "${out}" | python3 -c "import json,sys
+d=json.load(sys.stdin)
+print('ok' if (isinstance(d, list) and (len(d)==0 or all(k in d[0] for k in ['id','name','kind','file','language','line_start']))) else 'bad')")"
+  if [[ "${check}" != "ok" ]]; then
+    echo "FAIL call-chain-symbols-mcp: output shape wrong"
+    echo "${out}" | head -5
+    return 1
+  fi
+  # Negative case: max_depth=0 must return [], not an error.
+  local empty_out
+  empty_out="$(uv run context-router graph call-chain --project-root "${REPO_ROOT}" \
+                 --symbol-id "${sid}" --max-depth 0 --json 2>/dev/null)"
+  if [[ "${empty_out}" != "[]" ]]; then
+    echo "FAIL call-chain-symbols-mcp: max_depth=0 did not return []"
+    echo "${empty_out}" | head -5
+    return 1
+  fi
+  echo "PASS call-chain-symbols-mcp"
 }
 
 _check_mcp-mimetype-content() {
