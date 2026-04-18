@@ -27,6 +27,63 @@ class TestInitialize:
         resp = _handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
         assert "tools" in resp["result"]["capabilities"]
 
+    def test_server_version_matches_installed_package(self):
+        """Phase-4 mcp-serverinfo-version: serverInfo.version comes from
+        importlib.metadata, not a hard-coded literal."""
+        import re
+        from importlib.metadata import version as pkg_version
+
+        expected = pkg_version("context-router-mcp-server")
+        resp = _handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        observed = resp["result"]["serverInfo"]["version"]
+        assert observed == expected, (
+            f"serverInfo.version {observed!r} does not match installed "
+            f"package version {expected!r}"
+        )
+        # Must be a SemVer-ish string (accept both 2.x during dev and 3.x).
+        assert re.match(r"^\d+\.\d+\.\d+", observed), (
+            f"serverInfo.version {observed!r} is not SemVer-shaped"
+        )
+
+    def test_server_version_is_not_hardcoded_stub(self):
+        """Guard against accidental regression to the old ``0.1.0`` literal."""
+        resp = _handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+        assert resp["result"]["serverInfo"]["version"] != "0.1.0"
+        assert resp["result"]["serverInfo"]["version"] != "0.0.0+unknown"
+
+    def test_import_fails_clearly_when_package_missing(self, monkeypatch):
+        """Phase-4 mcp-serverinfo-version negative case: if the package
+        metadata cannot be resolved, module import MUST raise ImportError
+        with a clear message — NOT silently fall back to a stub version.
+
+        We drop the already-loaded ``mcp_server.main`` from ``sys.modules``
+        and re-import it under a patched ``importlib.metadata.version``
+        that raises for our distribution name.
+        """
+        import importlib
+        import importlib.metadata as md
+        import sys
+
+        real_version = md.version
+
+        def _raise(name: str) -> str:
+            if name == "context-router-mcp-server":
+                raise md.PackageNotFoundError(name)
+            return real_version(name)
+
+        monkeypatch.setattr(md, "version", _raise)
+        # Drop any cached copy so the module-level version lookup re-runs.
+        monkeypatch.delitem(sys.modules, "mcp_server.main", raising=False)
+        try:
+            with pytest.raises(ImportError, match="not installed"):
+                importlib.import_module("mcp_server.main")
+        finally:
+            # Restore real version resolution and force a clean reload so
+            # subsequent tests see a healthy module.
+            monkeypatch.setattr(md, "version", real_version)
+            sys.modules.pop("mcp_server.main", None)
+            importlib.import_module("mcp_server.main")
+
 
 class TestPing:
     def test_returns_empty_result(self):
@@ -114,6 +171,49 @@ class TestToolsCall:
         # Must be valid JSON
         parsed = json.loads(content_text)
         assert "error" in parsed
+
+    def test_content_block_includes_mimetype(self, tmp_path):
+        """Phase-4 mcp-mimetype-content: every text content block advertises
+        its MIME type — json-serialised tool output gets application/json."""
+        resp = _handle({
+            "jsonrpc": "2.0", "id": 40, "method": "tools/call",
+            "params": {"name": "build_index", "arguments": {"project_root": str(tmp_path)}},
+        })
+        blocks = resp["result"]["content"]
+        assert blocks, "tools/call must return at least one content block"
+        for block in blocks:
+            assert "mimeType" in block, (
+                f"content block missing mimeType: {block!r}"
+            )
+            assert block["mimeType"] in {"application/json", "text/plain"}, (
+                f"unexpected mimeType: {block['mimeType']!r}"
+            )
+        # Our current toolset is all-JSON — assert the concrete value.
+        assert blocks[0]["mimeType"] == "application/json"
+
+    def test_mimetype_present_for_every_tool_on_invalid_args(self):
+        """Even tool calls that fail validation MUST return a JSON-RPC
+        error, never a content block without mimeType."""
+        # Invalid args → JSON-RPC error, not a content block.  Ensures the
+        # mimeType change doesn't leak into the error path.
+        resp = _handle({
+            "jsonrpc": "2.0", "id": 41, "method": "tools/call",
+            "params": {"name": "update_index", "arguments": {}},
+        })
+        assert "error" in resp
+        assert "result" not in resp
+
+    def test_mimetype_on_error_result(self, tmp_path):
+        """When the tool fn returns an error dict (not a raised exception),
+        the content block is still wrapped with mimeType, and isError=True."""
+        resp = _handle({
+            "jsonrpc": "2.0", "id": 42, "method": "tools/call",
+            "params": {"name": "build_index", "arguments": {"project_root": str(tmp_path)}},
+        })
+        block = resp["result"]["content"][0]
+        assert block["type"] == "text"
+        assert block["mimeType"] == "application/json"
+        assert resp["result"]["isError"] is True
 
     def test_invalid_arguments_returns_jsonrpc_error(self):
         # update_index requires changed_files — omitting it must return a JSON-RPC error

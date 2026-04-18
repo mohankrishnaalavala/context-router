@@ -270,13 +270,31 @@ print('ok' if (isinstance(d, list) and (len(d)==0 or all(k in d[0] for k in ['id
 }
 
 _check_mcp-mimetype-content() {
-  echo "FAIL mcp-mimetype-content: check handler not implemented yet"
-  return 1
+  # Outcome: every text content block in a tools/call response carries
+  # a ``mimeType``.  The probe spawns a stdio MCP session, issues a
+  # canned tools/call, and validates the block's mimeType field.
+  local result
+  result="$(uv run python "${REPO_ROOT}/scripts/mcp_mimetype_probe.py" 2>/dev/null)"
+  if [[ "${result}" == PASS* ]]; then
+    echo "${result}"
+  else
+    echo "FAIL mcp-mimetype-content: ${result}"
+    return 1
+  fi
 }
 
 _check_mcp-serverinfo-version() {
-  echo "FAIL mcp-serverinfo-version: check handler not implemented yet"
-  return 1
+  # Outcome: initialize.serverInfo.version matches the installed
+  # ``context-router-mcp-server`` distribution metadata and is
+  # SemVer-shaped.
+  local result
+  result="$(uv run python "${REPO_ROOT}/scripts/mcp_version_probe.py" 2>/dev/null)"
+  if [[ "${result}" == PASS* ]]; then
+    echo "${result}"
+  else
+    echo "FAIL mcp-serverinfo-version: ${result}"
+    return 1
+  fi
 }
 
 _check_hub-bridge-ranking-signals() {

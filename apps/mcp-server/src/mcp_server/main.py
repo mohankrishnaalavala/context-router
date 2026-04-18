@@ -16,6 +16,8 @@ import json
 import os
 import sys
 import threading
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from typing import Any
 
 from mcp_server import tools
@@ -24,6 +26,26 @@ from mcp_server import tools
 # acquire this lock so a response and an in-flight notification cannot
 # interleave mid-line in the JSON-RPC stream.
 _write_lock: Any = threading.RLock()
+
+
+# Phase-4 mcp-serverinfo-version: the MCP ``initialize`` response's
+# ``serverInfo.version`` MUST reflect the actually installed package so
+# clients can reason about capabilities.  We resolve the version once
+# at import time from installed package metadata.  If the package is
+# not installed (e.g. the server was launched from a source tree that
+# was never ``pip install``ed), we raise a clear ImportError on import
+# rather than silently shipping a bogus ``"0.0.0"`` — silent fallback
+# would let stale/unknown versions ride into production MCP handshakes.
+_MCP_SERVER_DIST = "context-router-mcp-server"
+try:
+    _SERVER_VERSION: str = _pkg_version(_MCP_SERVER_DIST)
+except PackageNotFoundError as exc:  # pragma: no cover — import-time guard
+    raise ImportError(
+        f"context-router MCP server package {_MCP_SERVER_DIST!r} is not "
+        "installed; cannot determine serverInfo.version. Install the "
+        "package (e.g. `uv sync` or `pip install -e apps/mcp-server`) "
+        "and retry."
+    ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -995,7 +1017,7 @@ def _handle(request: dict) -> dict | None:
                 "tools": {},
                 "resources": {"listChanged": True},
             },
-            "serverInfo": {"name": "context-router", "version": "0.1.0"},
+            "serverInfo": {"name": "context-router", "version": _SERVER_VERSION},
         })
 
     if method == "tools/list":
@@ -1044,8 +1066,18 @@ def _handle(request: dict) -> dict | None:
             if not is_error and tool_name in _PACK_BUILDING_TOOLS:
                 _notify("notifications/resources/list_changed", {})
 
+            # Phase-4 mcp-mimetype-content: every text content block MUST
+            # advertise its MIME type so clients can route the payload.
+            # All 17 tools return JSON-serialisable dicts, so we tag the
+            # single content block as ``application/json``.  If a future
+            # tool emits a plain-text response, switch its block to
+            # ``text/plain`` here — but DO NOT omit ``mimeType``.
             return _ok(req_id, {
-                "content": [{"type": "text", "text": json.dumps(result, default=str)}],
+                "content": [{
+                    "type": "text",
+                    "text": json.dumps(result, default=str),
+                    "mimeType": "application/json",
+                }],
                 "isError": is_error,
             })
         except TypeError as exc:
