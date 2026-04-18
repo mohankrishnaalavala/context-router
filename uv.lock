@@ -455,12 +455,14 @@ version = "2.0.0"
 source = { editable = "packages/ranking" }
 dependencies = [
     { name = "context-router-contracts" },
+    { name = "context-router-graph-index" },
     { name = "tiktoken" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "context-router-contracts", editable = "packages/contracts" },
+    { name = "context-router-graph-index", editable = "packages/graph-index" },
     { name = "tiktoken", specifier = ">=0.7" },
 ]
 

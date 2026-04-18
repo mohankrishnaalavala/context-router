@@ -24,6 +24,11 @@ from typing import Any, Callable
 
 from contracts.models import ContextItem
 
+# ``graph_index.metrics`` is imported lazily inside ``_apply_hub_bridge_boost``
+# to avoid a top-level import cycle (``ranking → graph_index → core →
+# ranking`` via the orchestrator). ``metrics`` itself pulls in only
+# ``sqlite3`` and ``sys`` so the deferred import is cheap.
+
 _EMBED_MODEL: object | None = None
 _EMBED_LOCK = threading.Lock()
 
@@ -251,6 +256,7 @@ class ContextRanker:
         token_budget: int = 8_000,
         use_embeddings: bool = False,
         progress_cb: Callable[[str], None] | None = None,
+        use_hub_boost: bool | None = None,
     ) -> None:
         """Initialise the ranker with a token budget.
 
@@ -264,10 +270,18 @@ class ContextRanker:
                 first-time model download (see :func:`_get_embed_model`).
                 Used by the CLI to render a rich progress bar; must be None
                 on MCP stdio transport to avoid corrupting JSON-RPC frames.
+            use_hub_boost: If True, apply the Phase-3 hub / bridge structural
+                boost after BM25 and before semantic ranking. If ``None``
+                (the default), the flag is resolved per-call from the
+                ``CAPABILITIES_HUB_BOOST`` environment variable or from the
+                discovered project's ``capabilities.hub_boost`` config key
+                (the Orchestrator does not pass this flag today, hence the
+                env-/config-driven fallback).
         """
         self._budget = token_budget
         self._use_embeddings = use_embeddings
         self._progress_cb = progress_cb
+        self._use_hub_boost = use_hub_boost
         # P1-6: BM25 corpus cache — maps items_key -> _BM25Scorer
         # Bounded at 5 entries to avoid unbounded memory growth.
         self._bm25_cache: dict[int, Any] = {}
@@ -308,6 +322,14 @@ class ContextRanker:
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
         boosted = self._apply_bm25_boost(annotated, query_tokens)
+        # v3 phase-3 (outcome: hub-bridge-ranking-signals): structural
+        # boost applied AFTER BM25 so BM25's normalised signal is not
+        # flattened, and BEFORE the semantic pass so both additive
+        # signals compose on the same base. Off by default — resolved
+        # per-call from ``CAPABILITIES_HUB_BOOST`` env var or from
+        # ``capabilities.hub_boost`` in the discovered project config.
+        if self._resolve_hub_boost_enabled(items):
+            boosted = self._apply_hub_bridge_boost(boosted)
         # v3 phase-2 (outcome: semantic-default-with-progress): the semantic
         # boost now applies in every pack mode when ``use_embeddings=True``.
         # Prior to phase 2 this was gated to ``mode == "implement"`` and a
@@ -568,6 +590,226 @@ class ContextRanker:
             new_conf = min(0.95, 0.6 * item.confidence + 0.4 * bm25)
             result.append(item.model_copy(update={"confidence": new_conf}))
         return result
+
+    # ------------------------------------------------------------------
+    # Hub / bridge structural boost (v3 phase-3: hub-bridge-ranking-signals)
+    # ------------------------------------------------------------------
+
+    def _resolve_hub_boost_enabled(self, items: list[ContextItem]) -> bool:
+        """Return True iff the hub/bridge boost should run for this call.
+
+        Resolution order:
+            1. The constructor-supplied ``use_hub_boost`` overrides if set.
+            2. ``CAPABILITIES_HUB_BOOST`` env var (``1``/``true``/``yes``
+               → True; anything else False). Makes the flag toggleable
+               from shell scripts / smoke tests without editing config.
+            3. ``capabilities.hub_boost`` in the discovered project
+               ``.context-router/config.yaml``. ``False`` by default.
+
+        Silent no-ops are a policy violation (see CLAUDE.md). If the
+        boost is requested but structurally cannot run (no db found, no
+        edges indexed), ``_apply_hub_bridge_boost`` warns to stderr.
+        """
+        if self._use_hub_boost is not None:
+            return bool(self._use_hub_boost)
+
+        env = os.environ.get("CAPABILITIES_HUB_BOOST")
+        if env is not None:
+            return env.strip().lower() in {"1", "true", "yes", "on"}
+
+        db_path = _discover_db_path(items)
+        if db_path is None:
+            return False
+        try:
+            from contracts.config import load_config  # local to avoid import cost
+
+            cfg = load_config(db_path.parent.parent)
+            return bool(getattr(cfg.capabilities, "hub_boost", False))
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _apply_hub_bridge_boost(
+        self, items: list[ContextItem]
+    ) -> list[ContextItem]:
+        """Lift items whose underlying symbol is a hub or bridge.
+
+        Formula (caps at ``+0.10``):
+
+            boost = min(0.10, 0.07 * hub_score + 0.05 * bridge_score)
+
+        Resolution steps:
+            1. Discover the project DB from the item paths (reuses
+               :func:`_discover_db_path`, so read-only items like
+               memory / decisions are ignored for this pass).
+            2. Resolve ``(path_or_ref, name) → symbol_id`` via one bulk
+               query per repo, mirroring :meth:`_fetch_stored_vectors`.
+            3. Fetch hub + bridge scores and apply the capped boost.
+
+        Silent-failure rule: if the DB cannot be found OR structural
+        metrics are empty (e.g. graph not yet built), we emit a single
+        stderr line and return the original list. Items whose
+        ``symbol_id`` cannot be resolved (e.g. FTS-only hits with no
+        matching symbol row) are passed through untouched.
+        """
+        if not items:
+            return items
+
+        db_path = _discover_db_path(items)
+        if db_path is None:
+            self._warn_hub_boost_skipped("no .context-router DB discovered")
+            return items
+
+        sid_by_item_id = self._resolve_symbol_ids(items, db_path)
+        if not sid_by_item_id:
+            # No items map to a known symbol — safe to skip silently
+            # (this path is hit for memory-/decision-only packs).
+            return items
+
+        try:
+            import sqlite3
+
+            # Deferred import — see module-level comment for why.
+            from graph_index.metrics import (  # noqa: PLC0415
+                compute_bridge_scores,
+                compute_hub_scores,
+            )
+
+            conn = sqlite3.connect(db_path)
+            try:
+                # Use first resolved repo scope. Packs are single-repo in
+                # practice; if multi-repo ever arrives, a caller-side
+                # loop over repos would be the right extension.
+                repo_name = self._dominant_repo(items)
+                hub = compute_hub_scores(conn, repo_name)
+                bridge = compute_bridge_scores(conn, repo_name)
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001
+            self._warn_hub_boost_skipped(
+                f"metrics query failed ({type(exc).__name__}: {exc})"
+            )
+            return items
+
+        if not hub and not bridge:
+            self._warn_hub_boost_skipped(
+                "hub / bridge metrics empty — is the graph indexed?"
+            )
+            return items
+
+        out: list[ContextItem] = []
+        for item in items:
+            sid = sid_by_item_id.get(id(item))
+            # Public attribute fallback so callers that carry a
+            # ``symbol_id`` on a custom subclass still benefit.
+            if sid is None:
+                sid = getattr(item, "symbol_id", None)
+            if sid is None:
+                out.append(item)
+                continue
+            h = hub.get(int(sid), 0.0)
+            b = bridge.get(int(sid), 0.0)
+            raw = 0.07 * h + 0.05 * b
+            boost = min(0.10, raw)
+            if boost <= 0:
+                out.append(item)
+                continue
+            new_conf = min(0.95, item.confidence + boost)
+            out.append(item.model_copy(update={"confidence": new_conf}))
+        return out
+
+    def _resolve_symbol_ids(
+        self, items: list[ContextItem], db_path: Path
+    ) -> dict[int, int]:
+        """Return ``{id(item): symbol_id}`` for items resolvable via symbols.
+
+        Mirrors :meth:`_fetch_stored_vectors` — same (file_path, name)
+        lookup keyed through a WITH-VALUES CTE. Returns ``{}`` on any
+        failure so the hub/bridge path degrades gracefully.
+        """
+        try:
+            import sqlite3
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            try:
+                by_repo: dict[str, list[ContextItem]] = {}
+                for it in items:
+                    by_repo.setdefault(it.repo or "default", []).append(it)
+
+                result: dict[int, int] = {}
+                for repo_name, group in by_repo.items():
+                    keys: list[tuple[str, str]] = []
+                    item_by_key: dict[tuple[str, str], list[ContextItem]] = {}
+                    for it in group:
+                        name = it.title.split(" (")[0].strip()
+                        if not name or not it.path_or_ref:
+                            continue
+                        key = (it.path_or_ref, name)
+                        keys.append(key)
+                        item_by_key.setdefault(key, []).append(it)
+
+                    if not keys:
+                        continue
+
+                    placeholders = ",".join("(?, ?)" for _ in keys)
+                    flat: list[str] = []
+                    for fp, nm in keys:
+                        flat.append(fp)
+                        flat.append(nm)
+                    rows = conn.execute(
+                        f"""
+                        WITH wanted(file_path, name) AS (VALUES {placeholders})
+                        SELECT s.id, s.file_path, s.name
+                        FROM symbols s
+                        JOIN wanted w
+                          ON s.file_path = w.file_path AND s.name = w.name
+                        WHERE s.repo = ?
+                        """,
+                        (*flat, repo_name),
+                    ).fetchall()
+
+                    sid_by_key: dict[tuple[str, str], int] = {}
+                    for r in rows:
+                        sid_by_key[(r["file_path"], r["name"])] = int(r["id"])
+
+                    for key, sid in sid_by_key.items():
+                        for it in item_by_key.get(key, []):
+                            result[id(it)] = sid
+                return result
+            finally:
+                conn.close()
+        except Exception:  # noqa: BLE001
+            return {}
+
+    @staticmethod
+    def _dominant_repo(items: list[ContextItem]) -> str:
+        """Return the most common non-empty ``repo`` across *items*.
+
+        Packs are single-repo today; this helper exists so that a future
+        multi-repo caller gets a deterministic pick (majority wins,
+        ties go to first-seen).
+        """
+        counts: dict[str, int] = {}
+        order: list[str] = []
+        for it in items:
+            key = it.repo or "default"
+            if key not in counts:
+                order.append(key)
+            counts[key] = counts.get(key, 0) + 1
+        if not order:
+            return "default"
+        order.sort(key=lambda k: counts[k], reverse=True)
+        return order[0]
+
+    def _warn_hub_boost_skipped(self, reason: str) -> None:
+        """Emit a one-line stderr warning when the boost is requested but skipped."""
+        try:
+            print(
+                f"context-router: hub_boost requested but skipped — {reason}",
+                file=sys.stderr,
+            )
+        except Exception:  # noqa: BLE001
+            pass
 
     def _annotate(self, item: ContextItem) -> ContextItem:
         """Return a copy of *item* with the reason field populated."""
