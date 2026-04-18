@@ -6,12 +6,28 @@ analyzers into persisted SQLite rows via the repository pattern.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from contracts.interfaces import DependencyEdge, Symbol
 from storage_sqlite.repositories import EdgeRepository, SymbolRepository
+
 from graph_index.community import compute_communities
 from graph_index.test_linker import link_tests
+
+# v3 phase4/edge-source-resolution-fix: edge kinds whose ``from_symbol``
+# MUST anchor on a type declaration (class / record / interface / enum
+# / struct) — never on a constructor or method that happens to share
+# the class name.  Constructors share the class name by language rule,
+# so a naive name-based lookup picked the constructor row whenever it
+# appeared first in the table, which corrupted the directionality of
+# inheritance queries (``SELECT from_kind FROM edges WHERE edge_type
+# IN ('extends','implements')`` reported ``constructor`` rows that
+# should have been ``class`` rows).
+_CLASS_LIKE_KINDS: tuple[str, ...] = ("class", "record", "interface", "enum", "struct")
+_INHERITANCE_SOURCE_KINDS: frozenset[str] = frozenset(
+    {"extends", "implements", "tested_by"}
+)
 
 
 class SymbolWriter:
@@ -71,12 +87,22 @@ class SymbolWriter:
         if symbols:
             self._sym_repo.add_bulk(symbols, repo)
 
-        # Build a name → id map for edge resolution
+        # Build a name → id map for edge resolution.
+        # v3 phase4/edge-source-resolution-fix: also build a class-kind
+        # overlay so inheritance / tested_by source resolution can
+        # disambiguate class vs. constructor rows that share a name.
         id_map: dict[str, int] = {}
+        class_id_map: dict[str, int] = {}
         for sym in symbols:
             sym_id = self._sym_repo.get_id(repo, file_str, sym.name, sym.kind)
             if sym_id is not None:
-                id_map[sym.name] = sym_id
+                # First writer wins for id_map so we don't accidentally
+                # overwrite a class row with its constructor row (same
+                # name, different kinds, same file).
+                if sym.name not in id_map:
+                    id_map[sym.name] = sym_id
+                if sym.kind in _CLASS_LIKE_KINDS:
+                    class_id_map[sym.name] = sym_id
 
         # Pass 2: resolve edges and bulk-insert those we can resolve.
         # Supports cross-file edges where the source or target is a symbol
@@ -120,25 +146,113 @@ class SymbolWriter:
             external_id_cache[name] = sid
             return sid
 
+        def _resolve_source_symbol_id(edge: DependencyEdge) -> int | None:
+            """Resolve the ``from_symbol_id`` for *edge*.
+
+            v3 phase4/edge-source-resolution-fix: ``extends`` /
+            ``implements`` / ``tested_by`` edges MUST anchor on a class /
+            record / interface / enum / struct row — never on a
+            constructor that shares the class name.  The analyzer emits
+            these edges keyed by the class NAME (a string), so the
+            writer is responsible for picking the correct row when
+            multiple symbols share that name.
+
+            Resolution order for inheritance edges:
+              1. In-file class-kind overlay (``class_id_map``).
+              2. Cross-file class-kind lookup via a kind-filtered SQL
+                 query against the repo connection.
+              3. Any-kind fallback (existing ``id_map`` / file-path /
+                 ``get_id_by_name``) so we don't regress when the
+                 preferred row is unavailable (e.g. partial indexing).
+              4. Stderr debug note if every lookup fails.  No row is
+                 created and the edge is dropped (CLAUDE.md
+                 silent-failure rule — every drop is logged).
+
+            For other edge kinds (``calls``, ``imports``), behavior is
+            unchanged: fall through to the legacy in-file + cross-file
+            resolution chain.
+            """
+            name = edge.from_symbol
+            if edge.edge_type not in _INHERITANCE_SOURCE_KINDS:
+                return None  # legacy path handles this case
+
+            # 1. Prefer the class-like row in the current file.
+            fid = class_id_map.get(name)
+            if fid is not None:
+                return fid
+
+            # 2. Kind-filtered cross-file lookup.  We go through the
+            # repo's SQLite connection because ``SymbolRepository`` does
+            # not expose a kind-filtered by-name query; this single
+            # statement keeps the fix scoped to the writer.
+            placeholders = ",".join("?" for _ in _CLASS_LIKE_KINDS)
+            row = self._sym_repo._conn.execute(  # noqa: SLF001
+                f"""
+                SELECT id FROM symbols
+                WHERE repo = ? AND name = ? AND kind IN ({placeholders})
+                LIMIT 1
+                """,
+                (repo, name, *_CLASS_LIKE_KINDS),
+            ).fetchone()
+            if row is not None:
+                return row["id"]
+
+            # 3. Any-kind fallback so we don't silently drop edges where
+            # the class is simply not indexed yet (partial repo /
+            # symlinked code) — preserve the previous resolution chain.
+            fallback = id_map.get(name)
+            if fallback is None and ("/" in name or "\\" in name):
+                fallback = self._sym_repo.get_id_for_file(repo, name)
+            if fallback is None:
+                fallback = self._sym_repo.get_id_by_name(repo, name)
+            if fallback is not None:
+                # CLAUDE.md silent-failure rule: the edge is kept, but
+                # warn that we had to settle for a non-class row so
+                # consumers can spot partial indexing.
+                print(
+                    f"[graph-index] debug: {edge.edge_type} source '{name}' "
+                    f"resolved to a non-class row (no class/record/interface/"
+                    f"enum/struct match in repo={repo!r}); edge kept on "
+                    f"fallback id={fallback}",
+                    file=sys.stderr,
+                )
+                return fallback
+
+            # 4. Nothing matched — log and drop.
+            print(
+                f"[graph-index] debug: cannot resolve {edge.edge_type} source "
+                f"'{name}' in repo={repo!r}; edge dropped",
+                file=sys.stderr,
+            )
+            return None
+
         for edge in edges:
-            from_id = id_map.get(edge.from_symbol)
-            to_id = id_map.get(edge.to_symbol)
+            # v3 phase4/edge-source-resolution-fix: for inheritance /
+            # tested_by edges the source anchoring is class-kind-strict.
+            # The helper handles in-file preference, kind-filtered
+            # cross-file lookup, fallback, and stderr logging — so when
+            # it returns None we skip the edge entirely.
+            if edge.edge_type in _INHERITANCE_SOURCE_KINDS:
+                from_id = _resolve_source_symbol_id(edge)
+                to_id = id_map.get(edge.to_symbol)
+                if to_id is None:
+                    to_id = self._sym_repo.get_id_by_name(repo, edge.to_symbol)
+            else:
+                from_id = id_map.get(edge.from_symbol)
+                to_id = id_map.get(edge.to_symbol)
 
-            # Cross-file resolution: from_symbol may be an absolute file path
-            if from_id is None and ("/" in edge.from_symbol or "\\" in edge.from_symbol):
-                from_id = self._sym_repo.get_id_for_file(repo, edge.from_symbol)
+                # Cross-file resolution: from_symbol may be an absolute file path
+                if from_id is None and ("/" in edge.from_symbol or "\\" in edge.from_symbol):
+                    from_id = self._sym_repo.get_id_for_file(repo, edge.from_symbol)
 
-            # Cross-file resolution: from_symbol may be a name defined in
-            # another file (used by extends / implements / tested_by where
-            # the analyzer cannot know the target symbol's file at parse
-            # time — the source class of a ``tested_by`` edge often lives
-            # in a different file than the test class).
-            if from_id is None:
-                from_id = self._sym_repo.get_id_by_name(repo, edge.from_symbol)
+                # Cross-file resolution: from_symbol may be a name defined in
+                # another file.
+                if from_id is None:
+                    from_id = self._sym_repo.get_id_by_name(repo, edge.from_symbol)
 
-            # Cross-file resolution: to_symbol may be a name in another file
-            if to_id is None:
-                to_id = self._sym_repo.get_id_by_name(repo, edge.to_symbol)
+                # Cross-file resolution: to_symbol may be a name in another file
+                if to_id is None:
+                    to_id = self._sym_repo.get_id_by_name(repo, edge.to_symbol)
 
             # External-target fallback for inheritance edges only (NOT for
             # ``calls`` / ``imports`` / ``tested_by`` — those stay strict

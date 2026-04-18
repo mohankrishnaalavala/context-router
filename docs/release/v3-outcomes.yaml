@@ -218,6 +218,17 @@ outcomes:
       cmd: "scripts/smoke-v3.sh check edge-kinds-extended"
       expected_stdout_contains: "PASS edge-kinds-extended"
 
+  - id: edge-source-resolution-fix
+    severity: P1
+    effort: S
+    title: "extends/implements/tested_by edges anchor on class rows (not constructor); C# tested_by targets the method, not the return type"
+    outcome: "On eShopOnWeb, `SELECT from_kind FROM edges WHERE edge_type IN ('extends','implements')` has zero `constructor` rows; `SELECT DISTINCT to_name FROM edges WHERE edge_type='tested_by'` does NOT include `Task`"
+    threshold: "constructor-anchored inherits edges = 0 on eShopOnWeb; `to_name='Task'` rows for `tested_by` = 0"
+    negative_case: "existing `calls`/`imports` edges unchanged (regression guard)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check edge-source-resolution-fix"
+      expected_stdout_contains: "PASS edge-source-resolution-fix"
+
   - id: enum-symbols-extracted
     severity: P3
     effort: S

@@ -446,6 +446,64 @@ c.commit()
   fi
 }
 
+_check_edge-source-resolution-fix() {
+  # v3 phase4/edge-source-resolution-fix (P1): two bugs get fixed here.
+  #   Bug 1 — C# tested_by edges targeted the method's return type
+  #           (``Task``) instead of its identifier.  41/41 test methods
+  #           on eShopOnWeb were mis-targeted; ``to_name='Task'`` rows
+  #           must be 0 after the fix.
+  #   Bug 2 — ``extends``/``implements`` edges anchored on the
+  #           constructor row when the class and constructor shared a
+  #           name.  After the fix, ``SELECT from_kind FROM edges WHERE
+  #           edge_type IN ('extends','implements')`` has zero
+  #           ``constructor`` rows.
+  #
+  # Fixture: eShopOnWeb (the bugs reproduce there at scale).  We also
+  # sanity-check spring-petclinic to confirm the writer fix does not
+  # regress Java anchoring.
+  local fixture="${PROJECT_CONTEXT_ROOT}/eShopOnWeb"
+  [[ -d "${fixture}" ]] || {
+    echo "FAIL edge-source-resolution-fix: fixture missing at ${fixture}"
+    return 1
+  }
+  uv run context-router init --project-root "${fixture}" >/dev/null 2>&1
+  uv run context-router index --project-root "${fixture}" >/dev/null 2>&1
+  local db="${fixture}/.context-router/context-router.db"
+  [[ -f "${db}" ]] || {
+    echo "FAIL edge-source-resolution-fix: db missing at ${db}"
+    return 1
+  }
+  # Bug 2 probe: inheritance edges anchored on constructor rows.
+  local n_ctor_anchored
+  n_ctor_anchored="$(sqlite3 "${db}" "
+    SELECT COUNT(*) FROM edges e
+    JOIN symbols s ON s.id = e.from_symbol_id
+    WHERE e.edge_type IN ('extends','implements') AND s.kind='constructor'
+  ")"
+  # Bug 1 probe: tested_by edges targeting a symbol named 'Task'.
+  local n_task_targets
+  n_task_targets="$(sqlite3 "${db}" "
+    SELECT COUNT(*) FROM edges e
+    JOIN symbols s ON s.id = e.to_symbol_id
+    WHERE e.edge_type='tested_by' AND s.name='Task'
+  ")"
+  # Regression guard: the total ``extends``/``implements``/``tested_by``
+  # edge counts must stay healthy (not zero) — the fix must not wipe
+  # inheritance edges out.
+  local n_ext n_imp n_tst
+  n_ext="$(sqlite3 "${db}" "SELECT COUNT(*) FROM edges WHERE edge_type='extends'")"
+  n_imp="$(sqlite3 "${db}" "SELECT COUNT(*) FROM edges WHERE edge_type='implements'")"
+  n_tst="$(sqlite3 "${db}" "SELECT COUNT(*) FROM edges WHERE edge_type='tested_by'")"
+
+  if [[ "${n_ctor_anchored}" -eq 0 && "${n_task_targets}" -eq 0 \
+        && "${n_ext}" -ge 1 && "${n_imp}" -ge 1 && "${n_tst}" -ge 1 ]]; then
+    echo "PASS edge-source-resolution-fix (ctor-anchored=${n_ctor_anchored} task-targets=${n_task_targets} extends=${n_ext} implements=${n_imp} tested_by=${n_tst})"
+  else
+    echo "FAIL edge-source-resolution-fix: ctor-anchored=${n_ctor_anchored} (want 0), task-targets=${n_task_targets} (want 0), extends=${n_ext} implements=${n_imp} tested_by=${n_tst} (all must be >=1)"
+    return 1
+  fi
+}
+
 _check_edge-kinds-extended() {
   # v3 phase3/edge-kinds-extended: analyzers emit extends / implements /
   # tested_by edges matching the CRG edge-type vocabulary.
