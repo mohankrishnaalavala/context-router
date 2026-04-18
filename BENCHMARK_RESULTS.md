@@ -1,11 +1,62 @@
 # context-router Benchmark Results
 
-Real-world measurements on external Python codebases.
-Token budget: 8,000 (default). All runs: 2026-04-13.
+Real-world measurements, updated per release. Numbers tagged by release.
 
 ---
 
-## TL;DR
+## v3.0.0 — 2026-04-18
+
+Token budget: 8,000 (default). Runs: 10 per task. Latency measured warm (after L2 cache fill). `--runs 10` produces non-null 95% CIs on every metric.
+
+### TL;DR (v3.0.0 — across 3 real OSS repos + self)
+
+| Repo | Files | Symbols | Task suite | Mean reduction | Latency (warm) | Tasks OK |
+|---|---|---|---|---|---|---|
+| context-router (self) | 426 | 1,768 | generic | **94.85%** (CI 94.84–94.86) | 5.84 ms (CI 5.52–6.15) | 20 / 20 |
+| bulletproof-react | 426 | 769 | typescript | **78.69%** (CI 78.69–78.70) | 5.77 ms (CI 5.49–6.05) | 15 / 15 |
+| eShopOnWeb | 352 | 1,386 | dotnet | **90.40%** (CI 90.39–90.41) | 5.77 ms (CI 5.49–6.05) | 15 / 15 |
+| spring-petclinic | 48 | 217 | java | **52.63%** (CI 52.41–52.85) | 5.53 ms (CI 5.24–5.82) | 15 / 15 |
+
+Methodology: `uv run context-router benchmark run --project-root <repo> --task-suite <suite> --runs 10 --json`. CI = mean ± 1.96·σ/√n.
+
+### v3.0.0 delta vs v2.0.0 (where comparable)
+
+- **Cold pack-build wall time: 35–49 % faster** across all three fixtures (0.79 s / 0.89 s / 0.71 s on bulletproof-react / eShopOnWeb / spring-petclinic, median of 3 cold runs).
+- **Warm pack-build inner pipeline (SQLite L2 cache): 3.7× to 12× faster** on repeat queries.
+- **15 / 15 task-suite success rate** on each of the three external repos.
+
+### Cold-vs-warm pipeline latency (v3.0.0)
+
+| Repo | Cold build (inner) | Warm build (inner) | Speedup |
+|---|---|---|---|
+| bulletproof-react | 195 ms | 23 ms | **8.5×** |
+| eShopOnWeb | 229 ms | 19 ms | **12×** |
+| spring-petclinic | 81 ms | 22 ms | **3.7×** |
+
+End-to-end CLI wall time (including uv/typer/rich startup ~0.55 s) is dampened by startup, which is why the public number is "35–49 % faster" rather than "10× faster."
+
+### Honesty caveat — keyword baseline column
+
+The `--keyword` baseline report on v3.0.0 clamps the computed "vs Router" column to ≥ 0 %, which hides cases where the keyword baseline pack is actually *smaller* than the router pack. This affects the `vs_keyword` column in per-task output, **not** the `reduction_pct` column (which compares to the naive "all-files" baseline and is accurate). The clamp is fixed in **v3.1** (`reporters.py:103`); this table will be refreshed with corrected keyword deltas at that release.
+
+### Graph-edge accuracy (v3.0.0)
+
+| Repo | `calls` | `extends` | `implements` | `tested_by` | `imports` |
+|---|---|---|---|---|---|
+| bulletproof-react | 240 | 0 | 0 | 0 | 0 |
+| eShopOnWeb | 348 | 126 | 44 | 41 | 32 |
+| spring-petclinic | 243 | 11 | 6 | 38 | 29 |
+
+bulletproof-react's zeros are a known v3.1 follow-up (TypeScript analyzer extends inheritance/tested_by extraction to function-component + JSX patterns). Zero constructor-anchored inheritance edges on eShopOnWeb confirms the #60 analyzer fix landed cleanly (was 90 pre-#60).
+
+---
+
+## v0.6 / historical — 2026-04-13
+
+Real-world measurements on external Python codebases (pre-CRG-parity, pre-cache persistence).
+Retained for trend tracking.
+
+### Legacy TL;DR
 
 | Repo | Files | Symbols | Avg Reduction | Hit Rate vs Random | Latency |
 |------|-------|---------|---------------|--------------------|---------|

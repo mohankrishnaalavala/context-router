@@ -38,7 +38,7 @@ AI coding agents work best with focused, relevant context rather than entire cod
 | **Multi-repo** | Workspace YAML, cross-repo link detection from Python imports **and** real OpenAPI/protobuf/GraphQL signatures via `workspace detect-links`, unified ranked pack with contract-edge boost |
 | **Graph viz** | Interactive D3.js HTML — color by kind or community cluster |
 | **Call flow analysis** | Symbol-level `EdgeRepository.get_call_chain_symbols` (BFS with per-hop depth); debug mode walks `calls` edges up to 3 hops and surfaces `call_chain` items with decaying confidence (0.45 → 0.315 → 0.22) |
-| **MCP server** | **16 tools** over stdio JSON-RPC 2.0 with validated `inputSchema.required` and `outputSchema` on every tool; `resources` capability for addressable pack history (`context-router://packs/<uuid>`); `notifications/progress` for large packs; compatible with Claude Code, Cursor, Windsurf |
+| **MCP server** | **17 tools** over stdio JSON-RPC 2.0 with validated `inputSchema.required` and `outputSchema` on every tool; `resources` capability for addressable pack history (`context-router://packs/<uuid>`); `notifications/progress` for large packs (≥2 frames on >2k-token responses, 0 on small); every content block carries `mimeType`; compatible with Claude Code, Cursor, Windsurf |
 | **Agent adapters** | Claude system prompt, Copilot instructions, Codex task prompt |
 | **Benchmarks** | Generic 20-task suite plus language-specific suites (React, Spring Boot, ASP.NET Core — `--task-suite` flag), 3 baselines, external repo testing, JSON + Markdown report with 95% CIs per metric (`--runs N`, N≥10 → non-null `ci95`; below 10 emits `ci95: null` plus a stderr warning) |
 
