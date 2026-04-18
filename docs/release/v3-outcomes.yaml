@@ -377,3 +377,14 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check flows-n-plus-one"
       expected_stdout_contains: "PASS flows-n-plus-one"
+
+  - id: hub-bridge-sqlite-reuse
+    severity: P2
+    effort: S
+    title: "Hub-bridge boost reuses orchestrator's SQLite connection"
+    outcome: "_apply_hub_bridge_boost does not open new sqlite3.Connection when called from Orchestrator.build_pack"
+    threshold: "at the boost call site, no sqlite3.connect() invocation when `db_connection` is available"
+    negative_case: "ranker used standalone (no db_connection) still works via the fallback path"
+    verify:
+      cmd: "scripts/smoke-v3.sh check hub-bridge-sqlite-reuse"
+      expected_stdout_contains: "PASS hub-bridge-sqlite-reuse"

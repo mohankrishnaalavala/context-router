@@ -782,6 +782,10 @@ class Orchestrator:
                 token_budget=effective_budget,
                 use_embeddings=use_embeddings,
                 progress_cb=effective_cb,
+                # v3.1 `hub-bridge-sqlite-reuse` (P2): share the open
+                # Database connection so the hub/bridge boost doesn't
+                # open a fresh sqlite3.Connection per pack build.
+                db_connection=db.connection,
             )
             all_ranked = ranker.rank(candidates, query, mode)
             all_ranked, _dup_dropped = _dedup_ranked(all_ranked)

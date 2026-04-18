@@ -1067,6 +1067,85 @@ _check_semantic-default-with-progress() {
   fi
 }
 
+_check_hub-bridge-sqlite-reuse() {
+  # Spy on sqlite3.connect during Orchestrator.build_pack with hub_boost ON.
+  # Count only connects whose call stack includes ranker.py. Pre-fix the
+  # ranker opened >=1 connection per boost; post-fix that drops to 0
+  # because the ranker reuses the Orchestrator-owned Database.connection.
+  local fixture="${PROJECT_CONTEXT_ROOT}/eShopOnWeb"
+  [[ -d "${fixture}" ]] || fixture="${PROJECT_CONTEXT_ROOT}/spring-petclinic"
+  [[ -d "${fixture}" ]] || fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
+  [[ -d "${fixture}" ]] || { echo "FAIL hub-bridge-sqlite-reuse: no fixture under ${PROJECT_CONTEXT_ROOT}"; return 1; }
+
+  local spy_py
+  spy_py=$(mktemp -t hub_sqlite_spy.XXXXXX.py) || return 1
+  # shellcheck disable=SC2064
+  trap "rm -f '${spy_py}'" RETURN
+
+  cat >"${spy_py}" <<'PY'
+import os
+import sqlite3
+import sys
+import traceback
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ["CAPABILITIES_HUB_BOOST"] = "1"
+
+fixture = Path(sys.argv[1])
+db_path = fixture / ".context-router" / "context-router.db"
+
+# Wipe the pack cache first so the ranker actually runs (a cached pack
+# short-circuits build_pack before the ranker is ever touched, which
+# would make this probe a false PASS regardless of the connection fix).
+if db_path.exists():
+    try:
+        with sqlite3.connect(db_path) as _c:
+            _c.execute("DELETE FROM pack_cache")
+            _c.commit()
+    except sqlite3.OperationalError:
+        # pack_cache table not yet migrated — nothing to wipe.
+        pass
+
+from core.orchestrator import Orchestrator
+
+orch = Orchestrator(project_root=fixture)
+
+ranker_connects = 0
+original_connect = sqlite3.connect
+
+def spy(*a, **k):
+    global ranker_connects
+    stack = traceback.extract_stack()
+    if any("ranker.py" in f.filename for f in stack):
+        ranker_connects += 1
+    return original_connect(*a, **k)
+
+with patch("sqlite3.connect", side_effect=spy):
+    try:
+        orch.build_pack("implement", "rank items")
+    except Exception as exc:
+        # Build may fail on an unindexed fixture for unrelated reasons.
+        # We only care about connects attributed to ranker.py frames.
+        print(f"NOTE build_pack raised {type(exc).__name__}: {exc}", file=sys.stderr)
+
+if ranker_connects == 0:
+    print("PASS hub-bridge-sqlite-reuse (0 fresh sqlite3.connect calls from ranker)")
+else:
+    print(f"FAIL hub-bridge-sqlite-reuse ({ranker_connects} sqlite3.connect calls attributed to ranker.py)")
+    sys.exit(1)
+PY
+
+  local out
+  out="$(uv run python "${spy_py}" "${fixture}" 2>/dev/null)"
+  if [[ "${out}" == PASS* ]]; then
+    echo "${out}"
+  else
+    echo "${out:-FAIL hub-bridge-sqlite-reuse: probe produced no output}"
+    return 1
+  fi
+}
+
 _check_minimal-mode-ranker-tuning() {
   local fixture="${PROJECT_CONTEXT_ROOT}/spring-petclinic"
   [[ -d "${fixture}" ]] || { echo "FAIL minimal-mode-ranker-tuning: fixture missing at ${fixture}"; return 1; }
