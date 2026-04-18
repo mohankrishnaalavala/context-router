@@ -319,7 +319,7 @@ outcomes:
       cmd: "scripts/smoke-v3.sh check semantic-default-with-progress"
       expected_stdout_contains: "PASS semantic-default-with-progress"
 
-  # ──────────────────── v3.1 Wave 1 — ranking quality ────────────────────
+  # ──────────────────── v3.1 Wave 1 (added 2026-04-18) ────────────────────
 
   - id: minimal-mode-ranker-tuning
     severity: P1
@@ -331,3 +331,14 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check minimal-mode-ranker-tuning"
       expected_stdout_contains: "PASS minimal-mode-ranker-tuning"
+
+  - id: typescript-inheritance-edges
+    severity: P1
+    effort: M
+    title: "TypeScript analyzer emits extends/implements/tested_by on function-component repos"
+    outcome: "After indexing bulletproof-react, SELECT COUNT(*) FROM edges WHERE edge_type='tested_by' > 0"
+    threshold: "bulletproof-react: tested_by >= 10 edges"
+    negative_case: "non-test TS files do not emit spurious tested_by edges"
+    verify:
+      cmd: "scripts/smoke-v3.sh check typescript-inheritance-edges"
+      expected_stdout_contains: "PASS typescript-inheritance-edges"

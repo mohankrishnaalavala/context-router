@@ -8,6 +8,14 @@ v3 phase3/edge-kinds-extended: emits ``extends`` (class → base class,
 interface → super-interfaces), ``implements`` (class → interface), and
 ``tested_by`` (source symbol → test symbol via ``*.test.ts`` / ``*.spec.ts``
 files that import source symbols) edges.
+
+v3.1 typescript-inheritance-edges: extends ``tested_by`` emission to cover
+function-component React test patterns — anonymous ``test(...)`` /
+``it(...)`` / ``describe(...)`` callbacks that either (a) render a
+JSX element whose tag identifier is an imported same-repo symbol, or
+(b) invoke a named helper that was imported from a same-repo module. No
+edge is emitted when the render/call is outside a recognised test context,
+guarding against spurious edges in non-test sources.
 """
 
 from __future__ import annotations
@@ -72,6 +80,192 @@ def _looks_like_test_name(name: str) -> bool:
     # name — so we also trust any top-level test function that imports real
     # symbols.
     return False
+
+
+# v3.1 typescript-inheritance-edges: test-framework call identifiers whose
+# callback argument we treat as a "test context".  Anonymous arrow / function
+# callbacks inside these calls are what bulletproof-react style React suites
+# use — ``test("name", () => { render(<Foo />); })``.
+_TEST_BLOCK_CALLEES = frozenset(
+    {
+        "test",
+        "it",
+        "fit",
+        "xit",
+        "xtest",
+        "describe",
+        "fdescribe",
+        "xdescribe",
+        "suite",
+        "context",
+        "specify",
+    }
+)
+
+
+# v3.1 typescript-inheritance-edges: identifiers we never treat as system-
+# under-test even when imported into a ``*.test.tsx`` file.  These are test-
+# infrastructure helpers — the test calls them, but they are not the
+# thing being tested.
+_TEST_UTILITY_CALLEES = frozenset(
+    {
+        "render",
+        "renderHook",
+        "renderApp",
+        "renderWithProviders",
+        "mount",
+        "shallow",
+        "fireEvent",
+        "waitFor",
+        "waitForElementToBeRemoved",
+        "act",
+        "screen",
+        "within",
+        "userEvent",
+        "beforeAll",
+        "beforeEach",
+        "afterAll",
+        "afterEach",
+        "expect",
+        "vi",
+        "jest",
+        "vitest",
+        "cleanup",
+    }
+)
+
+
+def _call_function_name(node: object) -> str:
+    """Return the callee identifier for a ``call_expression`` node.
+
+    Returns the bare identifier for ``foo()``, the final ``.property`` for
+    ``a.b.foo()``, or an empty string when the callee is a complex
+    expression.  Helpers both in test detection and in ``tested_by`` emission
+    share this accessor.
+    """
+    fn = _child_by_field(node, "function")
+    if fn is None:
+        return ""
+    ft = fn.type  # type: ignore[attr-defined]
+    if ft == "identifier":
+        return _text(fn)
+    if ft == "member_expression":
+        prop = _child_by_field(fn, "property")
+        return _text(prop) if prop else ""
+    return ""
+
+
+def _is_test_block_call(node: object) -> bool:
+    """True if *node* is a ``call_expression`` to ``test``/``it``/``describe``
+    (or a modifier like ``test.only``).  Used to open a test context when the
+    walker descends into the callback argument.
+    """
+    if node.type != "call_expression":  # type: ignore[attr-defined]
+        return False
+    fn = _child_by_field(node, "function")
+    if fn is None:
+        return False
+    ft = fn.type  # type: ignore[attr-defined]
+    if ft == "identifier":
+        return _text(fn) in _TEST_BLOCK_CALLEES
+    if ft == "member_expression":
+        # ``test.only("…")``, ``it.skip("…")`` — root object is the framework.
+        obj = _child_by_field(fn, "object")
+        if obj is not None and obj.type == "identifier":  # type: ignore[attr-defined]
+            return _text(obj) in _TEST_BLOCK_CALLEES
+    return False
+
+
+def _test_block_label(node: object) -> str:
+    """Return the string-literal label of a ``test(...)``/``it(...)`` call,
+    or an empty string if the first argument is not a string literal."""
+    args = _child_by_field(node, "arguments")
+    if args is None:
+        return ""
+    for c in args.children:  # type: ignore[attr-defined]
+        t = c.type  # type: ignore[attr-defined]
+        if t in ("string", "template_string"):
+            raw = _text(c).strip()
+            # Strip outer quotes / backticks.
+            if len(raw) >= 2 and raw[0] in "\"'`" and raw[-1] == raw[0]:
+                return raw[1:-1]
+            return raw
+        if t in (",", "(", ")"):
+            continue
+        # First non-punctuation arg was not a string — stop scanning.
+        break
+    return ""
+
+
+def _synthesize_test_name(label: str, line: int) -> str:
+    """Turn a free-form test label like 'should render' into a stable symbol
+    name.  Non-identifier characters collapse to underscores, spaces become
+    underscores, and we always prefix with ``test_`` so ``_looks_like_test_name``
+    returns True.  The trailing line number disambiguates identical labels.
+    """
+    if not label:
+        return f"test_line_{line}"
+    slug_chars: list[str] = []
+    for ch in label:
+        if ch.isalnum():
+            slug_chars.append(ch)
+        elif ch in (" ", "\t", "-", "/", ":"):
+            slug_chars.append("_")
+    slug = "".join(slug_chars).strip("_") or f"line_{line}"
+    # Collapse runs of underscores.
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    if not slug.lower().startswith("test") and not slug.lower().startswith("it_"):
+        slug = "test_" + slug
+    return slug
+
+
+def _jsx_tag_identifier(node: object) -> str:
+    """Return the tag identifier of a JSX element.
+
+    Handles ``<Foo />`` (self-closing, type ``jsx_self_closing_element``) and
+    ``<Foo>...</Foo>`` (via the ``jsx_opening_element`` child).  Only
+    capitalised tag names are returned, matching React's convention for
+    component identifiers (``<div />`` is a host element and is ignored).
+    Member expressions like ``<Foo.Bar />`` return the root object
+    (``Foo``) which is what the import bound.
+    """
+    target: object | None = None
+    nt = node.type  # type: ignore[attr-defined]
+    if nt == "jsx_self_closing_element":
+        target = node
+    elif nt == "jsx_element":
+        target = _first_child_of_type(node, "jsx_opening_element")
+    if target is None:
+        return ""
+    name_sub = _child_by_field(target, "name")
+    if name_sub is None:
+        # Fallback: first identifier/member_expression child.
+        for c in target.children:  # type: ignore[attr-defined]
+            if c.type in (  # type: ignore[attr-defined]
+                "identifier",
+                "nested_identifier",
+                "member_expression",
+                "jsx_namespace_name",
+            ):
+                name_sub = c
+                break
+    if name_sub is None:
+        return ""
+    nst = name_sub.type  # type: ignore[attr-defined]
+    if nst == "identifier":
+        name = _text(name_sub)
+    elif nst == "member_expression":
+        obj = _child_by_field(name_sub, "object")
+        # Walk to root object for dotted tags.
+        while obj is not None and obj.type == "member_expression":  # type: ignore[attr-defined]
+            obj = _child_by_field(obj, "object")
+        name = _text(obj) if obj is not None else ""
+    else:
+        name = _text(name_sub)
+    if not name or not name[0].isupper():
+        return ""
+    return name
 
 
 def _is_test_file(file: Path) -> bool:
@@ -264,6 +458,8 @@ def _walk_ts(
     is_test_file: bool = False,
     imported_names: set[str] | None = None,
     has_emitted_test_edge: list[bool] | None = None,
+    in_test_context: bool = False,
+    emitted_jsx_suts: set[str] | None = None,
 ) -> None:
     """Recursively walk a TypeScript tree-sitter node tree.
 
@@ -300,6 +496,8 @@ def _walk_ts(
                     is_test_file=is_test_file,
                     imported_names=imported_names,
                     has_emitted_test_edge=has_emitted_test_edge,
+                    in_test_context=in_test_context,
+                    emitted_jsx_suts=emitted_jsx_suts,
                 )
             return
 
@@ -331,6 +529,8 @@ def _walk_ts(
                     is_test_file=is_test_file,
                     imported_names=imported_names,
                     has_emitted_test_edge=has_emitted_test_edge,
+                    in_test_context=in_test_context,
+                    emitted_jsx_suts=emitted_jsx_suts,
                 )
             return
 
@@ -365,6 +565,8 @@ def _walk_ts(
                 is_test_file=is_test_file,
                 imported_names=imported_names,
                 has_emitted_test_edge=has_emitted_test_edge,
+                in_test_context=in_test_context,
+                emitted_jsx_suts=emitted_jsx_suts,
             )
         return
 
@@ -394,6 +596,8 @@ def _walk_ts(
                 is_test_file=is_test_file,
                 imported_names=imported_names,
                 has_emitted_test_edge=has_emitted_test_edge,
+                in_test_context=in_test_context,
+                emitted_jsx_suts=emitted_jsx_suts,
             )
         return
 
@@ -425,6 +629,8 @@ def _walk_ts(
                 is_test_file=is_test_file,
                 imported_names=imported_names,
                 has_emitted_test_edge=has_emitted_test_edge,
+                in_test_context=in_test_context,
+                emitted_jsx_suts=emitted_jsx_suts,
             )
         return
 
@@ -453,6 +659,8 @@ def _walk_ts(
                 is_test_file=is_test_file,
                 imported_names=imported_names,
                 has_emitted_test_edge=has_emitted_test_edge,
+                in_test_context=in_test_context,
+                emitted_jsx_suts=emitted_jsx_suts,
             )
         return
 
@@ -460,8 +668,14 @@ def _walk_ts(
         # Capture arrow functions: const Foo = () => {...} / const Foo = async () => {...}
         name_node = _child_by_field(node, "name")
         value_node = _child_by_field(node, "value")
-        if name_node and value_node and value_node.type in (  # type: ignore[attr-defined]
-            "arrow_function", "function_expression"
+        if (
+            name_node
+            and value_node
+            and value_node.type
+            in (  # type: ignore[attr-defined]
+                "arrow_function",
+                "function_expression",
+            )
         ):
             name = _text(name_node)
             if name and name[0].isalpha():  # skip destructuring patterns
@@ -486,6 +700,8 @@ def _walk_ts(
                         is_test_file=is_test_file,
                         imported_names=imported_names,
                         has_emitted_test_edge=has_emitted_test_edge,
+                        in_test_context=in_test_context,
+                        emitted_jsx_suts=emitted_jsx_suts,
                     )
                 return
         # Default: recurse for destructuring / non-arrow declarations
@@ -498,6 +714,8 @@ def _walk_ts(
                 is_test_file=is_test_file,
                 imported_names=imported_names,
                 has_emitted_test_edge=has_emitted_test_edge,
+                in_test_context=in_test_context,
+                emitted_jsx_suts=emitted_jsx_suts,
             )
         return
 
@@ -537,44 +755,96 @@ def _walk_ts(
                                 imported_names.add(_text(sub))
         return
 
-    if node_type == "call_expression" and current_func is not None:
-        func_node = _child_by_field(node, "function")
-        called = ""
-        if func_node is not None:
-            ft = func_node.type  # type: ignore[attr-defined]
-            if ft == "identifier":
-                called = _text(func_node)
-            elif ft == "member_expression":
-                prop = _child_by_field(func_node, "property")
-                called = _text(prop) if prop else ""
-
-        if called and called not in _BUILTINS:
+    if node_type == "call_expression":
+        # v3.1 typescript-inheritance-edges: opening a ``test("name", () =>
+        # {...})`` block inside a test file establishes an implicit
+        # "test context" and a synthesized ``current_func`` for the
+        # anonymous callback.  This gives every ``tested_by`` edge a
+        # meaningful destination even when the user did not declare a
+        # named test function (Jest/Vitest/Mocha standard style).
+        if is_test_file and _is_test_block_call(node):
+            line = node.start_point[0] + 1  # type: ignore[index]
+            label = _test_block_label(node)
+            synthesized = _synthesize_test_name(label, line)
+            # Register the synthesized test as a symbol so graph consumers
+            # see an endpoint, matching how named test functions are
+            # emitted elsewhere.
+            end_line = node.end_point[0] + 1  # type: ignore[index]
             results.append(
-                DependencyEdge(
-                    from_symbol=current_func,
-                    to_symbol=called,
-                    edge_type="calls",
+                Symbol(
+                    name=synthesized,
+                    kind="function",
+                    file=file,
+                    line_start=line,
+                    line_end=end_line,
+                    language="typescript",
+                    signature=f"{synthesized}()",
                 )
             )
-            # v3 phase3/edge-kinds-extended: in a test file, if the caller
-            # is a test function and the callee is an imported source
-            # symbol, emit ``tested_by`` from the imported symbol → test
-            # function.  This mirrors CRG's TESTED_BY semantics.
-            if (
-                is_test_file
-                and imported_names is not None
-                and called in imported_names
-                and _looks_like_test_name(current_func)
-            ):
+            # Fresh dedup set per test block so each test can be linked
+            # to the same SUT without duplicate edges *within* the block.
+            child_jsx_suts: set[str] = set()
+            for child in node.children:  # type: ignore[attr-defined]
+                _walk_ts(
+                    child,
+                    results,
+                    file,
+                    current_func=synthesized,
+                    is_test_file=is_test_file,
+                    imported_names=imported_names,
+                    has_emitted_test_edge=has_emitted_test_edge,
+                    in_test_context=True,
+                    emitted_jsx_suts=child_jsx_suts,
+                )
+            return
+
+        # Standard call-edge handling: only emit a ``calls`` edge when we
+        # are inside a named function body (keeps behaviour identical for
+        # non-test source files).
+        if current_func is not None:
+            func_node = _child_by_field(node, "function")
+            called = ""
+            if func_node is not None:
+                ft = func_node.type  # type: ignore[attr-defined]
+                if ft == "identifier":
+                    called = _text(func_node)
+                elif ft == "member_expression":
+                    prop = _child_by_field(func_node, "property")
+                    called = _text(prop) if prop else ""
+
+            if called and called not in _BUILTINS:
                 results.append(
                     DependencyEdge(
-                        from_symbol=called,
-                        to_symbol=current_func,
-                        edge_type="tested_by",
+                        from_symbol=current_func,
+                        to_symbol=called,
+                        edge_type="calls",
                     )
                 )
-                if has_emitted_test_edge is not None:
-                    has_emitted_test_edge[0] = True
+                # v3 phase3/edge-kinds-extended + v3.1 typescript-inheritance-edges:
+                # emit ``tested_by`` when the callee is an imported source
+                # symbol and either (a) the current function has a test-ish
+                # name, or (b) we are inside an anonymous test-block
+                # callback.  The ``called not in _TEST_BLOCK_CALLEES`` guard
+                # prevents us from pointing edges at ``test``/``it``/
+                # ``describe`` themselves when those happen to be imported
+                # (e.g. ``import { test } from 'vitest'``).
+                if (
+                    is_test_file
+                    and imported_names is not None
+                    and called in imported_names
+                    and called not in _TEST_BLOCK_CALLEES
+                    and called not in _TEST_UTILITY_CALLEES
+                    and (in_test_context or _looks_like_test_name(current_func))
+                ):
+                    results.append(
+                        DependencyEdge(
+                            from_symbol=called,
+                            to_symbol=current_func,
+                            edge_type="tested_by",
+                        )
+                    )
+                    if has_emitted_test_edge is not None:
+                        has_emitted_test_edge[0] = True
         for child in node.children:  # type: ignore[attr-defined]
             _walk_ts(
                 child,
@@ -584,8 +854,43 @@ def _walk_ts(
                 is_test_file=is_test_file,
                 imported_names=imported_names,
                 has_emitted_test_edge=has_emitted_test_edge,
+                in_test_context=in_test_context,
+                emitted_jsx_suts=emitted_jsx_suts,
             )
         return
+
+    # v3.1 typescript-inheritance-edges: a JSX element whose tag is an
+    # imported same-repo symbol and that appears inside a test-block
+    # callback (e.g. ``render(<LoginForm />)``) emits ``tested_by`` from
+    # the component to the synthesized test function.  Host tags (lower-
+    # case) and elements outside a test context are ignored, so non-test
+    # TSX sources never produce spurious edges.
+    if (
+        node_type in ("jsx_self_closing_element", "jsx_element")
+        and is_test_file
+        and in_test_context
+        and imported_names is not None
+        and current_func is not None
+    ):
+        tag = _jsx_tag_identifier(node)
+        if (
+            tag
+            and tag in imported_names
+            and emitted_jsx_suts is not None
+            and tag not in emitted_jsx_suts
+        ):
+            emitted_jsx_suts.add(tag)
+            results.append(
+                DependencyEdge(
+                    from_symbol=tag,
+                    to_symbol=current_func,
+                    edge_type="tested_by",
+                )
+            )
+            if has_emitted_test_edge is not None:
+                has_emitted_test_edge[0] = True
+        # Fall through so we also walk into children (call_expression
+        # descendants like ``render(<Foo />)`` still need visitation).
 
     # Default: recurse into children
     for child in node.children:  # type: ignore[attr-defined]
@@ -597,6 +902,8 @@ def _walk_ts(
             is_test_file=is_test_file,
             imported_names=imported_names,
             has_emitted_test_edge=has_emitted_test_edge,
+            in_test_context=in_test_context,
+            emitted_jsx_suts=emitted_jsx_suts,
         )
 
 
@@ -647,6 +954,8 @@ class TypeScriptAnalyzer:
             is_test_file=is_test,
             imported_names=imported_names,
             has_emitted_test_edge=has_emitted_test_edge,
+            in_test_context=False,
+            emitted_jsx_suts=set(),
         )
 
         # Silent-failure rule: test file with imported source symbols but no
