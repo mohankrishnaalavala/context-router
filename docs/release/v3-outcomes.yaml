@@ -115,6 +115,17 @@ outcomes:
       cmd: "scripts/smoke-v3.sh check contracts-boost-single-repo"
       expected_stdout_contains: "PASS contracts-boost-single-repo"
 
+  - id: contracts-boost-tighter-match
+    severity: P1
+    effort: S
+    title: "Contracts boost matches only the exact endpoint path, not arbitrary POSTs"
+    outcome: "On eShopOnWeb, `pack --mode implement --query 'create order'` promotes files that consume `POST /api/orders`, NOT files that POST to other endpoints"
+    threshold: "top-5 contains the catalog-orders client file; does NOT contain unrelated POST consumers"
+    negative_case: "when no endpoint matches, boost does not fire (not applied as +0.10 to every item)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check contracts-boost-tighter-match"
+      expected_stdout_contains: "PASS contracts-boost-tighter-match"
+
   - id: benchmark-develop-ci
     severity: P1
     effort: S
