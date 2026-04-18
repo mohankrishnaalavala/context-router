@@ -76,6 +76,17 @@ outcomes:
       cmd: "uv run context-router index --project-root ${eshop} && sqlite3 ${eshop}/.context-router/db.sqlite \"SELECT count(*) FROM symbols WHERE kind='interface'\""
       expected_stdout_contains: "1"
 
+  - id: benchmark-keyword-baseline-honest
+    severity: P0
+    effort: S
+    title: "Benchmark keyword-baseline vs_keyword column shows honest negatives"
+    outcome: "`benchmark run --json --runs 10` never clamps vs_keyword to 0; when keyword baseline pack is smaller than router, the field is negative"
+    threshold: "on this repo, at least one task has vs_keyword < 0 in --runs 10 output"
+    negative_case: "on fixtures where router is strictly tighter than keyword, vs_keyword is positive across all tasks (regression guard)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check benchmark-keyword-baseline-honest"
+      expected_stdout_contains: "PASS benchmark-keyword-baseline-honest"
+
   # ──────────────────── P1 — hotfix candidates rolled into v3 ────────────────────
 
   - id: pack-cache-persists-cli
@@ -114,6 +125,17 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check contracts-boost-single-repo"
       expected_stdout_contains: "PASS contracts-boost-single-repo"
+
+  - id: contracts-boost-tighter-match
+    severity: P1
+    effort: S
+    title: "Contracts boost matches only the exact endpoint path, not arbitrary POSTs"
+    outcome: "On eShopOnWeb, `pack --mode implement --query 'create order'` promotes files that consume `POST /api/orders`, NOT files that POST to other endpoints"
+    threshold: "top-5 contains the catalog-orders client file; does NOT contain unrelated POST consumers"
+    negative_case: "when no endpoint matches, boost does not fire (not applied as +0.10 to every item)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check contracts-boost-tighter-match"
+      expected_stdout_contains: "PASS contracts-boost-tighter-match"
 
   - id: benchmark-develop-ci
     severity: P1
@@ -318,3 +340,51 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check semantic-default-with-progress"
       expected_stdout_contains: "PASS semantic-default-with-progress"
+
+  # ──────────────────── v3.1 Wave 1 (added 2026-04-18) ────────────────────
+
+  - id: minimal-mode-ranker-tuning
+    severity: P1
+    effort: S
+    title: "Minimal mode preserves the top implement-mode candidate"
+    outcome: "For `pack --mode minimal --query '<task-verb>'`, top-1 item matches the top implement-mode pick when one exists"
+    threshold: "on spring-petclinic 'add visit', top-1 item has `path_or_ref` containing 'visit' (case-insensitive)"
+    negative_case: "when implement-mode has no top pick (e.g. empty repo), minimal mode still returns coverage-selected items without crashing"
+    verify:
+      cmd: "scripts/smoke-v3.sh check minimal-mode-ranker-tuning"
+      expected_stdout_contains: "PASS minimal-mode-ranker-tuning"
+
+  - id: typescript-inheritance-edges
+    severity: P1
+    effort: M
+    title: "TypeScript analyzer emits extends/implements/tested_by on function-component repos"
+    outcome: "After indexing bulletproof-react, SELECT COUNT(*) FROM edges WHERE edge_type='tested_by' > 0"
+    threshold: "bulletproof-react: tested_by >= 10 edges"
+    negative_case: "non-test TS files do not emit spurious tested_by edges"
+    verify:
+      cmd: "scripts/smoke-v3.sh check typescript-inheritance-edges"
+      expected_stdout_contains: "PASS typescript-inheritance-edges"
+
+  # ──────────────────── v3.1 Wave 2 (added 2026-04-18) ────────────────────
+
+  - id: flows-n-plus-one
+    severity: P2
+    effort: S
+    title: "Flow BFS memoizes _callees to avoid N+1 round-trips"
+    outcome: "get_affected_flows on a 1000+ symbol repo issues O(N) SQL queries, not O(N^2)"
+    threshold: "query count < 2x visited symbol count on eShopOnWeb"
+    negative_case: "functional correctness unchanged — same flows returned"
+    verify:
+      cmd: "scripts/smoke-v3.sh check flows-n-plus-one"
+      expected_stdout_contains: "PASS flows-n-plus-one"
+
+  - id: hub-bridge-sqlite-reuse
+    severity: P2
+    effort: S
+    title: "Hub-bridge boost reuses orchestrator's SQLite connection"
+    outcome: "_apply_hub_bridge_boost does not open new sqlite3.Connection when called from Orchestrator.build_pack"
+    threshold: "at the boost call site, no sqlite3.connect() invocation when `db_connection` is available"
+    negative_case: "ranker used standalone (no db_connection) still works via the fallback path"
+    verify:
+      cmd: "scripts/smoke-v3.sh check hub-bridge-sqlite-reuse"
+      expected_stdout_contains: "PASS hub-bridge-sqlite-reuse"

@@ -12,6 +12,7 @@ from contracts_extractor.extractor import extract_contracts
 from contracts_extractor.matching import (
     compile_endpoint_pattern,
     file_references_endpoint,
+    file_references_endpoint_with_method,
 )
 from contracts_extractor.models import (
     ApiEndpoint,
@@ -30,4 +31,5 @@ __all__ = [
     "compile_endpoint_pattern",
     "extract_contracts",
     "file_references_endpoint",
+    "file_references_endpoint_with_method",
 ]

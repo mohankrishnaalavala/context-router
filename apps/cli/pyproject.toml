@@ -1,6 +1,6 @@
 [project]
 name = "context-router-cli"
-version = "3.0.0"
+version = "3.1.0"
 requires-python = ">=3.12"
 description = "Local-first CLI and MCP server for AI coding context — minimum useful context, maximum agent performance"
 readme = "README.md"

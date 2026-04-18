@@ -109,6 +109,48 @@ class TestBenchmarkRunner:
         report = runner.run_suite()
         assert report.summary["total_tasks"] == 20
 
+    def test_run_single_populates_vs_keyword_field(self, project_root):
+        """``run_single`` sets the new per-task baseline-delta fields.
+
+        This is the end-to-end guard for v3.1 outcome
+        ``benchmark-keyword-baseline-honest`` — the field must exist on
+        every TaskMetrics produced by the harness (it starts at 0.0 so
+        even zero-baseline runs don't emit junk; a real run on an
+        indexed project should populate a signed number).
+        """
+        from benchmark import BenchmarkRunner
+        runner = BenchmarkRunner(project_root)
+        task = BenchmarkTask(id="vsk01", mode="review", query="auth token validation")
+        metrics = runner.run_single(task)
+        # Field must exist and be a float (Pydantic would have raised on
+        # load otherwise — this check is belt-and-braces).
+        assert isinstance(metrics.vs_keyword, float)
+        assert isinstance(metrics.vs_naive, float)
+        # Empty project => baseline returns 0, so we expect 0.0 here.
+        # The important thing is that the field is present and typed.
+        assert metrics.vs_keyword == 0.0  # empty project: no baseline
+
+    def test_naive_baseline_cached(self, project_root):
+        """``_naive_tokens_cached`` hits the baseline only once per suite."""
+        from benchmark import BenchmarkRunner
+        runner = BenchmarkRunner(project_root)
+        calls = {"n": 0}
+        import benchmark.harness as harness_mod
+        original = harness_mod.naive_tokens
+
+        def counting(root):
+            calls["n"] += 1
+            return original(root)
+
+        harness_mod.naive_tokens = counting
+        try:
+            runner._naive_tokens_cached()
+            runner._naive_tokens_cached()
+            runner._naive_tokens_cached()
+        finally:
+            harness_mod.naive_tokens = original
+        assert calls["n"] == 1, f"expected 1 call, got {calls['n']}"
+
 
 # ---------------------------------------------------------------------------
 # BenchmarkReport.compute_summary

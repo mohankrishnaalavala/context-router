@@ -172,6 +172,16 @@ _EXTENSION_POINT_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# v3.1 minimal-mode-ranker-tuning: source_type values produced by
+# ``_implement_candidates`` / ``_classify_for_implement``. Items with these
+# source types are "code-symbol" items; other minimal-mode items (memory,
+# decision, runtime_signal, etc.) are metadata overlays that should not
+# outrank a code-symbol pick for a task-verb query. Used in the
+# minimal-mode top-item preservation overlay.
+_IMPLEMENT_SOURCE_TYPES: frozenset[str] = frozenset(
+    {"entrypoint", "contract", "extension_point", "file"}
+)
+
 # Implement mode: confidence per source category
 _IMPLEMENT_CONFIDENCE: dict[str, float] = {
     "entrypoint": 0.90,
@@ -772,6 +782,10 @@ class Orchestrator:
                 token_budget=effective_budget,
                 use_embeddings=use_embeddings,
                 progress_cb=effective_cb,
+                # v3.1 `hub-bridge-sqlite-reuse` (P2): share the open
+                # Database connection so the hub/bridge boost doesn't
+                # open a fresh sqlite3.Connection per pack build.
+                db_connection=db.connection,
             )
             all_ranked = ranker.rank(candidates, query, mode)
             all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
@@ -829,9 +843,26 @@ class Orchestrator:
         # Minimal mode: hard-cap to top-5 items by confidence (ranker already
         # sorts by confidence desc) and attach a next-tool suggestion so the
         # caller can escalate to a deeper pack when the preview isn't enough.
+        #
+        # v3.1 `minimal-mode-ranker-tuning` (P1): the ≤5-item cap alone can
+        # drop the top implement-mode code-symbol pick when a tight
+        # token budget + source-type coverage (``_enforce_budget``) admits
+        # a small item of the same source_type first, pushing a larger
+        # higher-confidence item out of the pack. For task-verb queries
+        # ("add X", "fix Y") the highest-confidence code-symbol item is
+        # the single most task-relevant result — it MUST survive the cap.
+        # We re-rank the same candidate pool with an unbounded budget so
+        # budget-driven drops cannot hide the true top pick, then pin it
+        # at position 0 of the final top-5. Other modes are untouched.
         pack_metadata: dict[str, Any] = {}
         if mode == "minimal":
-            page_items = page_items[:5]
+            page_items = self._preserve_top_implement_item(
+                page_items,
+                candidates=candidates,
+                query=query,
+                use_embeddings=use_embeddings,
+                config=config,
+            )
             has_more = False
             pack_metadata["next_tool_suggestion"] = _suggest_next_tool(page_items, query)
 
@@ -1520,6 +1551,79 @@ class Orchestrator:
     # ------------------------------------------------------------------
     # Implement mode
     # ------------------------------------------------------------------
+
+    def _preserve_top_implement_item(
+        self,
+        page_items: list[ContextItem],
+        *,
+        candidates: list[ContextItem],
+        query: str,
+        use_embeddings: bool,
+        config: ContextRouterConfig | None,
+    ) -> list[ContextItem]:
+        """Return the minimal-mode top-5 with the top implement pick pinned at 0.
+
+        Applied only from the ``build_pack`` minimal-mode branch. It
+        augments the naive ``page_items[:5]`` cap so the single most
+        task-relevant code-symbol item (the highest-confidence item that
+        an ``implement``-mode ranker pass would surface) never gets
+        displaced by source-type-coverage budget enforcement.
+
+        Algorithm:
+            1. Re-rank the SAME candidate pool with ``token_budget=0``
+               (no budget). This removes drops caused by
+               :meth:`ContextRanker._enforce_budget` reserving a small
+               same-source-type item ahead of a large high-confidence one.
+            2. Apply the same dedup + contracts-boost + confidence sort
+               that the primary pipeline applies so the unbounded list is
+               comparable to ``all_ranked``.
+            3. Pick the first item whose ``source_type`` is a code-symbol
+               type (see :data:`_IMPLEMENT_SOURCE_TYPES`). This is the
+               "top implement-mode candidate".
+            4. If no code-symbol candidate exists (e.g. empty repo or
+               metadata-only candidate pool), return the original top-5
+               untouched — preserves the coverage-selected items and
+               avoids crashing.
+            5. Otherwise, return ``[top_implement_item] + page_items[:5]``
+               de-duplicated by ``(path_or_ref, title)``, truncated to 5.
+        """
+        capped = list(page_items[:5])
+        if not candidates:
+            return capped
+        try:
+            probe = ContextRanker(
+                token_budget=0,
+                use_embeddings=use_embeddings,
+                progress_cb=None,
+            )
+            unbounded = probe.rank(candidates, query, "minimal")
+            unbounded, _ = _dedup_ranked(unbounded)
+            unbounded = self._apply_contracts_boost(
+                unbounded, self._root, repo_name="default", config=config
+            )
+            unbounded.sort(key=lambda i: i.confidence, reverse=True)
+        except Exception as exc:  # noqa: BLE001 — preservation is best-effort
+            _warn_optional_subsystem_failure(
+                "Minimal-mode top-item preservation",
+                "the pack will fall back to the naive 5-item confidence cap",
+                exc,
+            )
+            return capped
+
+        top_implement: ContextItem | None = next(
+            (it for it in unbounded if it.source_type in _IMPLEMENT_SOURCE_TYPES),
+            None,
+        )
+        if top_implement is None:
+            # No code-symbol candidate — graceful fallback (e.g. empty repo
+            # indexed only with memory/decision items).
+            return capped
+
+        key = (top_implement.path_or_ref, top_implement.title)
+        # Drop any existing copy in the capped list so we can re-insert at 0.
+        remaining = [it for it in capped if (it.path_or_ref, it.title) != key]
+        # Keep up to 4 others; the preserved item takes slot 0.
+        return [top_implement] + remaining[:4]
 
     def _implement_candidates(
         self,

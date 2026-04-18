@@ -93,11 +93,7 @@ def _is_entry_by_name(name: str) -> bool:
         if lower.startswith(verb + "_"):
             return True
         # camelCase variant: "getOwner", "postFoo" — verb then UPPER letter.
-        if (
-            lower.startswith(verb)
-            and len(name) > len(verb)
-            and name[len(verb)].isupper()
-        ):
+        if lower.startswith(verb) and len(name) > len(verb) and name[len(verb)].isupper():
             return True
     return False
 
@@ -158,7 +154,15 @@ def _callees(
     repo: str,
     from_id: int,
 ) -> list[int]:
-    """Return the list of direct callees for *from_id* via ``calls`` edges."""
+    """Return the list of direct callees for *from_id* via ``calls`` edges.
+
+    This is the uncached, single-symbol lookup. During a flow enumeration we
+    prefer :class:`_FlowCache` (below) which memoizes results across the BFS
+    frontier and across every entry traversed in the same ``list_flows`` /
+    ``get_affected_flows`` call — collapsing an O(N) pattern of one SQL
+    round-trip per visited symbol into at most one round-trip per distinct
+    symbol id.
+    """
     rows = conn.execute(
         "SELECT to_symbol_id FROM edges "
         "WHERE repo = ? AND from_symbol_id = ? AND edge_type = 'calls'",
@@ -167,19 +171,83 @@ def _callees(
     return [r[0] for r in rows]
 
 
+class _FlowCache:
+    """Per-call memoization wrapper for ``_callees`` lookups.
+
+    Lifetime is a single public call (``list_flows`` /
+    ``get_affected_flows``). Not thread-safe. Not meant to outlive the call:
+    on large repos the graph can fit thousands of entries in memory, and we
+    don't want that retained indefinitely.
+
+    The cache stores a ``dict[int, list[int]]`` keyed on ``from_symbol_id``.
+    Miss -> one SQL query and a dict insert. Hit -> zero SQL queries.
+
+    ``exc_count`` records the number of lookups that raised so the caller
+    (and tests) can assert that a callee resolution failure did not poison
+    later lookups for other symbols.
+    """
+
+    __slots__ = ("_conn", "_repo", "_callees", "exc_count")
+
+    def __init__(self, conn, repo: str) -> None:
+        self._conn = conn
+        self._repo = repo
+        self._callees: dict[int, list[int]] = {}
+        self.exc_count = 0
+
+    def callees(self, sid: int) -> list[int]:
+        """Return (and memoize) the callee ids for *sid*.
+
+        Exceptions during the SQL read are logged and swallowed; the cache
+        stores ``[]`` for that symbol so repeated visits on the same BFS
+        frontier don't re-run a failing query.
+        """
+        cached = self._callees.get(sid)
+        if cached is not None:
+            return cached
+        try:
+            rows = self._conn.execute(
+                "SELECT to_symbol_id FROM edges "
+                "WHERE repo = ? AND from_symbol_id = ? AND edge_type = 'calls'",
+                (self._repo, sid),
+            ).fetchall()
+            result = [r[0] for r in rows]
+        except Exception as exc:  # noqa: BLE001 — silent-failure contract
+            self.exc_count += 1
+            print(
+                f"warning: flows._FlowCache.callees: lookup failed at "
+                f"symbol_id={sid} in repo={self._repo!r}: {exc}",
+                file=sys.stderr,
+            )
+            result = []
+        self._callees[sid] = result
+        return result
+
+
 def _bfs_flows_from(
     conn,
     repo: str,
     entry_id: int,
     entry_name: str,
     id_to_name: dict[int, str],
+    cache: "_FlowCache | None" = None,
 ) -> list[Flow]:
     """Return up to ``MAX_FLOWS_PER_ENTRY`` flows rooted at *entry_id*.
 
     A flow terminates at the first callee without outgoing ``calls`` edges,
     at ``MAX_DEPTH`` hops, or when a cycle is detected (the repeated symbol
     becomes the leaf). Each (entry, leaf) pair is reported at most once.
+
+    ``cache`` is a per-call memoization wrapper for ``_callees``. When the
+    caller is iterating over multiple entries in the same ``list_flows``
+    invocation, sharing one cache across all entries collapses overlapping
+    subtrees into a single SQL query per distinct symbol — the N+1 fix. If
+    ``cache`` is None, one is created locally so direct callers of this
+    helper still benefit.
     """
+    if cache is None:
+        cache = _FlowCache(conn, repo)
+
     # BFS frontier of (path_tuple,) where path_tuple is the ordered list of
     # symbol ids visited from entry to current node inclusive.
     frontier: list[tuple[int, ...]] = [(entry_id,)]
@@ -191,15 +259,9 @@ def _bfs_flows_from(
         for path in frontier:
             tail = path[-1]
             depth = len(path) - 1
-            try:
-                children = _callees(conn, repo, tail)
-            except Exception as exc:  # noqa: BLE001
-                print(
-                    f"warning: flows._bfs_flows_from: callee lookup failed at "
-                    f"symbol_id={tail} in repo={repo!r}: {exc}",
-                    file=sys.stderr,
-                )
-                children = []
+            # _FlowCache already swallows per-symbol exceptions and returns
+            # an empty children list, so no outer try/except is needed here.
+            children = cache.callees(tail)
 
             if not children or depth >= MAX_DEPTH:
                 # Emit a flow only once per (entry, leaf) pair.
@@ -274,18 +336,17 @@ def list_flows(
                 file=sys.stderr,
             )
             return []
-        id_to_name: dict[int, str] = {
-            s.id: s.name for s in all_syms if s.id is not None
-        }
+        id_to_name: dict[int, str] = {s.id: s.name for s in all_syms if s.id is not None}
 
         conn = edge_repo._conn
+        # One cache per public call so overlapping subtrees across entries
+        # share _callees lookups. The cache is discarded on return.
+        cache = _FlowCache(conn, repo)
         flows: list[Flow] = []
         for entry_id, entry_name in entries:
             if len(flows) >= MAX_TOTAL_FLOWS:
                 break
-            flows.extend(
-                _bfs_flows_from(conn, repo, entry_id, entry_name, id_to_name)
-            )
+            flows.extend(_bfs_flows_from(conn, repo, entry_id, entry_name, id_to_name, cache=cache))
         return flows[:MAX_TOTAL_FLOWS]
     except Exception as exc:  # noqa: BLE001 — silent-failure contract
         print(

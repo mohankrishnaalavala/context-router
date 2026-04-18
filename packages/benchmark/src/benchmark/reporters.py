@@ -8,6 +8,80 @@ from datetime import timezone
 from benchmark.models import BenchmarkReport
 
 
+def _vs_keyword(router_tokens: int, keyword_tokens: int) -> float:
+    """Percentage delta of router vs keyword baseline (signed, honest).
+
+    Positive when the router pack is smaller than the keyword baseline
+    (router is tighter — a win). Negative when the keyword baseline is
+    smaller than the router pack (router is looser — an honest loss we
+    must not hide).
+
+    The previous implementation clamped negatives to 0, masking real
+    regressions in user-facing output. This helper intentionally returns
+    negative numbers when appropriate — see v3.1 outcome
+    ``benchmark-keyword-baseline-honest``.
+
+    Args:
+        router_tokens: Estimated tokens produced by context-router.
+        keyword_tokens: Estimated tokens produced by the keyword baseline.
+
+    Returns:
+        Signed percentage delta rounded to 1 decimal place. Returns 0.0
+        when ``keyword_tokens`` is zero or negative (no baseline to
+        compare against).
+    """
+    if keyword_tokens <= 0:
+        return 0.0
+    return round((keyword_tokens - router_tokens) / keyword_tokens * 100, 1)
+
+
+def _format_signed_delta(pct: float) -> str:
+    """Render a signed percentage for the baseline-comparison table.
+
+    The table column reads "vs Router" where positive means "router saves
+    N% vs this baseline" and negative means "router is N% larger than this
+    baseline" — an honest loss. Both are displayed with explicit sign so
+    the direction is unambiguous; e.g. ``-47%`` means router is 47% worse
+    than the baseline (i.e. keyword pack was tighter).
+
+    Args:
+        pct: Signed percentage delta from :func:`_vs_keyword` /
+            :func:`_vs_naive`.
+
+    Returns:
+        Formatted string with explicit sign and trailing ``%``.
+    """
+    if pct > 0:
+        return f"-{pct:.0f}%"  # savings — router smaller (conventional "-N%")
+    if pct < 0:
+        # Honest loss — router larger than baseline. Show with explicit "+"
+        # so the reader sees "the router pack grew by N% vs baseline".
+        return f"+{abs(pct):.0f}%"
+    return "0%"
+
+
+def _vs_naive(router_tokens: int, naive_tokens: int) -> float:
+    """Percentage delta of router vs naive baseline (signed, honest).
+
+    Same semantics as :func:`_vs_keyword` — positive means router is
+    tighter than the naive "all symbols" baseline, negative means the
+    naive baseline is actually smaller (rare, but possible on very small
+    projects; we surface it honestly rather than clamp).
+
+    Args:
+        router_tokens: Estimated tokens produced by context-router.
+        naive_tokens: Estimated tokens for the naive baseline (all
+            indexed symbols, no ranking).
+
+    Returns:
+        Signed percentage delta rounded to 1 decimal place, or 0.0 when
+        ``naive_tokens`` is zero or negative.
+    """
+    if naive_tokens <= 0:
+        return 0.0
+    return round((naive_tokens - router_tokens) / naive_tokens * 100, 1)
+
+
 def to_json(report: BenchmarkReport, indent: int = 2) -> str:
     """Serialise *report* to a JSON string.
 
@@ -96,11 +170,23 @@ def to_markdown(
         ]
         router_tok = s.get("avg_est_tokens", 0) or 1
         if naive_tok:
-            vs_naive = round((naive_tok - router_tok) / naive_tok * 100, 1)
-            lines.append(f"| Naive (all symbols) | {naive_tok:,} | -{vs_naive:.0f}% |")
+            # Signed delta — router tighter than naive => positive, rendered
+            # as "-N%" (the table column is "vs Router" framed as savings).
+            # If the router pack is somehow larger than naive we surface it
+            # honestly as "+N%" rather than clamp to 0.
+            vs_naive_pct = _vs_naive(router_tok, naive_tok)
+            lines.append(
+                f"| Naive (all symbols) | {naive_tok:,} | {_format_signed_delta(vs_naive_pct)} |"
+            )
         if keyword_tok:
-            vs_kw = round((keyword_tok - router_tok) / keyword_tok * 100, 1) if keyword_tok > router_tok else 0
-            lines.append(f"| Keyword match (top 50) | {keyword_tok:,} | -{vs_kw:.0f}% |")
+            # Honest signed delta — negative values mean the keyword
+            # baseline was tighter than the router pack (we must NOT hide
+            # this). See docs/release/v3-outcomes.yaml →
+            # benchmark-keyword-baseline-honest.
+            vs_kw_pct = _vs_keyword(router_tok, keyword_tok)
+            lines.append(
+                f"| Keyword match (top 50) | {keyword_tok:,} | {_format_signed_delta(vs_kw_pct)} |"
+            )
         lines.append(f"| context-router | {router_tok:,} | — |")
 
     lines += ["", "## Results by Mode", ""]

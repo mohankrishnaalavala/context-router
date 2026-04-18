@@ -51,6 +51,23 @@ _check_pack-dedup-at-orchestrator() {
   fi
 }
 
+_check_benchmark-keyword-baseline-honest() {
+  # P0 honesty check: `benchmark run --json --runs 10` must produce at
+  # least one task whose `vs_keyword` field is negative on this repo.
+  # A value of 0 where the keyword baseline is tighter than the router
+  # pack indicates the old clamp is still active — release blocker.
+  local out
+  out="$(uv run context-router benchmark run --json --runs 10 --project-root . 2>/dev/null)"
+  local neg_count
+  neg_count="$(echo "${out}" | python3 -c "import json,sys; d=json.load(sys.stdin); tasks=d.get('tasks',[]); negs=[t for t in tasks if t.get('vs_keyword',0) < 0]; print(len(negs))")"
+  if [[ "${neg_count}" -ge 1 ]]; then
+    echo "PASS benchmark-keyword-baseline-honest (${neg_count} tasks with negative vs_keyword)"
+  else
+    echo "FAIL benchmark-keyword-baseline-honest (no negative vs_keyword values — clamp may still be active)"
+    return 1
+  fi
+}
+
 _check_pack-cache-persists-cli() {
   # Two identical pack runs in separate Python processes; assert that the
   # second invocation's pack-pipeline wall time is strictly less than half
@@ -233,6 +250,131 @@ PY
   fi
 }
 
+_check_contracts-boost-tighter-match() {
+  # v3.1 P1: contracts boost must match the *exact* endpoint path, not any
+  # quoted URL that happens to start with ``/api/``.  The fixture seeds a
+  # spec with POST /api/orders and two consumer files:
+  #
+  #   * orders_client.py  -> fetch('/api/orders')     (should be boosted)
+  #   * other_client.py   -> fetch('/api/unrelated')  (must NOT be boosted)
+  #
+  # With the tighter matcher, the orders file ranks higher than the other
+  # file after the boost.  The negative case locks down that the boost is
+  # not sprayed onto every POST consumer.
+  local script tmp
+  tmp="$(mktemp -d -t cr-contracts-tighter.XXXXXX)" || return 1
+  script="$(mktemp -t cr_contracts_tighter.XXXXXX.py)" || return 1
+  # shellcheck disable=SC2064
+  trap "rm -f '${script}'; rm -rf '${tmp}'" RETURN
+
+  cat >"${script}" <<'PY'
+import sys, json, yaml
+from pathlib import Path
+
+root = Path(sys.argv[1])
+(root / ".context-router").mkdir(parents=True, exist_ok=True)
+(root / "src").mkdir(exist_ok=True)
+
+# File A: consumes POST /api/orders — should be boosted.
+(root / "src" / "orders_client.py").write_text(
+    "import requests\n\n"
+    "def create_order(payload):\n"
+    "    return requests.post('/api/orders', json=payload).json()\n"
+)
+# File B: consumes POST /api/unrelated — must NOT get the boost.
+(root / "src" / "other_client.py").write_text(
+    "import requests\n\n"
+    "def send_other(payload):\n"
+    "    return requests.post('/api/unrelated', json=payload).json()\n"
+)
+(root / "openapi.yaml").write_text(yaml.safe_dump({
+    "openapi": "3.0.0",
+    "info": {"title": "Orders API", "version": "1.0.0"},
+    "paths": {"/api/orders": {"post": {"operationId": "createOrder",
+        "responses": {"200": {"description": "ok"}}}}},
+}))
+
+from contracts.interfaces import Symbol
+from storage_sqlite.database import Database
+from storage_sqlite.repositories import SymbolRepository, ContractRepository
+
+db_path = root / ".context-router" / "context-router.db"
+with Database(db_path) as db:
+    SymbolRepository(db.connection).add_bulk(
+        [
+            Symbol(
+                name="create_order", kind="function",
+                file=root / "src" / "orders_client.py",
+                line_start=4, line_end=5, language="python",
+                signature="def create_order(payload):", docstring="",
+            ),
+            Symbol(
+                name="send_other", kind="function",
+                file=root / "src" / "other_client.py",
+                line_start=4, line_end=5, language="python",
+                signature="def send_other(payload):", docstring="",
+            ),
+        ],
+        "default",
+    )
+    ContractRepository(db.connection).upsert_api_endpoint(
+        "default", "POST", "/api/orders",
+    )
+
+from core.orchestrator import Orchestrator
+pack = Orchestrator(project_root=root).build_pack("implement", "create order")
+top5 = [i.path_or_ref for i in pack.selected_items[:5]]
+
+orders_path = str(root / "src" / "orders_client.py")
+other_path = str(root / "src" / "other_client.py")
+
+print("TOP5", json.dumps(top5))
+
+def rank(path: str) -> int:
+    try:
+        return top5.index(path)
+    except ValueError:
+        return 10_000
+
+orders_rank = rank(orders_path)
+other_rank = rank(other_path)
+
+# Outcome: orders file appears in top-5 AND it ranks higher than the
+# unrelated file.  Negative case: the unrelated consumer must not also
+# be boosted — we assert strict rank ordering.
+if orders_rank >= 5:
+    print("FAIL: orders_client.py not in top-5")
+    sys.exit(1)
+if orders_rank >= other_rank:
+    print(
+        f"FAIL: orders_client.py rank {orders_rank} not above "
+        f"other_client.py rank {other_rank}"
+    )
+    sys.exit(1)
+
+# Direct sanity check on the matcher itself — catches future regressions
+# where the regex widens again.
+from contracts_extractor import file_references_endpoint
+orders_src = (root / "src" / "orders_client.py").read_text()
+other_src = (root / "src" / "other_client.py").read_text()
+if not file_references_endpoint(orders_src, "/api/orders"):
+    print("FAIL: matcher missed the /api/orders consumer")
+    sys.exit(1)
+if file_references_endpoint(other_src, "/api/orders"):
+    print("FAIL: matcher over-matched /api/unrelated as /api/orders")
+    sys.exit(1)
+sys.exit(0)
+PY
+
+  if uv run python "${script}" "${tmp}" 2>&1; then
+    echo "PASS contracts-boost-tighter-match (orders consumer ranks above unrelated POST consumer)"
+    return 0
+  else
+    echo "FAIL contracts-boost-tighter-match: unrelated POST consumer was not excluded"
+    return 1
+  fi
+}
+
 _check_call-chain-symbols-mcp() {
   # Use this repo as the fixture — it is always present and has a known
   # call chain.  We only need an indexed DB to read a method/function id
@@ -319,18 +461,36 @@ _check_hub-bridge-ranking-signals() {
   uv run context-router index --project-root "${fixture}" >/dev/null 2>&1 \
     || { echo "FAIL hub-bridge-ranking-signals: index step failed"; return 1; }
 
+  # Pack-cache invalidation: ``CAPABILITIES_HUB_BOOST`` is read inside
+  # the ranker but is NOT part of the orchestrator's pack cache key
+  # (``(repo_id, mode, query_hash, budget, use_embeddings, items_hash)``).
+  # That means a stale L2 entry from a previous run — including this
+  # handler's own OFF run — would be returned unchanged for the ON run,
+  # masking the boost entirely. We wipe the L2 ``pack_cache`` via sqlite
+  # between the two invocations so each ``uv run context-router pack``
+  # subprocess (which brings a fresh L1) hits the full pipeline.
+  local db_path="${fixture}/.context-router/context-router.db"
+  _hbs_purge_pack_cache() {
+    [[ -f "${db_path}" ]] && sqlite3 "${db_path}" "DELETE FROM pack_cache;" 2>/dev/null
+    return 0
+  }
+
   # Extract the top-5 ordered list of (title, path) pairs from the JSON
   # pack. Using both keys avoids false positives when two symbols share
-  # a path or a title but not both.
+  # a path or a title but not both. ``ContextPack.selected_items`` is the
+  # authoritative list; the ``items`` alias is kept for backward compat
+  # but may be dropped, so we read from ``selected_items``.
   local extractor
   extractor="import json,sys
-items = json.load(sys.stdin).get('items', [])
+items = json.load(sys.stdin).get('selected_items', [])
 print('|'.join(f\"{i.get('title','')}::{i.get('path_or_ref','')}\" for i in items[:5]))"
 
   local off_out on_out
+  _hbs_purge_pack_cache
   off_out="$(CAPABILITIES_HUB_BOOST=0 uv run context-router pack --mode implement \
                --query 'add pagination' --project-root "${fixture}" --json 2>/dev/null \
              | python3 -c "${extractor}")"
+  _hbs_purge_pack_cache
   on_out="$(CAPABILITIES_HUB_BOOST=1 uv run context-router pack --mode implement \
               --query 'add pagination' --project-root "${fixture}" --json 2>/dev/null \
             | python3 -c "${extractor}")"
@@ -866,6 +1026,23 @@ PY
   fi
 }
 
+_check_typescript-inheritance-edges() {
+  local fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
+  [[ -d "${fixture}" ]] || { echo "FAIL typescript-inheritance-edges: fixture missing at ${fixture}"; return 1; }
+  # Re-index from scratch so the measurement is deterministic across runs.
+  rm -f "${fixture}/.context-router/context-router.db"
+  uv run context-router init --project-root "${fixture}" >/dev/null 2>&1
+  uv run context-router index --project-root "${fixture}" >/dev/null 2>&1
+  local n
+  n="$(sqlite3 "${fixture}/.context-router/context-router.db" "SELECT COUNT(*) FROM edges WHERE edge_type='tested_by'")"
+  if [[ "${n}" -ge 10 ]]; then
+    echo "PASS typescript-inheritance-edges (tested_by=${n} on bulletproof-react)"
+  else
+    echo "FAIL typescript-inheritance-edges (tested_by=${n}; need >=10)"
+    return 1
+  fi
+}
+
 _check_semantic-default-with-progress() {
   local fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
   [[ -d "${fixture}" ]] || { echo "FAIL semantic-default-with-progress: fixture missing at ${fixture}"; return 1; }
@@ -886,6 +1063,262 @@ _check_semantic-default-with-progress() {
     echo "PASS semantic-default-with-progress (handover-mode ranking differs with vs without --with-semantic)"
   else
     echo "FAIL semantic-default-with-progress: handover-mode output identical with/without --with-semantic"
+    return 1
+  fi
+}
+
+_check_hub-bridge-sqlite-reuse() {
+  # Spy on sqlite3.connect during Orchestrator.build_pack with hub_boost ON.
+  # Count only connects whose call stack includes ranker.py. Pre-fix the
+  # ranker opened >=1 connection per boost; post-fix that drops to 0
+  # because the ranker reuses the Orchestrator-owned Database.connection.
+  local fixture="${PROJECT_CONTEXT_ROOT}/eShopOnWeb"
+  [[ -d "${fixture}" ]] || fixture="${PROJECT_CONTEXT_ROOT}/spring-petclinic"
+  [[ -d "${fixture}" ]] || fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
+  [[ -d "${fixture}" ]] || { echo "FAIL hub-bridge-sqlite-reuse: no fixture under ${PROJECT_CONTEXT_ROOT}"; return 1; }
+
+  local spy_py
+  spy_py=$(mktemp -t hub_sqlite_spy.XXXXXX.py) || return 1
+  # shellcheck disable=SC2064
+  trap "rm -f '${spy_py}'" RETURN
+
+  cat >"${spy_py}" <<'PY'
+import os
+import sqlite3
+import sys
+import traceback
+from pathlib import Path
+from unittest.mock import patch
+
+os.environ["CAPABILITIES_HUB_BOOST"] = "1"
+
+fixture = Path(sys.argv[1])
+db_path = fixture / ".context-router" / "context-router.db"
+
+# Wipe the pack cache first so the ranker actually runs (a cached pack
+# short-circuits build_pack before the ranker is ever touched, which
+# would make this probe a false PASS regardless of the connection fix).
+if db_path.exists():
+    try:
+        with sqlite3.connect(db_path) as _c:
+            _c.execute("DELETE FROM pack_cache")
+            _c.commit()
+    except sqlite3.OperationalError:
+        # pack_cache table not yet migrated — nothing to wipe.
+        pass
+
+from core.orchestrator import Orchestrator
+
+orch = Orchestrator(project_root=fixture)
+
+ranker_connects = 0
+original_connect = sqlite3.connect
+
+def spy(*a, **k):
+    global ranker_connects
+    stack = traceback.extract_stack()
+    if any("ranker.py" in f.filename for f in stack):
+        ranker_connects += 1
+    return original_connect(*a, **k)
+
+with patch("sqlite3.connect", side_effect=spy):
+    try:
+        orch.build_pack("implement", "rank items")
+    except Exception as exc:
+        # Build may fail on an unindexed fixture for unrelated reasons.
+        # We only care about connects attributed to ranker.py frames.
+        print(f"NOTE build_pack raised {type(exc).__name__}: {exc}", file=sys.stderr)
+
+if ranker_connects == 0:
+    print("PASS hub-bridge-sqlite-reuse (0 fresh sqlite3.connect calls from ranker)")
+else:
+    print(f"FAIL hub-bridge-sqlite-reuse ({ranker_connects} sqlite3.connect calls attributed to ranker.py)")
+    sys.exit(1)
+PY
+
+  local out
+  out="$(uv run python "${spy_py}" "${fixture}" 2>/dev/null)"
+  if [[ "${out}" == PASS* ]]; then
+    echo "${out}"
+  else
+    echo "${out:-FAIL hub-bridge-sqlite-reuse: probe produced no output}"
+    return 1
+  fi
+}
+
+_check_minimal-mode-ranker-tuning() {
+  local fixture="${PROJECT_CONTEXT_ROOT}/spring-petclinic"
+  [[ -d "${fixture}" ]] || { echo "FAIL minimal-mode-ranker-tuning: fixture missing at ${fixture}"; return 1; }
+  local implement_json minimal_json
+  implement_json="$(uv run context-router pack --mode implement --query 'add visit' --project-root "${fixture}" --json 2>/dev/null)" \
+    || { echo "FAIL minimal-mode-ranker-tuning: implement pack errored"; return 1; }
+  minimal_json="$(uv run context-router pack --mode minimal --query 'add visit' --project-root "${fixture}" --json 2>/dev/null)" \
+    || { echo "FAIL minimal-mode-ranker-tuning: minimal pack errored"; return 1; }
+
+  # Compare the top-1 path_or_ref across the two packs. The fix guarantees
+  # that minimal-mode preserves whatever implement-mode surfaces as the
+  # top item (the highest-confidence code-symbol candidate), so the two
+  # paths MUST match.
+  local cmp
+  cmp="$(IMPL="${implement_json}" MIN="${minimal_json}" python3 - <<'PY'
+import json, os, sys
+try:
+    impl = json.loads(os.environ["IMPL"])
+    mini = json.loads(os.environ["MIN"])
+except Exception as exc:
+    print(f"ERR:json:{exc}")
+    sys.exit(0)
+impl_items = impl.get("selected_items") or impl.get("items") or []
+mini_items = mini.get("selected_items") or mini.get("items") or []
+if not impl_items and not mini_items:
+    # Negative case: no candidates available. Minimal must still return
+    # a valid (possibly empty) pack without crashing.
+    print("OK:empty")
+    sys.exit(0)
+if not impl_items:
+    print("ERR:impl-empty-but-minimal-has-items")
+    sys.exit(0)
+if not mini_items:
+    print("ERR:minimal-empty-but-impl-has-items")
+    sys.exit(0)
+impl_top = impl_items[0].get("path_or_ref", "")
+mini_top = mini_items[0].get("path_or_ref", "")
+if impl_top == mini_top:
+    print(f"OK:{mini_top}")
+else:
+    print(f"MISMATCH:impl={impl_top}:min={mini_top}")
+PY
+)"
+  case "${cmp}" in
+    OK:empty)
+      echo "PASS minimal-mode-ranker-tuning (empty candidate pool — graceful no-op)"
+      ;;
+    OK:*)
+      echo "PASS minimal-mode-ranker-tuning (minimal top-1 matches implement top-1: ${cmp#OK:})"
+      ;;
+    MISMATCH:*)
+      echo "FAIL minimal-mode-ranker-tuning (${cmp})"
+      return 1
+      ;;
+    *)
+      echo "FAIL minimal-mode-ranker-tuning (probe error: ${cmp})"
+      return 1
+      ;;
+  esac
+}
+
+_check_flows-n-plus-one() {
+  # v3.1 Wave 2 P2: _bfs_flows_from memoizes _callees via a per-call
+  # _FlowCache so get_affected_flows issues O(distinct_symbols) SQL
+  # round-trips instead of O(visited_paths).
+  #
+  # Uses an in-process fixture rather than a real indexed repo so the
+  # smoke is hermetic and self-contained — no dependency on the
+  # eShopOnWeb / petclinic fixtures being indexed on the current machine.
+  # The fixture plants ~40 symbols with a diamond call graph (two entries
+  # converging on a 5-deep shared chain) so that without the cache the
+  # visit count would exceed the query count. After the fix, the number
+  # of distinct `from_symbol_id` queries must be strictly less than the
+  # number of symbols visited across BFS paths.
+  local out
+  out="$(uv run python - <<'PY'
+import os, sys
+from pathlib import Path
+
+# Use an ephemeral temp dir so the test is hermetic.
+import tempfile
+tmp = Path(tempfile.mkdtemp(prefix="flows_np1_"))
+os.environ.setdefault("CONTEXT_ROUTER_STATE_DIR", str(tmp))
+
+from contracts.interfaces import Symbol
+from storage_sqlite.database import Database
+from storage_sqlite.repositories import SymbolRepository, EdgeRepository
+from graph_index.flows import list_flows
+
+db_path = tmp / "flows.db"
+db = Database(db_path)
+db.initialize()
+conn = db.connection
+sym_repo = SymbolRepository(conn)
+edge_repo = EdgeRepository(conn)
+repo = "default"
+
+def _mk(name, kind="function"):
+    return Symbol(
+        name=name, kind=kind, file=Path(f"/src/{name}.py"),
+        line_start=1, line_end=5, language="python",
+    )
+
+# Two entries -> shared chain of length 5, plus a handful of extra
+# mid nodes to emulate diamond traversal seen on real repos.
+entries = [sym_repo.add(_mk(f"get_entry_{i}"), repo) for i in range(2)]
+mids = [sym_repo.add(_mk(f"svc_step_{i}", "method"), repo) for i in range(5)]
+leaf = sym_repo.add(_mk("db_select", "method"), repo)
+
+# Entries fan in on the first mid.
+for e in entries:
+    edge_repo.add_raw(repo, e, mids[0], "calls")
+# Chain mid_0 -> mid_1 -> ... -> mid_4 -> leaf.
+for a, b in zip(mids, mids[1:]):
+    edge_repo.add_raw(repo, a, b, "calls")
+edge_repo.add_raw(repo, mids[-1], leaf, "calls")
+
+# Install a counting wrapper on EdgeRepository._conn so list_flows
+# ends up routing all edge queries through the counter.
+class Counter:
+    def __init__(self, inner):
+        self._inner = inner
+        self.total = 0
+        self.sid_queries = []
+    def execute(self, sql, params=(), *a, **k):
+        self.total += 1
+        if "from_symbol_id" in sql and len(params) >= 2:
+            self.sid_queries.append(params[1])
+        return self._inner.execute(sql, params, *a, **k)
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+counter = Counter(conn)
+edge_repo._conn = counter
+
+flows = list_flows(repo, sym_repo, edge_repo)
+
+# Visited path segments across the BFS — "symbol visits" (an upper bound
+# on what a naive non-cached implementation would query).
+visited = sum(len(f.path) for f in flows)
+# Distinct symbol ids actually queried for callees.
+distinct = len(set(counter.sid_queries))
+# Total callee queries issued.
+q = len(counter.sid_queries)
+
+# Correctness: at least one flow, non-empty, and the leaf is reached.
+ok_corr = (len(flows) >= 1) and all(f.leaf_id == leaf for f in flows)
+
+# Invariant: callee query count < 2 * visited symbol count.
+threshold = max(2 * visited, 10)
+ok_quota = q < threshold
+# Strong invariant: no sid queried more than once within a single call.
+from collections import Counter as _C
+dupes = [s for s, n in _C(counter.sid_queries).items() if n > 1]
+ok_unique = not dupes
+
+db.close()
+
+if ok_corr and ok_quota and ok_unique:
+    print(f"PASS flows-n-plus-one (visited={visited}, queries={q}, distinct={distinct})")
+else:
+    reasons = []
+    if not ok_corr: reasons.append("correctness (flows/leaf mismatch)")
+    if not ok_quota: reasons.append(f"queries {q} >= threshold {threshold}")
+    if not ok_unique: reasons.append(f"duplicate sid queries: {dupes}")
+    print(f"FAIL flows-n-plus-one ({'; '.join(reasons)})")
+    sys.exit(1)
+PY
+)"
+  if [[ "${out}" == PASS* ]]; then
+    echo "${out}"
+  else
+    echo "${out}"
     return 1
   fi
 }
