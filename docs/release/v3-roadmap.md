@@ -18,11 +18,11 @@
 | Phase | Outcomes | Done / Total | Target |
 |---|---|---|---|
 | 0 · Scaffolding | docs/release, ship-check skill, smoke script | ✅ 1/1 | 2026-04-17 |
-| 1 · First impressions | cli-version, dedup, interface-kind, semantic-warning, ci-develop | ✅ 5/5 (re-review pending) | 2026-04-17 |
-| 2 · Speed & discoverability | cache persistence, proactive embeddings, semantic default, contracts boost | ⬜ 0/4 | 2026-05-01 |
-| 3 · CRG-parity intelligence | edge kinds, enums, hub/bridge, minimal-context, call-chain, risk, untested | ⬜ 0/7 | 2026-05-15 |
-| 4 · Advanced features + MCP polish | flow-level, wiki, streaming, coupling, mimeType, serverInfo, ci95 | ⬜ 0/7 | 2026-05-29 |
-| Release | v3.0.0 tag after 23/23 smoke PASS + full 7-prompt re-review | ⬜ | 2026-05-30 |
+| 1 · First impressions | cli-version, dedup, interface-kind, semantic-warning, ci-develop, dedup-at-orchestrator | ✅ 6/6 | 2026-04-17 |
+| 2 · Speed & discoverability | cache persistence, proactive embeddings, semantic default, contracts boost | ✅ 4/4 | 2026-04-17 |
+| 3 · CRG-parity intelligence | edge kinds, enums, hub/bridge, minimal-context, call-chain, risk, untested | ✅ 7/7 | 2026-04-17 |
+| 4 · Advanced features + MCP polish | flow-level, wiki, streaming, coupling, mimeType, serverInfo, ci95, edge-source-fix | ✅ 8/8 (edge-source-fix was P1 surfaced by Phase 3 re-review) | 2026-04-18 |
+| Release | v3.0.0 tag after release PR develop → main | 🟧 in review (release/3.0.0 branch; PR open) | 2026-04-18 |
 
 ---
 
