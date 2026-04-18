@@ -121,6 +121,20 @@ class TestLoadConfig:
         cfg = load_config(tmp_path)
         assert cfg.token_budget == 4000
 
+    def test_hub_boost_defaults_to_false(self, tmp_path: Path):
+        """Phase-3 opt-in flag must default to False (negative DoD case)."""
+        cfg = load_config(tmp_path)
+        assert cfg.capabilities.hub_boost is False
+
+    def test_hub_boost_reads_from_yaml(self, tmp_path: Path):
+        config_dir = tmp_path / ".context-router"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text(
+            "capabilities:\n  hub_boost: true\n"
+        )
+        cfg = load_config(tmp_path)
+        assert cfg.capabilities.hub_boost is True
+
 
 class TestProtocols:
     def test_language_analyzer_is_protocol(self):

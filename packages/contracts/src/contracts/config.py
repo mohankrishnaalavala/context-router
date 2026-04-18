@@ -30,6 +30,12 @@ class CapabilitiesConfig(BaseModel):
     # same repo get +0.10 confidence (clamped at 0.95). On by default;
     # set to false to disable (e.g. for ranking A/B comparisons).
     contracts_boost: bool = True
+    # Phase-3 (outcome ``hub-bridge-ranking-signals``): opt-in boost
+    # that lifts items whose underlying symbol is a structural hub
+    # (high inbound degree) or a bridge between communities. Default
+    # False — enable explicitly to A/B test the signal before rolling
+    # it out widely. Capped at +0.10 so BM25 + semantic remain primary.
+    hub_boost: bool = False
 
 
 class ContextRouterConfig(BaseModel):

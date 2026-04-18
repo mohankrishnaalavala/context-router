@@ -280,8 +280,56 @@ _check_mcp-serverinfo-version() {
 }
 
 _check_hub-bridge-ranking-signals() {
-  echo "FAIL hub-bridge-ranking-signals: check handler not implemented yet"
-  return 1
+  # Outcome: turning on ``capabilities.hub_boost`` MUST change the top-5
+  # of ``pack --mode implement`` relative to the baseline. We drive the
+  # toggle via the ranker's ``CAPABILITIES_HUB_BOOST`` env var so we do
+  # not have to touch the orchestrator or write a temp config.
+  #
+  # Fixture selection:
+  #   1. spring-petclinic if present (has the richest graph shape; hub
+  #      and bridge scores actually differentiate candidates).
+  #   2. fall back to this repo — always present, smaller graph, but
+  #      still has enough inbound-edge variance to tip a top-5 order.
+  local fixture
+  if [[ -d "${PROJECT_CONTEXT_ROOT}/spring-petclinic" ]]; then
+    fixture="${PROJECT_CONTEXT_ROOT}/spring-petclinic"
+  else
+    fixture="${REPO_ROOT}"
+  fi
+
+  uv run context-router init --project-root "${fixture}" >/dev/null 2>&1 || true
+  uv run context-router index --project-root "${fixture}" >/dev/null 2>&1 \
+    || { echo "FAIL hub-bridge-ranking-signals: index step failed"; return 1; }
+
+  # Extract the top-5 ordered list of (title, path) pairs from the JSON
+  # pack. Using both keys avoids false positives when two symbols share
+  # a path or a title but not both.
+  local extractor
+  extractor="import json,sys
+items = json.load(sys.stdin).get('items', [])
+print('|'.join(f\"{i.get('title','')}::{i.get('path_or_ref','')}\" for i in items[:5]))"
+
+  local off_out on_out
+  off_out="$(CAPABILITIES_HUB_BOOST=0 uv run context-router pack --mode implement \
+               --query 'add pagination' --project-root "${fixture}" --json 2>/dev/null \
+             | python3 -c "${extractor}")"
+  on_out="$(CAPABILITIES_HUB_BOOST=1 uv run context-router pack --mode implement \
+              --query 'add pagination' --project-root "${fixture}" --json 2>/dev/null \
+            | python3 -c "${extractor}")"
+
+  if [[ -z "${off_out}" || -z "${on_out}" ]]; then
+    echo "FAIL hub-bridge-ranking-signals: empty pack output (off='${off_out}' on='${on_out}')"
+    return 1
+  fi
+
+  if [[ "${off_out}" != "${on_out}" ]]; then
+    echo "PASS hub-bridge-ranking-signals (top-5 differs; off=[${off_out}] on=[${on_out}])"
+  else
+    echo "FAIL hub-bridge-ranking-signals: top-5 unchanged with/without hub_boost"
+    echo "    off=[${off_out}]"
+    echo "    on =[${on_out}]"
+    return 1
+  fi
 }
 
 _check_proactive-embedding-cache() {
