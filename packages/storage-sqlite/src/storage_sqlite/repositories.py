@@ -616,6 +616,105 @@ class SymbolRepository:
             result.setdefault(cid, []).append(row["id"])
         return result
 
+    def get_untested_hotspots(
+        self,
+        repo: str,
+        top_pct: float = 0.10,
+        limit_cap: int = 50,
+    ) -> list[tuple[SymbolRef, int]]:
+        """Return high-inbound-degree symbols that have zero ``tested_by`` edges.
+
+        Identifies the top ``top_pct`` of symbols (by inbound ``calls`` /
+        ``imports`` edges — a cheap hub-score proxy) that are not the
+        target of any ``tested_by`` edge.  This mirrors
+        code-review-graph's ``get_knowledge_gaps`` tool and is the data
+        source for the ``audit --untested-hotspots`` CLI subcommand.
+
+        The effective ``LIMIT`` is ``min(round(total_hot * top_pct), limit_cap)``.
+        If ``top_pct`` resolves to zero rows the cap is still honoured as
+        a minimum of 1 so a single-file repo with one hot symbol is not
+        filtered out.
+
+        Args:
+            repo: Logical repository name.
+            top_pct: Fraction of hot symbols to include (default 0.10).
+            limit_cap: Absolute upper bound on returned rows (default 50).
+
+        Returns:
+            List of ``(SymbolRef, inbound_degree)`` tuples, ordered by
+            inbound degree descending.  Empty list when the repo has no
+            qualifying symbols.
+        """
+        # Count distinct hot symbols so we can turn top_pct into a LIMIT.
+        total_row = self._conn.execute(
+            """
+            SELECT COUNT(DISTINCT to_symbol_id) AS n
+            FROM edges
+            WHERE repo = ? AND edge_type IN ('calls', 'imports')
+            """,
+            (repo,),
+        ).fetchone()
+        total_hot = int(total_row["n"] or 0)
+        if total_hot == 0:
+            return []
+
+        # round() + max(1, ...) ensures a single-hot-symbol repo still
+        # surfaces its one row, which matches the registered smoke
+        # expectation that this repo produces at least one result.
+        effective_limit = max(1, min(round(total_hot * top_pct), limit_cap))
+
+        rows = self._conn.execute(
+            """
+            WITH hot AS (
+                SELECT to_symbol_id AS sid, COUNT(*) AS inbound
+                FROM edges
+                WHERE repo = ? AND edge_type IN ('calls', 'imports')
+                GROUP BY to_symbol_id
+            ),
+            tested AS (
+                -- ``tested_by`` edges point SUT (from) → test fn (to).
+                -- The *SUT* is what has coverage, so we exclude
+                -- ``from_symbol_id`` from the hotspot list.  See
+                -- language-python/language-java/language-typescript for
+                -- the producer side of the edge.
+                SELECT DISTINCT from_symbol_id AS sid
+                FROM edges
+                WHERE repo = ? AND edge_type = 'tested_by'
+            )
+            SELECT s.id       AS id,
+                   s.name     AS name,
+                   s.kind     AS kind,
+                   s.file_path AS file_path,
+                   s.language AS language,
+                   s.line_start AS line_start,
+                   s.line_end AS line_end,
+                   h.inbound  AS inbound
+            FROM symbols s
+            JOIN hot h ON h.sid = s.id
+            WHERE s.repo = ?
+              AND s.id NOT IN (SELECT sid FROM tested)
+            ORDER BY h.inbound DESC, s.name ASC
+            LIMIT ?
+            """,
+            (repo, repo, repo, effective_limit),
+        ).fetchall()
+
+        return [
+            (
+                SymbolRef(
+                    id=r["id"],
+                    name=r["name"],
+                    kind=r["kind"],
+                    file=Path(r["file_path"]),
+                    language=r["language"] or "",
+                    line_start=r["line_start"] or 0,
+                    line_end=r["line_end"] or 0,
+                ),
+                int(r["inbound"]),
+            )
+            for r in rows
+        ]
+
 
 class EdgeRepository:
     """Typed access to the edges table."""
@@ -871,6 +970,27 @@ class EdgeRepository:
         """Return the total number of edges for a repository."""
         row = self._conn.execute(
             "SELECT COUNT(*) FROM edges WHERE repo = ?", (repo,)
+        ).fetchone()
+        return row[0]
+
+    def count_by_type(self, repo: str, edge_type: str) -> int:
+        """Return the number of edges of a given type for a repository.
+
+        Used by ``audit --untested-hotspots`` to detect the pre-v3 legacy
+        case where zero ``tested_by`` edges are indexed — in that case the
+        CLI surfaces a stderr warning rather than emitting an empty list
+        (per the CLAUDE.md silent-failure rule).
+
+        Args:
+            repo: Logical repository name.
+            edge_type: Edge type string (e.g. ``tested_by``, ``calls``).
+
+        Returns:
+            Integer row count.
+        """
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM edges WHERE repo = ? AND edge_type = ?",
+            (repo, edge_type),
         ).fetchone()
         return row[0]
 
