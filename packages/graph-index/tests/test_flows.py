@@ -237,3 +237,184 @@ def test_flow_label_self_contained_entry():
         length=0,
     )
     assert f.label == "main"
+
+
+# ---------------------------------------------------------------------------
+# N+1 fix — _FlowCache memoizes callee lookups per public call
+# ---------------------------------------------------------------------------
+
+
+class _CountingConn:
+    """Wrap a real sqlite3 connection and count every ``execute`` call.
+
+    Used to assert that a ``list_flows`` run hits the database at most once
+    per distinct symbol id (plus a handful of fixed queries for
+    ``_collect_entries`` and ``sym_repo.get_all``).
+    """
+
+    def __init__(self, inner) -> None:
+        self._inner = inner
+        self.call_count = 0
+        self.call_sids: list[int] = []
+
+    def execute(self, sql, params=(), *args, **kwargs):
+        self.call_count += 1
+        # Record the symbol id argument for callee lookups so we can assert
+        # uniqueness. The callee query always has (repo, sid) params.
+        if "from_symbol_id" in sql and len(params) >= 2:
+            self.call_sids.append(params[1])
+        return self._inner.execute(sql, params, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+
+def test_flow_cache_memoizes_callees_single_query_per_sid(repos, db):
+    """A ``_FlowCache`` must issue at most one SQL query per distinct sid.
+
+    This is the core N+1 guarantee: a BFS that visits the same symbol through
+    different paths doesn't re-fetch its callees.
+    """
+    from graph_index.flows import _FlowCache
+
+    sym_repo, edge_repo = repos
+    repo = "r"
+
+    a = sym_repo.add(_mk("entry_a", "function", "/a.py"), repo)
+    b = sym_repo.add(_mk("entry_b", "function", "/b.py"), repo)
+    leaf = sym_repo.add(_mk("shared_leaf", "function", "/l.py"), repo)
+    edge_repo.add_raw(repo, a, leaf, "calls")
+    edge_repo.add_raw(repo, b, leaf, "calls")
+
+    counting = _CountingConn(db.connection)
+    cache = _FlowCache(counting, repo)
+
+    # First call — cold, should issue one query.
+    assert cache.callees(a) == [leaf]
+    assert counting.call_count == 1
+    # Second call, same sid — must be served from cache.
+    assert cache.callees(a) == [leaf]
+    assert counting.call_count == 1
+    # Different sid — one more query.
+    assert cache.callees(b) == [leaf]
+    assert counting.call_count == 2
+    # Leaf has no callees — still memoized after first miss.
+    assert cache.callees(leaf) == []
+    assert cache.callees(leaf) == []
+    assert counting.call_count == 3
+    # Each sid appeared at most once in the SQL param log.
+    assert sorted(counting.call_sids) == sorted([a, b, leaf])
+
+
+def test_list_flows_does_not_issue_n_plus_one_queries(repos, db):
+    """Regression: ``list_flows`` issues O(distinct symbols) callee queries.
+
+    Construct a diamond graph where two entries share a common descendant.
+    Without the cache, BFS would query the shared subtree once per entry.
+    With the cache, each symbol's callees are looked up exactly once.
+    """
+    sym_repo, edge_repo = repos
+    repo = "r"
+
+    # Two entries converging on a shared mid -> leaf chain.
+    e1 = sym_repo.add(_mk("get_one", "function", "/ctrl.py"), repo)
+    e2 = sym_repo.add(_mk("get_two", "function", "/ctrl.py"), repo)
+    mid = sym_repo.add(_mk("find", "method", "/svc.py"), repo)
+    leaf = sym_repo.add(_mk("select", "method", "/db.py"), repo)
+    edge_repo.add_raw(repo, e1, mid, "calls")
+    edge_repo.add_raw(repo, e2, mid, "calls")
+    edge_repo.add_raw(repo, mid, leaf, "calls")
+
+    # Monkey-patch EdgeRepository._conn to a counting wrapper so both
+    # _collect_entries and _bfs_flows_from see it.
+    counting = _CountingConn(db.connection)
+    edge_repo._conn = counting
+
+    flows = list_flows(repo, sym_repo, edge_repo)
+
+    # Correctness: two flows (one per entry), both end at leaf.
+    assert {f.entry_id for f in flows} == {e1, e2}
+    assert all(f.leaf_id == leaf for f in flows)
+
+    # Callee-lookup invariant: every sid we queried callees for appears
+    # at most once, i.e. the cache caught all re-visits.
+    from collections import Counter
+
+    sid_counts = Counter(counting.call_sids)
+    assert all(n == 1 for n in sid_counts.values()), (
+        f"_callees lookup repeated for some symbol(s): {sid_counts}"
+    )
+    # Total callee queries are bounded by distinct traversed symbols (4).
+    assert len(counting.call_sids) <= 4
+
+
+def test_get_affected_flows_shares_cache_across_entries(repos, db):
+    """``get_affected_flows`` delegates to ``list_flows`` and must benefit
+    from the same per-call cache — no duplicate callee queries."""
+    sym_repo, edge_repo = repos
+    repo = "r"
+
+    e1 = sym_repo.add(_mk("get_a", "function", "/ctrl.py"), repo)
+    e2 = sym_repo.add(_mk("get_b", "function", "/ctrl.py"), repo)
+    shared = sym_repo.add(_mk("find", "method", "/svc.py"), repo)
+    edge_repo.add_raw(repo, e1, shared, "calls")
+    edge_repo.add_raw(repo, e2, shared, "calls")
+
+    counting = _CountingConn(db.connection)
+    edge_repo._conn = counting
+
+    flows = get_affected_flows(repo, sym_repo, edge_repo, shared)
+    assert len(flows) == 2  # both entries reach `shared`
+    from collections import Counter
+
+    sid_counts = Counter(counting.call_sids)
+    assert all(n == 1 for n in sid_counts.values()), (
+        f"get_affected_flows caused duplicate callee queries: {sid_counts}"
+    )
+
+
+def test_list_flows_on_empty_graph_issues_zero_callee_queries(repos, db):
+    """No symbols => no callee queries, no crash. Matches the sentinel spec
+    (empty graph in the N+1 check)."""
+    sym_repo, edge_repo = repos
+    counting = _CountingConn(db.connection)
+    edge_repo._conn = counting
+
+    assert list_flows("r", sym_repo, edge_repo) == []
+    # No from_symbol_id queries were needed at all.
+    assert counting.call_sids == []
+
+
+def test_flow_cache_swallows_lookup_exceptions(repos, db):
+    """A SQL failure on one sid must not prevent later cached lookups."""
+    from graph_index.flows import _FlowCache
+
+    class _FlakyConn:
+        def __init__(self, inner):
+            self._inner = inner
+            self.bad_sid = None
+
+        def execute(self, sql, params=(), *args, **kwargs):
+            if self.bad_sid is not None and len(params) >= 2 and params[1] == self.bad_sid:
+                raise RuntimeError("simulated sqlite failure")
+            return self._inner.execute(sql, params, *args, **kwargs)
+
+    sym_repo, edge_repo = repos
+    repo = "r"
+    a = sym_repo.add(_mk("a", "function", "/a.py"), repo)
+    b = sym_repo.add(_mk("b", "function", "/b.py"), repo)
+    edge_repo.add_raw(repo, a, b, "calls")
+
+    flaky = _FlakyConn(db.connection)
+    flaky.bad_sid = a
+    cache = _FlowCache(flaky, repo)
+    # First call — exception is caught, returns [] and is memoized.
+    assert cache.callees(a) == []
+    assert cache.exc_count == 1
+    # Second call — served from cache, no further exception.
+    assert cache.callees(a) == []
+    assert cache.exc_count == 1
+    # Different sid — still works.
+    flaky.bad_sid = None  # stop flaking
+    assert cache.callees(b) == []  # b has no callees
+    assert cache.exc_count == 1
