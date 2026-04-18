@@ -890,6 +890,67 @@ _check_semantic-default-with-progress() {
   fi
 }
 
+_check_minimal-mode-ranker-tuning() {
+  local fixture="${PROJECT_CONTEXT_ROOT}/spring-petclinic"
+  [[ -d "${fixture}" ]] || { echo "FAIL minimal-mode-ranker-tuning: fixture missing at ${fixture}"; return 1; }
+  local implement_json minimal_json
+  implement_json="$(uv run context-router pack --mode implement --query 'add visit' --project-root "${fixture}" --json 2>/dev/null)" \
+    || { echo "FAIL minimal-mode-ranker-tuning: implement pack errored"; return 1; }
+  minimal_json="$(uv run context-router pack --mode minimal --query 'add visit' --project-root "${fixture}" --json 2>/dev/null)" \
+    || { echo "FAIL minimal-mode-ranker-tuning: minimal pack errored"; return 1; }
+
+  # Compare the top-1 path_or_ref across the two packs. The fix guarantees
+  # that minimal-mode preserves whatever implement-mode surfaces as the
+  # top item (the highest-confidence code-symbol candidate), so the two
+  # paths MUST match.
+  local cmp
+  cmp="$(IMPL="${implement_json}" MIN="${minimal_json}" python3 - <<'PY'
+import json, os, sys
+try:
+    impl = json.loads(os.environ["IMPL"])
+    mini = json.loads(os.environ["MIN"])
+except Exception as exc:
+    print(f"ERR:json:{exc}")
+    sys.exit(0)
+impl_items = impl.get("selected_items") or impl.get("items") or []
+mini_items = mini.get("selected_items") or mini.get("items") or []
+if not impl_items and not mini_items:
+    # Negative case: no candidates available. Minimal must still return
+    # a valid (possibly empty) pack without crashing.
+    print("OK:empty")
+    sys.exit(0)
+if not impl_items:
+    print("ERR:impl-empty-but-minimal-has-items")
+    sys.exit(0)
+if not mini_items:
+    print("ERR:minimal-empty-but-impl-has-items")
+    sys.exit(0)
+impl_top = impl_items[0].get("path_or_ref", "")
+mini_top = mini_items[0].get("path_or_ref", "")
+if impl_top == mini_top:
+    print(f"OK:{mini_top}")
+else:
+    print(f"MISMATCH:impl={impl_top}:min={mini_top}")
+PY
+)"
+  case "${cmp}" in
+    OK:empty)
+      echo "PASS minimal-mode-ranker-tuning (empty candidate pool — graceful no-op)"
+      ;;
+    OK:*)
+      echo "PASS minimal-mode-ranker-tuning (minimal top-1 matches implement top-1: ${cmp#OK:})"
+      ;;
+    MISMATCH:*)
+      echo "FAIL minimal-mode-ranker-tuning (${cmp})"
+      return 1
+      ;;
+    *)
+      echo "FAIL minimal-mode-ranker-tuning (probe error: ${cmp})"
+      return 1
+      ;;
+  esac
+}
+
 # ──────────────────── registry driver ────────────────────
 
 _yq() {

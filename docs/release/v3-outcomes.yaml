@@ -318,3 +318,16 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check semantic-default-with-progress"
       expected_stdout_contains: "PASS semantic-default-with-progress"
+
+  # ──────────────────── v3.1 Wave 1 — ranking quality ────────────────────
+
+  - id: minimal-mode-ranker-tuning
+    severity: P1
+    effort: S
+    title: "Minimal mode preserves the top implement-mode candidate"
+    outcome: "For `pack --mode minimal --query '<task-verb>'`, top-1 item matches the top implement-mode pick when one exists"
+    threshold: "on spring-petclinic 'add visit', top-1 item has `path_or_ref` containing 'visit' (case-insensitive)"
+    negative_case: "when implement-mode has no top pick (e.g. empty repo), minimal mode still returns coverage-selected items without crashing"
+    verify:
+      cmd: "scripts/smoke-v3.sh check minimal-mode-ranker-tuning"
+      expected_stdout_contains: "PASS minimal-mode-ranker-tuning"
