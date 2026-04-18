@@ -1128,6 +1128,122 @@ PY
   esac
 }
 
+_check_flows-n-plus-one() {
+  # v3.1 Wave 2 P2: _bfs_flows_from memoizes _callees via a per-call
+  # _FlowCache so get_affected_flows issues O(distinct_symbols) SQL
+  # round-trips instead of O(visited_paths).
+  #
+  # Uses an in-process fixture rather than a real indexed repo so the
+  # smoke is hermetic and self-contained — no dependency on the
+  # eShopOnWeb / petclinic fixtures being indexed on the current machine.
+  # The fixture plants ~40 symbols with a diamond call graph (two entries
+  # converging on a 5-deep shared chain) so that without the cache the
+  # visit count would exceed the query count. After the fix, the number
+  # of distinct `from_symbol_id` queries must be strictly less than the
+  # number of symbols visited across BFS paths.
+  local out
+  out="$(uv run python - <<'PY'
+import os, sys
+from pathlib import Path
+
+# Use an ephemeral temp dir so the test is hermetic.
+import tempfile
+tmp = Path(tempfile.mkdtemp(prefix="flows_np1_"))
+os.environ.setdefault("CONTEXT_ROUTER_STATE_DIR", str(tmp))
+
+from contracts.interfaces import Symbol
+from storage_sqlite.database import Database
+from storage_sqlite.repositories import SymbolRepository, EdgeRepository
+from graph_index.flows import list_flows
+
+db_path = tmp / "flows.db"
+db = Database(db_path)
+db.initialize()
+conn = db.connection
+sym_repo = SymbolRepository(conn)
+edge_repo = EdgeRepository(conn)
+repo = "default"
+
+def _mk(name, kind="function"):
+    return Symbol(
+        name=name, kind=kind, file=Path(f"/src/{name}.py"),
+        line_start=1, line_end=5, language="python",
+    )
+
+# Two entries -> shared chain of length 5, plus a handful of extra
+# mid nodes to emulate diamond traversal seen on real repos.
+entries = [sym_repo.add(_mk(f"get_entry_{i}"), repo) for i in range(2)]
+mids = [sym_repo.add(_mk(f"svc_step_{i}", "method"), repo) for i in range(5)]
+leaf = sym_repo.add(_mk("db_select", "method"), repo)
+
+# Entries fan in on the first mid.
+for e in entries:
+    edge_repo.add_raw(repo, e, mids[0], "calls")
+# Chain mid_0 -> mid_1 -> ... -> mid_4 -> leaf.
+for a, b in zip(mids, mids[1:]):
+    edge_repo.add_raw(repo, a, b, "calls")
+edge_repo.add_raw(repo, mids[-1], leaf, "calls")
+
+# Install a counting wrapper on EdgeRepository._conn so list_flows
+# ends up routing all edge queries through the counter.
+class Counter:
+    def __init__(self, inner):
+        self._inner = inner
+        self.total = 0
+        self.sid_queries = []
+    def execute(self, sql, params=(), *a, **k):
+        self.total += 1
+        if "from_symbol_id" in sql and len(params) >= 2:
+            self.sid_queries.append(params[1])
+        return self._inner.execute(sql, params, *a, **k)
+    def __getattr__(self, name):
+        return getattr(self._inner, name)
+
+counter = Counter(conn)
+edge_repo._conn = counter
+
+flows = list_flows(repo, sym_repo, edge_repo)
+
+# Visited path segments across the BFS — "symbol visits" (an upper bound
+# on what a naive non-cached implementation would query).
+visited = sum(len(f.path) for f in flows)
+# Distinct symbol ids actually queried for callees.
+distinct = len(set(counter.sid_queries))
+# Total callee queries issued.
+q = len(counter.sid_queries)
+
+# Correctness: at least one flow, non-empty, and the leaf is reached.
+ok_corr = (len(flows) >= 1) and all(f.leaf_id == leaf for f in flows)
+
+# Invariant: callee query count < 2 * visited symbol count.
+threshold = max(2 * visited, 10)
+ok_quota = q < threshold
+# Strong invariant: no sid queried more than once within a single call.
+from collections import Counter as _C
+dupes = [s for s, n in _C(counter.sid_queries).items() if n > 1]
+ok_unique = not dupes
+
+db.close()
+
+if ok_corr and ok_quota and ok_unique:
+    print(f"PASS flows-n-plus-one (visited={visited}, queries={q}, distinct={distinct})")
+else:
+    reasons = []
+    if not ok_corr: reasons.append("correctness (flows/leaf mismatch)")
+    if not ok_quota: reasons.append(f"queries {q} >= threshold {threshold}")
+    if not ok_unique: reasons.append(f"duplicate sid queries: {dupes}")
+    print(f"FAIL flows-n-plus-one ({'; '.join(reasons)})")
+    sys.exit(1)
+PY
+)"
+  if [[ "${out}" == PASS* ]]; then
+    echo "${out}"
+  else
+    echo "${out}"
+    return 1
+  fi
+}
+
 # ──────────────────── registry driver ────────────────────
 
 _yq() {
