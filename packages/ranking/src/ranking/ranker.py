@@ -257,6 +257,7 @@ class ContextRanker:
         use_embeddings: bool = False,
         progress_cb: Callable[[str], None] | None = None,
         use_hub_boost: bool | None = None,
+        db_connection: Any | None = None,
     ) -> None:
         """Initialise the ranker with a token budget.
 
@@ -277,11 +278,22 @@ class ContextRanker:
                 discovered project's ``capabilities.hub_boost`` config key
                 (the Orchestrator does not pass this flag today, hence the
                 env-/config-driven fallback).
+            db_connection: Optional pre-opened SQLite connection to reuse
+                for structural lookups (hub/bridge boost + symbol id
+                resolution). When supplied, the ranker does NOT open a new
+                ``sqlite3.Connection`` per ``rank()`` call — this avoids
+                connection-lifetime churn on large repos when the Orchestrator
+                already holds an open ``Database`` instance. When ``None``
+                (ranker used standalone, e.g. unit tests), the boost falls
+                back to opening a fresh connection from the discovered
+                db_path. Callers retain ownership — the ranker never closes
+                a connection it did not open.
         """
         self._budget = token_budget
         self._use_embeddings = use_embeddings
         self._progress_cb = progress_cb
         self._use_hub_boost = use_hub_boost
+        self._db_connection = db_connection
         # P1-6: BM25 corpus cache — maps items_key -> _BM25Scorer
         # Bounded at 5 entries to avoid unbounded memory growth.
         self._bm25_cache: dict[int, Any] = {}
@@ -666,15 +678,24 @@ class ContextRanker:
             return items
 
         try:
-            import sqlite3
-
             # Deferred import — see module-level comment for why.
             from graph_index.metrics import (  # noqa: PLC0415
                 compute_bridge_scores,
                 compute_hub_scores,
             )
 
-            conn = sqlite3.connect(db_path)
+            # Prefer the Orchestrator-supplied connection. Opening a fresh
+            # one per pack on large repos is wasted I/O (per v3.1
+            # hub-bridge-sqlite-reuse P2). Fall back to a fresh connection
+            # only when the ranker is used standalone (no db_connection).
+            if self._db_connection is not None:
+                conn = self._db_connection
+                owns_conn = False
+            else:
+                import sqlite3  # noqa: PLC0415
+
+                conn = sqlite3.connect(db_path)
+                owns_conn = True
             try:
                 # Use first resolved repo scope. Packs are single-repo in
                 # practice; if multi-repo ever arrives, a caller-side
@@ -683,7 +704,8 @@ class ContextRanker:
                 hub = compute_hub_scores(conn, repo_name)
                 bridge = compute_bridge_scores(conn, repo_name)
             finally:
-                conn.close()
+                if owns_conn:
+                    conn.close()
         except Exception as exc:  # noqa: BLE001
             self._warn_hub_boost_skipped(
                 f"metrics query failed ({type(exc).__name__}: {exc})"
@@ -725,12 +747,28 @@ class ContextRanker:
         Mirrors :meth:`_fetch_stored_vectors` — same (file_path, name)
         lookup keyed through a WITH-VALUES CTE. Returns ``{}`` on any
         failure so the hub/bridge path degrades gracefully.
+
+        Reuses ``self._db_connection`` when the Orchestrator supplied one
+        (v3.1 hub-bridge-sqlite-reuse). Only opens a fresh connection when
+        the ranker is used standalone.
         """
         try:
-            import sqlite3
+            import sqlite3  # noqa: PLC0415
 
-            conn = sqlite3.connect(db_path)
-            conn.row_factory = sqlite3.Row
+            if self._db_connection is not None:
+                conn = self._db_connection
+                owns_conn = False
+                # Row factory is set by Database.connect() already, but be
+                # defensive: our WITH-VALUES CTE expects column access by
+                # name, and an orchestrator-shared connection must keep
+                # that invariant for the duration of this call.
+                prev_factory = conn.row_factory
+                conn.row_factory = sqlite3.Row
+            else:
+                conn = sqlite3.connect(db_path)
+                conn.row_factory = sqlite3.Row
+                owns_conn = True
+                prev_factory = None
             try:
                 by_repo: dict[str, list[ContextItem]] = {}
                 for it in items:
@@ -777,7 +815,12 @@ class ContextRanker:
                             result[id(it)] = sid
                 return result
             finally:
-                conn.close()
+                if owns_conn:
+                    conn.close()
+                elif prev_factory is not None:
+                    # Restore the caller's row_factory so we don't leak a
+                    # ranker-local invariant onto the shared connection.
+                    conn.row_factory = prev_factory
         except Exception:  # noqa: BLE001
             return {}
 
