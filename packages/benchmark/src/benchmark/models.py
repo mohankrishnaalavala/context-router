@@ -113,6 +113,40 @@ class TaskMetrics(BaseModel):
     """Hit rate of a random sample at the same item count — baseline for comparison."""
     rank_quality: float = 0.0
     """Fraction of selected items with confidence ≥ 0.70."""
+    # Baseline token deltas (signed — honest negatives required)
+    vs_keyword: float = 0.0
+    """Signed percentage delta vs the keyword baseline at this task's query.
+
+    Positive => the router pack is smaller than the keyword baseline
+    (a win; the router saved tokens). Negative => the keyword baseline
+    was tighter than the router (an honest regression surfaced by
+    v3.1's ``benchmark-keyword-baseline-honest`` outcome). Zero when the
+    baseline could not be computed for this task (e.g. no DB, or empty
+    baseline result).
+
+    See :func:`benchmark.reporters._vs_keyword` for the computation.
+    """
+    vs_naive: float = 0.0
+    """Signed percentage delta vs the naive (all symbols) baseline.
+
+    Same sign convention as :attr:`vs_keyword` — positive means the
+    router pack is smaller than the naive baseline, negative means the
+    naive baseline was smaller (rare but possible on tiny projects; we
+    surface it honestly rather than clamp).
+    """
+    keyword_baseline_tokens: int = 0
+    """Estimated tokens produced by the keyword baseline for this task's query.
+
+    Kept alongside :attr:`vs_keyword` so consumers can reproduce the
+    delta without re-running the baseline. Zero when the baseline wasn't
+    computed (e.g. DB missing, short query with no 3+ char tokens).
+    """
+    naive_baseline_tokens: int = 0
+    """Estimated tokens produced by the naive (all symbols) baseline.
+
+    This is the same value for every task in a run — we record it on
+    each task anyway so a single-task JSON slice is self-contained.
+    """
 
 
 class BenchmarkReport(BaseModel):
