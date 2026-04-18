@@ -156,3 +156,242 @@ def test_suggest_next_tool_default_echoes_query() -> None:
     hint = _suggest_next_tool([_item("src/main.py")], "add pagination")
     assert "implement" in hint
     assert "add pagination" in hint
+
+
+# ---------------------------------------------------------------------------
+# v3.1 minimal-mode-ranker-tuning (P1) — top implement-mode item preservation
+# ---------------------------------------------------------------------------
+
+
+def _code_item(
+    path: str,
+    *,
+    source_type: str = "file",
+    confidence: float = 0.5,
+    title: str | None = None,
+    est_tokens: int = 10,
+):
+    """Build a ContextItem with a code-symbol source_type for tests."""
+    from contracts.models import ContextItem
+
+    return ContextItem(
+        source_type=source_type,
+        repo="default",
+        path_or_ref=path,
+        title=title or path.split("/")[-1],
+        reason="seed",
+        confidence=confidence,
+        est_tokens=est_tokens,
+    )
+
+
+def test_minimal_pins_highest_confidence_code_symbol_at_top(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With 10 synthetic candidates, minimal top-1 == the unbounded-rank top-1.
+
+    Simulates the budget-enforcement drop path: we seed 10 code-symbol items
+    with deterministic confidences such that the highest-confidence item
+    (``entrypoint``, Visit.java) would be demoted by ``_enforce_budget``'s
+    source-type coverage rule. The preservation overlay must pin it at
+    position 0 of the final top-5.
+    """
+    root = _make_project(tmp_path, symbol_count=12)
+    orch = Orchestrator(project_root=root)
+
+    # Deterministic, monotonically decreasing confidences. The first item is
+    # the "Visit" entity and has the highest confidence — the overlay must
+    # surface it at position 0 even if budget enforcement would drop it.
+    synthetic = [
+        _code_item(
+            "src/main/java/.../visit/Visit.java",
+            source_type="entrypoint",
+            confidence=0.90,
+            title="Visit (Visit.java)",
+        ),
+        _code_item("src/main/java/AppRoot.java", source_type="entrypoint", confidence=0.80),
+        _code_item("src/main/java/Owner.java", source_type="file", confidence=0.70),
+        _code_item("src/main/java/Pet.java", source_type="file", confidence=0.60),
+        _code_item("src/main/java/Clinic.java", source_type="file", confidence=0.55),
+        _code_item("src/test/java/OwnerTest.java", source_type="file", confidence=0.50),
+        _code_item("src/test/java/PetTest.java", source_type="file", confidence=0.45),
+        _code_item("src/main/java/Vet.java", source_type="contract", confidence=0.40),
+        _code_item("config/app.yaml", source_type="file", confidence=0.35),
+        _code_item("pom.xml", source_type="file", confidence=0.30),
+    ]
+
+    # Stub the candidate builder so the ranker sees exactly our synthetic set.
+    monkeypatch.setattr(
+        Orchestrator,
+        "_build_candidates",
+        lambda self, mode, sym_repo, edge_repo, **kwargs: list(synthetic),
+    )
+    # Disable the community boost so confidence ordering is deterministic —
+    # the boost reads the SQLite graph which is irrelevant to this contract.
+    monkeypatch.setattr(
+        Orchestrator,
+        "_apply_community_boost",
+        lambda self, items, sym_repo, repo_name: items,
+    )
+    # Disable the contracts boost for the same reason (reads disk).
+    monkeypatch.setattr(
+        Orchestrator,
+        "_apply_contracts_boost",
+        lambda self, items, repo_root, repo_name="default", config=None: items,
+    )
+    # Force the ranker to skip semantic embeddings — the test contract is
+    # about confidence preservation, not semantic boost.
+    orch.invalidate_cache()
+
+    pack = orch.build_pack("minimal", "add visit", use_embeddings=False)
+
+    assert len(pack.selected_items) <= 5
+    assert pack.selected_items, "minimal pack must not be empty when candidates exist"
+    top = pack.selected_items[0]
+    assert "Visit.java" in top.path_or_ref, (
+        f"expected Visit.java pinned at top, got {top.path_or_ref}"
+    )
+
+
+def test_minimal_no_code_symbol_candidates_does_not_crash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the candidate pool has zero code-symbol items (e.g. memory-only),
+    minimal mode must still return a valid pack without raising.
+    """
+    from contracts.models import ContextItem
+
+    root = _make_project(tmp_path)
+    orch = Orchestrator(project_root=root)
+
+    # All candidates are metadata overlays (memory/decision) — none match
+    # the implement source types, so preservation must gracefully no-op.
+    metadata_only = [
+        ContextItem(
+            source_type="memory",
+            repo="default",
+            path_or_ref="memory/obs-1",
+            title="Observation: old fix",
+            reason="recent work",
+            confidence=0.40,
+            est_tokens=20,
+        ),
+        ContextItem(
+            source_type="decision",
+            repo="default",
+            path_or_ref="decision/dec-1",
+            title="Decision: use X",
+            reason="adr",
+            confidence=0.35,
+            est_tokens=18,
+        ),
+    ]
+    monkeypatch.setattr(
+        Orchestrator,
+        "_build_candidates",
+        lambda self, mode, sym_repo, edge_repo, **kwargs: list(metadata_only),
+    )
+    monkeypatch.setattr(
+        Orchestrator,
+        "_apply_community_boost",
+        lambda self, items, sym_repo, repo_name: items,
+    )
+    monkeypatch.setattr(
+        Orchestrator,
+        "_apply_contracts_boost",
+        lambda self, items, repo_root, repo_name="default", config=None: items,
+    )
+
+    pack = orch.build_pack("minimal", "any query", use_embeddings=False)
+    assert pack.mode == "minimal"
+    # No crash, cap still honored, coverage-selected items retained.
+    assert len(pack.selected_items) <= 5
+
+
+def test_minimal_still_caps_at_five_items_after_preservation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Top-1 preservation MUST NOT inflate the cap past 5 items."""
+    root = _make_project(tmp_path, symbol_count=20)
+    orch = Orchestrator(project_root=root)
+
+    # 10 synthetic items, all code-symbol, decreasing confidence.
+    pool = [
+        _code_item(
+            f"src/module_{i}.py",
+            source_type="file",
+            confidence=0.9 - i * 0.05,
+            title=f"mod{i}",
+        )
+        for i in range(10)
+    ]
+    monkeypatch.setattr(
+        Orchestrator,
+        "_build_candidates",
+        lambda self, mode, sym_repo, edge_repo, **kwargs: list(pool),
+    )
+    monkeypatch.setattr(
+        Orchestrator,
+        "_apply_community_boost",
+        lambda self, items, sym_repo, repo_name: items,
+    )
+    monkeypatch.setattr(
+        Orchestrator,
+        "_apply_contracts_boost",
+        lambda self, items, repo_root, repo_name="default", config=None: items,
+    )
+
+    pack = orch.build_pack("minimal", "pick one", use_embeddings=False)
+    assert len(pack.selected_items) == 5
+
+
+def test_minimal_top_one_matches_implement_top_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Contract: minimal-mode top-1 `path_or_ref` MUST equal implement-mode top-1.
+
+    Mirrors the smoke-handler assertion so a regression shows up in unit
+    tests before it reaches the release gate.
+    """
+    root = _make_project(tmp_path, symbol_count=15)
+    orch = Orchestrator(project_root=root)
+
+    pool = [
+        _code_item("src/alpha.py", source_type="entrypoint", confidence=0.88),
+        _code_item("src/beta.py", source_type="file", confidence=0.75),
+        _code_item("src/gamma.py", source_type="file", confidence=0.60),
+        _code_item("src/delta.py", source_type="file", confidence=0.55),
+        _code_item("src/epsilon.py", source_type="file", confidence=0.50),
+        _code_item("src/zeta.py", source_type="contract", confidence=0.48),
+        _code_item("src/eta.py", source_type="extension_point", confidence=0.40),
+    ]
+    monkeypatch.setattr(
+        Orchestrator,
+        "_build_candidates",
+        lambda self, mode, sym_repo, edge_repo, **kwargs: list(pool),
+    )
+    monkeypatch.setattr(
+        Orchestrator,
+        "_apply_community_boost",
+        lambda self, items, sym_repo, repo_name: items,
+    )
+    monkeypatch.setattr(
+        Orchestrator,
+        "_apply_contracts_boost",
+        lambda self, items, repo_root, repo_name="default", config=None: items,
+    )
+
+    impl_pack = orch.build_pack("implement", "same-query", use_embeddings=False)
+    orch.invalidate_cache()
+    mini_pack = orch.build_pack("minimal", "same-query", use_embeddings=False)
+
+    assert impl_pack.selected_items, "implement pack must not be empty"
+    assert mini_pack.selected_items, "minimal pack must not be empty"
+    assert (
+        mini_pack.selected_items[0].path_or_ref
+        == impl_pack.selected_items[0].path_or_ref
+    ), (
+        "minimal top-1 path_or_ref must match implement top-1 — "
+        f"got minimal={mini_pack.selected_items[0].path_or_ref}, "
+        f"implement={impl_pack.selected_items[0].path_or_ref}"
+    )
