@@ -13,6 +13,7 @@ Protocol flow:
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from typing import Any
@@ -851,6 +852,114 @@ def _notify(method: str, params: dict) -> None:
         sys.stdout.flush()
 
 
+# Phase-4 mcp-pack-streams-large: token threshold for streaming progress.
+# Packs below this size suppress progress notifications entirely; packs at or
+# above emit the full milestone stream.  Matches the v3-outcomes registry
+# negative_case ("<500 tokens — no spurious progress notifications").
+# The threshold is overridable via the ``CONTEXT_ROUTER_MCP_STREAM_MIN_TOKENS``
+# env var for test fixtures where synthetic packs are tiny by design.
+_STREAM_PROGRESS_MIN_TOKENS_DEFAULT: int = 500
+
+
+def _stream_min_tokens() -> int:
+    """Return the progress-streaming threshold (env-var overridable)."""
+    raw = os.environ.get("CONTEXT_ROUTER_MCP_STREAM_MIN_TOKENS")
+    if raw is None:
+        return _STREAM_PROGRESS_MIN_TOKENS_DEFAULT
+    try:
+        value = int(raw)
+        if value < 0:
+            raise ValueError
+        return value
+    except ValueError:
+        print(
+            f"[mcp-server] invalid CONTEXT_ROUTER_MCP_STREAM_MIN_TOKENS={raw!r}; "
+            f"falling back to {_STREAM_PROGRESS_MIN_TOKENS_DEFAULT}",
+            file=sys.stderr,
+        )
+        return _STREAM_PROGRESS_MIN_TOKENS_DEFAULT
+
+
+class _ProgressGate:
+    """Buffers progress callbacks until the final pack size is known.
+
+    The MCP registry outcome ``mcp-pack-streams-large`` requires that packs
+    over 2k tokens emit at least two ``notifications/progress`` messages
+    *before* the final ``tools/call`` response, while packs under 500 tokens
+    emit none.  The orchestrator fires ``progress_cb`` mid-build without
+    knowing the eventual token count, so we buffer here and decide post-hoc
+    based on the serialised pack's ``total_est_tokens`` field.
+    """
+
+    def __init__(self, progress_token: object) -> None:
+        self._progress_token = progress_token
+        self._buffer: list[tuple[str, int, int]] = []
+        self._flushed: bool = False
+
+    def capture(self, stage: str, progress: int, total: int) -> None:
+        """Progress callback supplied to ``build_pack``; buffers one event."""
+        if self._flushed:
+            # Large-pack path: already flushed, forward subsequent events live.
+            _notify_progress(self._progress_token, stage, progress, total)
+            return
+        self._buffer.append((stage, progress, total))
+
+    def flush_if_large(self, total_tokens: int) -> int:
+        """Flush buffered events iff the pack is large enough.
+
+        Returns the number of notifications actually emitted.  Silent-failure
+        rule: any individual notification error is logged to stderr but never
+        crashes the response pipeline.
+        """
+        if total_tokens < _stream_min_tokens():
+            # Drop buffered events — small pack, negative_case in registry.
+            self._buffer.clear()
+            self._flushed = True
+            return 0
+        emitted = 0
+        for stage, progress, total in self._buffer:
+            try:
+                _notify_progress(self._progress_token, stage, progress, total)
+                emitted += 1
+            except Exception as exc:  # noqa: BLE001
+                print(
+                    f"[mcp-server] progress notification failed: {exc}",
+                    file=sys.stderr,
+                )
+        self._buffer.clear()
+        self._flushed = True
+        return emitted
+
+
+def _notify_progress(progress_token: object, stage: str, progress: int, total: int) -> None:
+    """Emit a single ``notifications/progress`` JSON-RPC frame."""
+    _notify("notifications/progress", {
+        "progressToken": progress_token,
+        "progress": progress,
+        "total": total,
+        "message": stage,
+    })
+
+
+def _extract_total_tokens(result: object) -> int:
+    """Return ``total_est_tokens`` from a pack result (0 if unavailable).
+
+    Handles both the full JSON pack dict (``format="json"``) and the compact
+    text shape (``{"text": ..., "total_items": N}``).  The compact shape has
+    no token count, so we fall back to infer from ``text`` length as a
+    conservative proxy (1 token ≈ 4 chars).
+    """
+    if not isinstance(result, dict):
+        return 0
+    if "total_est_tokens" in result and isinstance(result["total_est_tokens"], int):
+        return int(result["total_est_tokens"])
+    # Compact format: {"text": "...", "has_more": ..., "total_items": N}.
+    text = result.get("text")
+    if isinstance(text, str):
+        return len(text) // 4
+    return 0
+
+
 # Tools that accept progress_cb (P3-5) and/or build packs that should trigger
 # a resources/list_changed notification (P3-6).  Kept as module constants so
 # adding a new pack-building tool is a one-line registration.
@@ -909,21 +1018,27 @@ def _handle(request: dict) -> dict | None:
         if tool_name not in _TOOLS:
             return _err(req_id, -32601, f"Unknown tool: {tool_name!r}")
 
-        # P3-5: wire optional progress notifications for pack-building tools.
-        # Extract progressToken so the tool fn never sees it (not in its signature).
+        # P3-5 / Phase-4 mcp-pack-streams-large: wire optional progress
+        # notifications for pack-building tools.  Extract progressToken so the
+        # tool fn never sees it (not in its signature).
         progress_token = arguments.pop("progressToken", None)
+        progress_gate: "_ProgressGate | None" = None
         if progress_token is not None and tool_name in _PROGRESS_TOOLS:
-            def _progress_cb(stage: str, progress: int, total: int) -> None:
-                _notify("notifications/progress", {
-                    "progressToken": progress_token,
-                    "progress": progress,
-                    "total": total,
-                })
-            arguments["progress_cb"] = _progress_cb
+            progress_gate = _ProgressGate(progress_token)
+            arguments["progress_cb"] = progress_gate.capture
 
         try:
             result = _TOOLS[tool_name]["fn"](**arguments)
             is_error = isinstance(result, dict) and "error" in result
+
+            # Phase-4 mcp-pack-streams-large: decide whether to flush buffered
+            # progress notifications based on the final pack's token count.
+            # Large packs (>=500 tokens) flush all milestones so clients see
+            # streaming progress; small packs drop them to avoid spurious
+            # notifications on trivial payloads (registry negative_case).
+            if progress_gate is not None and not is_error:
+                total_tokens = _extract_total_tokens(result)
+                progress_gate.flush_if_large(total_tokens)
 
             # P3-6: announce newly-registered packs so MCP clients can refresh.
             if not is_error and tool_name in _PACK_BUILDING_TOOLS:

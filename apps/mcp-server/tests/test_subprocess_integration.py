@@ -116,11 +116,16 @@ class TestInitialize:
 
 class TestProgressNotifications:
     def test_progress_notifications_precede_response(
-        self, mcp_proc: subprocess.Popen[str], tmp_project_dir: Path
+        self, tmp_project_dir: Path
     ) -> None:
-        """At least one notifications/progress arrives before the tools/call reply."""
+        """At least one notifications/progress arrives before the tools/call reply.
+
+        This test spawns a dedicated subprocess with the
+        ``CONTEXT_ROUTER_MCP_STREAM_MIN_TOKENS`` env var lowered so the synthetic
+        (tiny) fixture still exercises the streaming path.  Production defaults
+        (>=500 tokens) are covered by Phase-4 mcp-pack-streams-large smoke.
+        """
         # Initialize DB in the project dir so build_pack can open it.
-        # We use the Database API directly rather than shelling out to the CLI.
         (tmp_project_dir / ".context-router").mkdir(exist_ok=True)
         from storage_sqlite.database import Database
         db_path = tmp_project_dir / ".context-router" / "context-router.db"
@@ -129,29 +134,49 @@ class TestProgressNotifications:
             db.initialize()
             db.close()
 
-        # initialize handshake
-        _send(mcp_proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
-        _recv_until(mcp_proc, 1)
+        import os as _os
+        env = _os.environ.copy()
+        env["CONTEXT_ROUTER_MCP_STREAM_MIN_TOKENS"] = "0"
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "mcp_server.main"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+        try:
+            _send(proc, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+            _recv_until(proc, 1)
 
-        # Call get_context_pack with progressToken — an empty DB still yields a pack
-        _send(mcp_proc, {
-            "jsonrpc": "2.0", "id": 5, "method": "tools/call",
-            "params": {
-                "name": "get_context_pack",
-                "arguments": {
-                    "mode": "implement",
-                    "query": "test",
-                    "project_root": str(tmp_project_dir),
-                    "progressToken": "e2e",
+            _send(proc, {
+                "jsonrpc": "2.0", "id": 5, "method": "tools/call",
+                "params": {
+                    "name": "get_context_pack",
+                    "arguments": {
+                        "mode": "implement",
+                        "query": "test",
+                        "project_root": str(tmp_project_dir),
+                        "progressToken": "e2e",
+                    },
                 },
-            },
-        })
-        notes, resp = _recv_until(mcp_proc, 5, timeout=30.0)
-        assert resp["result"]["isError"] is False
-        progress_notes = [n for n in notes if n.get("method") == "notifications/progress"]
-        assert progress_notes, f"expected at least one progress notification, got: {notes}"
-        for n in progress_notes:
-            assert n["params"]["progressToken"] == "e2e"
+            })
+            notes, resp = _recv_until(proc, 5, timeout=30.0)
+            assert resp["result"]["isError"] is False
+            progress_notes = [n for n in notes if n.get("method") == "notifications/progress"]
+            assert progress_notes, f"expected at least one progress notification, got: {notes}"
+            for n in progress_notes:
+                assert n["params"]["progressToken"] == "e2e"
+        finally:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
 
 
 class TestResourcesRoundTrip:
