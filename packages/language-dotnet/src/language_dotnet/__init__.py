@@ -16,9 +16,8 @@ import sys
 from pathlib import Path
 
 import tree_sitter_c_sharp as tscs
-from tree_sitter import Language, Node, Parser
-
 from contracts.interfaces import DependencyEdge, Symbol
+from tree_sitter import Language, Node, Parser
 
 _LANGUAGE = Language(tscs.language())
 _PARSER = Parser(_LANGUAGE)
@@ -85,6 +84,23 @@ def _first_child_of_type(node: Node, *types: str) -> Node | None:
         if child.type in types:
             return child
     return None
+
+
+def _name_field_text(node: Node) -> str | None:
+    """Return the text of *node*'s ``name`` field, if any.
+
+    C# declarations (method / constructor / property / class / interface /
+    record / struct / enum) expose their identifier via the ``name`` field
+    in tree-sitter-c-sharp.  This is the canonical way to read the
+    declared name — falling back to ``_first_child_of_type(node,
+    "identifier")`` is unsafe for ``method_declaration`` because a custom
+    return type (``public HttpClient GetClient()``) appears as an
+    earlier ``identifier`` child and would shadow the method name.
+    """
+    name_node = node.child_by_field_name("name")
+    if name_node is None:
+        return None
+    return _text(name_node)
 
 
 def _extract_invocation_name(node: Node) -> str:
@@ -281,8 +297,15 @@ def _walk(
     if node.type in ("class_declaration", "interface_declaration",
                       "struct_declaration", "record_declaration",
                       "enum_declaration"):
-        name_node = _first_child_of_type(node, "identifier")
-        name = _text(name_node) if name_node else "<unknown>"
+        # v3 phase4/edge-source-resolution-fix: read the declared name
+        # from the ``name`` field.  For these node types the first
+        # ``identifier`` child is also the name (no preceding return
+        # type), so behavior is unchanged — but this is the canonical
+        # API and matches the method/constructor/property handlers.
+        name = _name_field_text(node)
+        if not name:
+            name_node = _first_child_of_type(node, "identifier")
+            name = _text(name_node) if name_node else "<unknown>"
         attrs = _collect_attributes(node)
         tags: list[str] = []
         if any(a in _ASPNET_ATTRIBUTES for a in attrs):
@@ -338,11 +361,47 @@ def _walk(
         return
 
     if node.type == "method_declaration":
-        name_node = _first_child_of_type(node, "identifier")
-        name = _text(name_node) if name_node else "<unknown>"
+        # v3 phase4/edge-source-resolution-fix: use the ``name`` field
+        # instead of the first ``identifier`` child.  A custom return
+        # type (e.g. ``public HttpClient GetClient()``) emits an
+        # ``identifier`` child BEFORE the method name, which would
+        # otherwise leak the return type into ``symbols.name`` (and in
+        # turn mis-anchor ``tested_by`` targets and pollute the graph
+        # with spurious ``kind='method'`` rows named ``Task``,
+        # ``HttpClient``, etc.).
+        name = _name_field_text(node)
+        if not name:
+            # Silent-failure rule: the parser should always populate the
+            # ``name`` field for a method_declaration; if it does not,
+            # something is structurally wrong — skip the symbol rather
+            # than risk anchoring on the return type.
+            print(
+                f"[language-dotnet] debug: method_declaration without name field "
+                f"at {file}:{node.start_point[0] + 1}",
+                file=sys.stderr,
+            )
+            # Fall through: do not emit a method symbol with a bogus name.
+            # We still recurse into the body so call edges are captured.
+            body = _first_child_of_type(node, "block")
+            if body:
+                _walk(
+                    body,
+                    results,
+                    file,
+                    current_method=None,
+                    current_class=current_class,
+                    sut_name=sut_name,
+                    has_emitted_test_edge=has_emitted_test_edge,
+                )
+            return
         attrs = _collect_attributes(node)
-        return_type = _first_child_of_type(node, "predefined_type", "identifier",
-                                            "nullable_type", "generic_name")
+        # Return-type is the ``type`` field; fall back to the old
+        # first-typed-child heuristic for signature display only (not
+        # used for name extraction anymore).
+        type_field = node.child_by_field_name("type")
+        return_type = type_field or _first_child_of_type(
+            node, "predefined_type", "identifier", "nullable_type", "generic_name"
+        )
         attrs_str = ", ".join(f"[{a}]" for a in attrs) if attrs else ""
         sig = f"{_text(return_type) if return_type else 'void'} {name}()"
         if attrs_str:
@@ -390,8 +449,14 @@ def _walk(
         return
 
     if node.type == "constructor_declaration":
-        name_node = _first_child_of_type(node, "identifier")
-        name = _text(name_node) if name_node else "<unknown>"
+        # v3 phase4/edge-source-resolution-fix: prefer the ``name`` field
+        # for parity with method/class handlers.  Constructors have no
+        # preceding return type, so the first-identifier heuristic also
+        # returned the correct name — this is purely defensive.
+        name = _name_field_text(node)
+        if not name:
+            name_node = _first_child_of_type(node, "identifier")
+            name = _text(name_node) if name_node else "<unknown>"
         attrs = _collect_attributes(node)
         attrs_str = ", ".join(f"[{a}]" for a in attrs) if attrs else ""
         raw_sig = _text(node).split("{")[0].strip()
@@ -421,10 +486,17 @@ def _walk(
         return
 
     if node.type == "property_declaration":
-        name_node = _first_child_of_type(node, "identifier")
-        name = _text(name_node) if name_node else "<unknown>"
-        type_node = _first_child_of_type(node, "predefined_type", "identifier",
-                                          "nullable_type", "generic_name")
+        # v3 phase4/edge-source-resolution-fix: prefer the ``name`` field
+        # so a custom property type (``public HttpClient Client { get; }``)
+        # does not mis-label the property with its return-type identifier.
+        name = _name_field_text(node)
+        if not name:
+            name_node = _first_child_of_type(node, "identifier")
+            name = _text(name_node) if name_node else "<unknown>"
+        type_field = node.child_by_field_name("type")
+        type_node = type_field or _first_child_of_type(
+            node, "predefined_type", "identifier", "nullable_type", "generic_name"
+        )
         type_str = _text(type_node) if type_node else "object"
         results.append(
             Symbol(
