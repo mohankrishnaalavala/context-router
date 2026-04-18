@@ -866,6 +866,23 @@ PY
   fi
 }
 
+_check_typescript-inheritance-edges() {
+  local fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
+  [[ -d "${fixture}" ]] || { echo "FAIL typescript-inheritance-edges: fixture missing at ${fixture}"; return 1; }
+  # Re-index from scratch so the measurement is deterministic across runs.
+  rm -f "${fixture}/.context-router/context-router.db"
+  uv run context-router init --project-root "${fixture}" >/dev/null 2>&1
+  uv run context-router index --project-root "${fixture}" >/dev/null 2>&1
+  local n
+  n="$(sqlite3 "${fixture}/.context-router/context-router.db" "SELECT COUNT(*) FROM edges WHERE edge_type='tested_by'")"
+  if [[ "${n}" -ge 10 ]]; then
+    echo "PASS typescript-inheritance-edges (tested_by=${n} on bulletproof-react)"
+  else
+    echo "FAIL typescript-inheritance-edges (tested_by=${n}; need >=10)"
+    return 1
+  fi
+}
+
 _check_semantic-default-with-progress() {
   local fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
   [[ -d "${fixture}" ]] || { echo "FAIL semantic-default-with-progress: fixture missing at ${fixture}"; return 1; }
