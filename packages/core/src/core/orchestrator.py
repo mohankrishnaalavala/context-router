@@ -74,6 +74,53 @@ def _estimate_item_tokens(title: str, excerpt: str) -> int:
     return estimate_tokens(title + " " + excerpt) + _METADATA_OVERHEAD_TOKENS
 
 
+# ---------------------------------------------------------------------------
+# Review-mode risk scoring (Phase 3 Wave 2)
+# ---------------------------------------------------------------------------
+
+# Risk is a cheap per-item display overlay for review-mode packs: it tells
+# reviewers where to look first by combining diff membership with a
+# file-size proxy for complexity and the candidate's bm25/ranker confidence.
+# It is NOT a ranking signal — the ranker never sees it.
+_RISK_SIZE_MEDIUM_THRESHOLD: int = 500
+_RISK_SIZE_HIGH_THRESHOLD: int = 2000
+_RISK_HIGH_CONFIDENCE_THRESHOLD: float = 0.8
+
+
+def _count_lines(path: Path) -> int:
+    """Return the line count of *path*, or 0 if the file cannot be read."""
+    try:
+        with path.open("rb") as fh:
+            return sum(1 for _ in fh)
+    except (OSError, ValueError):
+        return 0
+
+
+def _compute_risk(
+    item: ContextItem,
+    diff_files: set[str],
+    file_size: dict[str, int],
+) -> str:
+    """Cheap per-item risk label for review mode.
+
+    Returns one of ``none``, ``low``, ``medium``, ``high``::
+
+      none    = file not in current diff
+      low     = in diff, small file (< 500 lines)
+      medium  = in diff, medium file (500-2000 lines)
+      high    = in diff AND large file (> 2000 lines) OR
+                in diff AND high bm25/ranker confidence (>= 0.8)
+    """
+    if item.path_or_ref not in diff_files:
+        return "none"
+    size = file_size.get(item.path_or_ref, 0)
+    if size > _RISK_SIZE_HIGH_THRESHOLD or item.confidence >= _RISK_HIGH_CONFIDENCE_THRESHOLD:
+        return "high"
+    if size > _RISK_SIZE_MEDIUM_THRESHOLD:
+        return "medium"
+    return "low"
+
+
 def _warn_optional_subsystem_failure(
     subsystem: str,
     consequence: str,
@@ -738,6 +785,12 @@ class Orchestrator:
             )
             all_ranked.sort(key=lambda i: i.confidence, reverse=True)
 
+            # Phase 3 Wave 2: review-mode risk overlay. Pure display metadata
+            # — not a ranking signal — so it runs AFTER rank+dedup+boosts
+            # but BEFORE pagination so every page sees the labels.
+            if mode == "review":
+                all_ranked = self._apply_review_risk(all_ranked)
+
             total_items_count = len(all_ranked)
 
             if progress_cb is not None:
@@ -1207,6 +1260,87 @@ class Orchestrator:
             return {str(self._root / cf.path) for cf in changed}
         except (RuntimeError, OSError):
             return set()
+
+    def _apply_review_risk(self, items: list[ContextItem]) -> list[ContextItem]:
+        """Return *items* with per-item ``risk`` populated for review mode.
+
+        Pulls the current diff via :class:`GitDiffParser` and pairs each
+        changed file with a cheap size-based complexity proxy. Items whose
+        ``path_or_ref`` is not in the diff stay at ``risk="none"``.
+
+        The diff set intentionally contains BOTH the absolute path and the
+        repo-relative path for each changed file so the membership check
+        matches symbol records regardless of whether they were indexed
+        with relative or absolute paths (existing stores do both).
+
+        Silent-failure rule (CLAUDE.md): if the diff lookup fails (not a
+        git repo, first commit on branch, etc.) we emit a one-line stderr
+        debug note so reviewers can tell the risk column is intentionally
+        blank rather than silently skipped. Risk stays ``"none"`` for all
+        items in that case.
+        """
+        if not items:
+            return items
+        try:
+            raw_diff = self._get_changed_files()
+        except Exception as exc:  # noqa: BLE001 — risk is best-effort
+            print(
+                f"review-mode risk overlay skipped (git diff lookup failed: {exc})",
+                file=sys.stderr,
+            )
+            return items
+        if not raw_diff:
+            # Negative case: no diff → every item stays risk="none".
+            # Avoid per-item copies — defaults already satisfy the contract.
+            return items
+
+        # Build a membership set that works for both absolute-path items
+        # (MCP contract) and relative-path items (most symbol repositories
+        # persist repo-relative paths). For each changed file we also
+        # record its size keyed by BOTH forms so the lookup in
+        # _compute_risk hits regardless of how the item was stored.
+        #
+        # NOTE: self._root may be a relative path (e.g. ``Path(".")`` when
+        # the CLI is invoked with ``--project-root .``). We resolve to an
+        # absolute form so membership checks hit items whose
+        # ``path_or_ref`` is stored in canonical absolute form.
+        diff_files: set[str] = set()
+        file_size: dict[str, int] = {}
+        try:
+            root_abs = self._root.resolve()
+        except (OSError, RuntimeError):
+            root_abs = self._root
+        for fp in raw_diff:
+            p = Path(fp)
+            if p.is_absolute():
+                abs_path = p
+            else:
+                abs_path = (self._root / p)
+            try:
+                abs_resolved = abs_path.resolve()
+            except (OSError, RuntimeError):
+                abs_resolved = abs_path
+            abs_str = str(abs_resolved)
+            nonresolved_abs = str(abs_path)
+            try:
+                rel_str = str(abs_resolved.relative_to(root_abs))
+            except ValueError:
+                # Path lives outside the project root; keep absolute form.
+                rel_str = abs_str
+            lines = _count_lines(abs_resolved)
+            for key in {abs_str, nonresolved_abs, rel_str, fp}:
+                diff_files.add(key)
+                file_size[key] = lines
+            # Also record a leading-"./" form which some CLIs emit.
+            if not rel_str.startswith(("/", ".")):
+                dot_rel = f"./{rel_str}"
+                diff_files.add(dot_rel)
+                file_size[dot_rel] = lines
+
+        return [
+            item.model_copy(update={"risk": _compute_risk(item, diff_files, file_size)})
+            for item in items
+        ]
 
     @staticmethod
     def _is_test_file(file_path: str) -> bool:
