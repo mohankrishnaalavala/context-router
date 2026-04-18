@@ -36,6 +36,12 @@ class CapabilitiesConfig(BaseModel):
     # False — enable explicitly to A/B test the signal before rolling
     # it out widely. Capped at +0.10 so BM25 + semantic remain primary.
     hub_boost: bool = False
+    # Phase-4 (outcome ``cross-community-coupling``): threshold for the
+    # multi-repo workspace pack to emit a stderr warning about edges
+    # that cross community boundaries. Only evaluated in workspace
+    # (multi-repo) mode. Default 50 — tune upward for large codebases
+    # or downward to exercise the warning on smaller fixtures.
+    coupling_warn_threshold: int = 50
 
 
 class ContextRouterConfig(BaseModel):

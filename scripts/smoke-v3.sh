@@ -559,8 +559,103 @@ PY
 }
 
 _check_cross-community-coupling() {
-  echo "FAIL cross-community-coupling: check handler not implemented yet"
-  return 1
+  # Phase 4 Wave 2 outcome: when a multi-repo workspace pack contains
+  # >= `capabilities.coupling_warn_threshold` edges whose endpoints live
+  # in different communities, WorkspaceOrchestrator writes a warning to
+  # stderr. The negative case (single-repo pack) must not emit it.
+  local tmp
+  tmp="$(mktemp -d)"
+  local repo_a="${tmp}/repo_a"
+  local repo_b="${tmp}/repo_b"
+  mkdir -p "${repo_a}" "${repo_b}"
+
+  # Initialise both repos so the SQLite schema (including community_id)
+  # exists before we seed synthetic symbols.
+  uv run context-router init --project-root "${repo_a}" >/dev/null 2>&1 \
+    || { echo "FAIL cross-community-coupling: init repo_a failed"; rm -rf "${tmp}"; return 1; }
+  uv run context-router init --project-root "${repo_b}" >/dev/null 2>&1 \
+    || { echo "FAIL cross-community-coupling: init repo_b failed"; rm -rf "${tmp}"; return 1; }
+
+  # Write workspace.yaml by hand so we do not depend on the `repo add`
+  # subcommand walking the filesystem.
+  cat >"${tmp}/workspace.yaml" <<EOF
+name: xcc-smoke
+repos:
+  - name: repo-a
+    path: ${repo_a}
+  - name: repo-b
+    path: ${repo_b}
+links: {}
+contract_links: []
+EOF
+
+  # Lower the threshold to 10 via workspace-root config so a small
+  # synthetic fixture trips the warning deterministically.
+  mkdir -p "${tmp}/.context-router"
+  cat >"${tmp}/.context-router/config.yaml" <<'EOF'
+capabilities:
+  coupling_warn_threshold: 10
+EOF
+
+  # Seed repo-a with 30 cross-community edges.
+  uv run python - "${repo_a}/.context-router/context-router.db" "repo-a" 30 <<'PY' \
+    || { echo "FAIL cross-community-coupling: seed repo-a failed"; rm -rf "${tmp}"; return 1; }
+import sqlite3, sys
+db, repo, n = sys.argv[1], sys.argv[2], int(sys.argv[3])
+conn = sqlite3.connect(db)
+cur = conn.cursor()
+ids = []
+for i in range(2 * n):
+    community = 1 if i % 2 == 0 else 2
+    cur.execute(
+        "INSERT INTO symbols(repo, file_path, name, kind, community_id) "
+        "VALUES (?, ?, ?, 'function', ?)",
+        (repo, f"src/mod_{i}.py", f"sym_{i}", community),
+    )
+    ids.append(cur.lastrowid)
+for i in range(n):
+    cur.execute(
+        "INSERT INTO edges(repo, from_symbol_id, to_symbol_id, edge_type) "
+        "VALUES (?, ?, ?, 'calls')",
+        (repo, ids[2 * i], ids[2 * i + 1]),
+    )
+conn.commit()
+conn.close()
+PY
+
+  # Run the multi-repo workspace pack; capture stderr only.
+  local stderr_out
+  stderr_out="$(uv run context-router workspace pack --mode implement --query x --root "${tmp}" 2>&1 1>/dev/null)" \
+    || { echo "FAIL cross-community-coupling: workspace pack errored"; echo "${stderr_out}" | head -5; rm -rf "${tmp}"; return 1; }
+
+  if ! echo "${stderr_out}" | grep -q "cross-community edges detected"; then
+    echo "FAIL cross-community-coupling: multi-repo pack did not emit the warning"
+    echo "${stderr_out}" | head -5
+    rm -rf "${tmp}"
+    return 1
+  fi
+
+  # Negative case: single-repo workspace must NOT emit the warning, even
+  # though repo-a already exceeds the threshold.
+  cat >"${tmp}/workspace.yaml" <<EOF
+name: xcc-smoke-single
+repos:
+  - name: repo-a
+    path: ${repo_a}
+links: {}
+contract_links: []
+EOF
+  local single_stderr
+  single_stderr="$(uv run context-router workspace pack --mode implement --query x --root "${tmp}" 2>&1 1>/dev/null)" \
+    || { echo "FAIL cross-community-coupling: single-repo pack errored"; rm -rf "${tmp}"; return 1; }
+  if echo "${single_stderr}" | grep -q "cross-community edges detected"; then
+    echo "FAIL cross-community-coupling: single-repo pack emitted the warning (must not)"
+    rm -rf "${tmp}"
+    return 1
+  fi
+
+  echo "PASS cross-community-coupling"
+  rm -rf "${tmp}"
 }
 
 _check_handover-wiki() {
