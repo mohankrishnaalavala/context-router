@@ -238,6 +238,8 @@ context-router pack --mode MODE [--query TEXT] [--project-root PATH] [--json]
 
 The pack is saved to `.context-router/last-pack.json` for later inspection.
 
+**Handover wiki mode.** `context-router pack --mode handover --wiki` skips the ranker entirely and emits a deterministic markdown "subsystem wiki" built from the indexed graph: the top communities are ranked by total inbound hub degree, and each section lists the key files, hub symbols, and a template-based one-paragraph summary. Stream to stdout by default or write to a file with `--out PATH`. The `--wiki` flag is handover-only — combining it with any other `--mode` is a usage error.
+
 **Examples:**
 
 ```bash

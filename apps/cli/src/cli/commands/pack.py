@@ -89,14 +89,55 @@ def pack(
             ),
         ),
     ] = 0,
+    wiki: Annotated[
+        bool,
+        typer.Option(
+            "--wiki",
+            help=(
+                "Emit a markdown subsystem wiki instead of a ranked pack. "
+                "Requires --mode handover."
+            ),
+        ),
+    ] = False,
+    out: Annotated[
+        str,
+        typer.Option(
+            "--out",
+            help=(
+                "Write output (currently only --wiki markdown) to PATH. "
+                "Streams to stdout when omitted."
+            ),
+        ),
+    ] = "",
 ) -> None:
     """Generate a context pack for the given task MODE.
 
     Exit codes:
       0 — success
       1 — no index found (run 'context-router index' first)
-      2 — invalid mode / empty query for minimal mode
+      2 — invalid mode / empty query for minimal mode / usage error
     """
+    # Silent-failure rule: --wiki is a handover-mode-only flag. Using it
+    # in any other mode is a clear user error, so we fail loudly with
+    # exit code 2 rather than silently produce a normal pack.
+    if wiki and mode != "handover":
+        typer.secho(
+            "error: --wiki requires --mode handover",
+            err=True,
+            fg="red",
+        )
+        raise typer.Exit(code=2)
+
+    # --out is meaningful only in --wiki today. Warn instead of silently
+    # ignoring it if the caller supplies --out without --wiki.
+    if out and not wiki:
+        typer.secho(
+            "warning: --out is ignored without --wiki (it only routes the "
+            "markdown wiki today; pack JSON/table output always goes to stdout).",
+            err=True,
+            fg="yellow",
+        )
+
     if mode not in _VALID_MODES:
         typer.echo(
             f"Error: invalid mode '{mode}'. Must be one of: {', '.join(_VALID_MODES)}",
@@ -118,6 +159,15 @@ def pack(
 
     root = Path(project_root) if project_root else None
     err_path = Path(error_file) if error_file else None
+
+    # --wiki short-circuits the pack pipeline: no ranker, no token budget.
+    # It needs a concrete project_root so the wiki generator can find
+    # .context-router/context-router.db — mirror the orchestrator's
+    # auto-detection when the caller omits --project-root.
+    if wiki:
+        _emit_wiki(root=root, out_path=Path(out) if out else None)
+        return
+
     try:
         result = _run_build_pack(
             mode=mode,
@@ -154,6 +204,68 @@ def pack(
         return
 
     _print_pack(result)
+
+
+def _emit_wiki(*, root, out_path) -> None:  # type: ignore[no-untyped-def]
+    """Render the handover-mode markdown wiki and write it to *out_path*.
+
+    When *out_path* is ``None`` the markdown streams to stdout. On any
+    failure we surface a stderr warning and exit code 1 — the
+    handover-wiki outcome explicitly calls out that silent empty output
+    is a bug.
+    """
+    from pathlib import Path as _Path
+
+    from core.wiki import generate_wiki  # local import — optional dep
+    # Auto-detect the project root if the caller did not pass one, so
+    # `context-router pack --mode handover --wiki` "just works" from
+    # inside an indexed tree.
+    if root is None:
+        try:
+            from core.orchestrator import _find_project_root  # type: ignore[attr-defined]
+            project_root = _find_project_root(_Path.cwd())
+        except FileNotFoundError as exc:
+            typer.secho(f"error: {exc}", err=True, fg="red")
+            raise typer.Exit(code=1)
+    else:
+        project_root = _Path(root).resolve()
+
+    try:
+        md = generate_wiki(project_root)
+    except Exception as exc:  # noqa: BLE001 — surface all errors with context
+        typer.secho(
+            f"error: wiki generation failed ({type(exc).__name__}: {exc})",
+            err=True,
+            fg="red",
+        )
+        raise typer.Exit(code=1)
+
+    if not md.strip():
+        # Defensive: generate_wiki always returns a non-empty placeholder,
+        # but if a future refactor regresses this we must fail loudly —
+        # silent empty output is a bug per CLAUDE.md.
+        typer.secho(
+            "error: wiki generator returned empty output",
+            err=True,
+            fg="red",
+        )
+        raise typer.Exit(code=1)
+
+    if out_path is not None:
+        try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(md)
+        except OSError as exc:
+            typer.secho(
+                f"error: failed to write wiki to {out_path} ({exc})",
+                err=True,
+                fg="red",
+            )
+            raise typer.Exit(code=1)
+        typer.echo(f"Wrote wiki to {out_path} ({len(md)} bytes)")
+        return
+
+    typer.echo(md)
 
 
 def _run_build_pack(

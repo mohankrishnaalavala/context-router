@@ -546,8 +546,39 @@ _check_cross-community-coupling() {
 }
 
 _check_handover-wiki() {
-  echo "FAIL handover-wiki: check handler not implemented yet"
-  return 1
+  # Phase 4 Wave 2 outcome: `context-router pack --mode handover --wiki`
+  # writes a markdown subsystem wiki with >=3 sections (each with a
+  # key-file list + one-paragraph summary), and `--wiki` without
+  # `--mode handover` is a usage error.
+  local fixture="${PROJECT_CONTEXT_ROOT}/spring-petclinic"
+  [[ -d "${fixture}" ]] || { echo "FAIL handover-wiki: fixture missing at ${fixture}"; return 1; }
+
+  uv run context-router index --project-root "${fixture}" >/dev/null 2>&1 \
+    || { echo "FAIL handover-wiki: index step failed"; return 1; }
+
+  local wiki
+  wiki="$(uv run context-router pack --mode handover --wiki --project-root "${fixture}" 2>/dev/null)" \
+    || { echo "FAIL handover-wiki: wiki command errored"; return 1; }
+
+  local n_sections n_lists
+  n_sections="$(printf '%s\n' "${wiki}" | grep -cE '^## Subsystem:')"
+  n_lists="$(printf '%s\n' "${wiki}" | grep -c 'Key files')"
+  if [[ "${n_sections}" -lt 3 || "${n_lists}" -lt 3 ]]; then
+    echo "FAIL handover-wiki (${n_sections} sections, ${n_lists} file lists; need >=3 each)"
+    return 1
+  fi
+
+  # Negative case: --wiki without --mode handover must be a usage error.
+  # The command exits non-zero by design; capture stdout+stderr first so
+  # `pipefail` doesn't misread the expected non-zero exit as a failure.
+  local negative_out
+  negative_out="$(uv run context-router pack --mode implement --wiki --project-root "${fixture}" 2>&1 || true)"
+  if [[ "${negative_out}" != *"requires --mode handover"* ]]; then
+    echo "FAIL handover-wiki: missing usage-error on --wiki without handover"
+    return 1
+  fi
+
+  echo "PASS handover-wiki (${n_sections} sections, ${n_lists} file lists)"
 }
 
 _check_mcp-pack-streams-large() {
