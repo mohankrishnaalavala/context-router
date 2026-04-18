@@ -498,8 +498,46 @@ _check_enum-symbols-extracted() {
 }
 
 _check_flow-level-debug() {
-  echo "FAIL flow-level-debug: check handler not implemented yet"
-  return 1
+  # Phase 4 Wave 1 outcome: debug-mode packs annotate top items with a
+  # flow-level label (``entry -> leaf``) so the consumer can see which
+  # execution path each item belongs to. Threshold (per
+  # docs/release/v3-outcomes.yaml): at least 3 of the top-5 items must
+  # carry a non-null ``flow``.
+  local fixture="${PROJECT_CONTEXT_ROOT}/spring-petclinic"
+  [[ -d "${fixture}" ]] || { echo "FAIL flow-level-debug: fixture missing at ${fixture}"; return 1; }
+
+  uv run context-router index --project-root "${fixture}" >/dev/null 2>&1 \
+    || { echo "FAIL flow-level-debug: indexer failed on fixture"; return 1; }
+
+  local pack_json
+  pack_json="$(uv run context-router pack --mode debug --query 'null pointer in owner' --project-root "${fixture}" --json 2>/dev/null)" \
+    || { echo "FAIL flow-level-debug: pack command errored"; return 1; }
+
+  local flow_count
+  flow_count="$(
+    python3 - "${pack_json}" <<'PY' 2>/dev/null
+import json, sys
+try:
+    p = json.loads(sys.argv[1])
+except Exception:
+    print(-1)
+    sys.exit(0)
+items = p.get("items") or p.get("selected_items") or []
+print(sum(1 for i in items[:5] if i.get("flow")))
+PY
+  )"
+
+  if [[ -z "${flow_count}" ]]; then
+    echo "FAIL flow-level-debug: could not parse pack JSON"
+    return 1
+  fi
+
+  if [[ "${flow_count}" -ge 3 ]]; then
+    echo "PASS flow-level-debug (${flow_count} of top-5 items have flow annotations)"
+  else
+    echo "FAIL flow-level-debug (only ${flow_count} of top-5 items have flow annotations; need >=3)"
+    return 1
+  fi
 }
 
 _check_cross-community-coupling() {

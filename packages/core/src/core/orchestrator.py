@@ -791,6 +791,17 @@ class Orchestrator:
             if mode == "review":
                 all_ranked = self._apply_review_risk(all_ranked)
 
+            # Phase 4 Wave 1: debug-mode flow-level annotation. Runs after
+            # ranking + dedup + boosts so the top-N items are finalized, and
+            # BEFORE pagination so each page carries its ``flow`` labels.
+            # Returns the annotated list plus an optional explanatory note
+            # that is folded into ``pack.metadata`` below.
+            debug_flow_note: str | None = None
+            if mode == "debug":
+                all_ranked, debug_flow_note = self._apply_debug_flows(
+                    all_ranked, sym_repo, edge_repo, repo_name="default"
+                )
+
             total_items_count = len(all_ranked)
 
             if progress_cb is not None:
@@ -823,6 +834,13 @@ class Orchestrator:
             page_items = page_items[:5]
             has_more = False
             pack_metadata["next_tool_suggestion"] = _suggest_next_tool(page_items, query)
+
+        # Phase 4 Wave 1: surface flow-detection status in the debug pack so
+        # consumers can tell the difference between "no flows available" and
+        # "flows available on every item". ``debug_flow_note`` is ``None``
+        # when the threshold (>=3 annotated top-5 items) is met.
+        if mode == "debug" and debug_flow_note:
+            pack_metadata["note"] = debug_flow_note
 
         total = sum(i.est_tokens for i in page_items)
         reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
@@ -1341,6 +1359,139 @@ class Orchestrator:
             item.model_copy(update={"risk": _compute_risk(item, diff_files, file_size)})
             for item in items
         ]
+
+    def _apply_debug_flows(
+        self,
+        items: list[ContextItem],
+        sym_repo: SymbolRepository,
+        edge_repo: EdgeRepository,
+        repo_name: str = "default",
+    ) -> tuple[list[ContextItem], str | None]:
+        """Return *items* with ``flow`` annotated for debug-mode packs.
+
+        For each item whose underlying symbol can be resolved (by
+        ``path_or_ref`` + the leading token of ``title``), look up the
+        affected flows via :func:`graph_index.flows.get_affected_flows` and
+        label the item with a compact ``entry -> leaf`` string. The shortest
+        flow wins when several flows pass through the same symbol.
+
+        Returns a tuple ``(annotated_items, note_or_none)``. ``note_or_none``
+        is a short explanation for ``pack.metadata["note"]`` when fewer than
+        3 of the top-5 items could be annotated (the outcome's threshold) or
+        when no flows are available at all. It is ``None`` when the threshold
+        is met — in that case callers add no metadata note.
+
+        Silent-failure rule: any unexpected error returns ``(items, note)``
+        so the debug pack still rolls out without flow labels. A stderr
+        warning is emitted so the missing annotations are never silent.
+        """
+        # Local import to avoid introducing a package-level dependency cycle
+        # between core and graph-index.
+        from graph_index.flows import list_flows
+
+        if not items:
+            return items, None
+
+        # Pre-compute all flows once so per-item lookups stay O(total_flows).
+        # Re-using a cached list across items also means a single stderr
+        # warning (if any) is emitted rather than one per item.
+        try:
+            all_flows = list_flows(repo_name, sym_repo, edge_repo)
+        except Exception as exc:  # noqa: BLE001 — silent-failure contract
+            print(
+                f"warning: debug flow annotation skipped "
+                f"(list_flows failed: {exc})",
+                file=sys.stderr,
+            )
+            return items, (
+                "flows unavailable: list_flows failed (see stderr); "
+                "items carry no ``flow`` labels"
+            )
+
+        if not all_flows:
+            # Negative case required by the outcome: "no flows detected →
+            # fall back to today's behavior with a note in explain.why".
+            # Every item keeps flow=None.
+            return items, (
+                "no flows detected in the indexed graph; "
+                "debug pack falls back to file-level context"
+            )
+
+        # Build a (file_path, symbol_name) -> symbol_id lookup so we can map
+        # items back to symbols without a per-item SQL roundtrip.
+        try:
+            all_symbols = sym_repo.get_all(repo_name)
+        except Exception as exc:  # noqa: BLE001 — silent-failure contract
+            print(
+                f"warning: debug flow annotation skipped "
+                f"(symbol lookup failed: {exc})",
+                file=sys.stderr,
+            )
+            return items, (
+                "flows unavailable: symbol lookup failed (see stderr); "
+                "items carry no ``flow`` labels"
+            )
+
+        file_name_to_id: dict[tuple[str, str], int] = {}
+        for sym in all_symbols:
+            if sym.id is None:
+                continue
+            file_name_to_id[(str(sym.file), sym.name)] = sym.id
+            # Also index by just-the-basename so items with bare file names
+            # resolve too.
+            file_name_to_id[(Path(sym.file).name, sym.name)] = sym.id
+
+        # Group flows by symbol id for cheap per-item affected-flow lookup.
+        by_symbol: dict[int, list] = {}
+        for f in all_flows:
+            for sid in f.path:
+                by_symbol.setdefault(sid, []).append(f)
+
+        annotated: list[ContextItem] = []
+        for item in items:
+            # Extract the symbol name from the item title. Our ``_make_item``
+            # helper formats titles as ``"{name} ({filename})"`` — split on
+            # " (" to recover the leading symbol name. Call-chain /
+            # runtime-signal items that lack this format simply won't match
+            # the lookup, which is correct — they point to files, not
+            # symbols, so there's no single symbol to anchor a flow to.
+            sym_name = item.title.split(" (", 1)[0].strip()
+            candidate_keys = (
+                (item.path_or_ref, sym_name),
+                (Path(item.path_or_ref).name, sym_name),
+            )
+            sym_id: int | None = None
+            for key in candidate_keys:
+                if key in file_name_to_id:
+                    sym_id = file_name_to_id[key]
+                    break
+
+            if sym_id is None:
+                annotated.append(item)
+                continue
+
+            flows = by_symbol.get(sym_id, [])
+            if not flows:
+                annotated.append(item)
+                continue
+
+            # Prefer the shortest flow for a compact label; ties broken by
+            # (entry_name, leaf_name) so the label is stable across runs.
+            best = min(flows, key=lambda f: (f.length, f.entry_name, f.leaf_name))
+            annotated.append(item.model_copy(update={"flow": best.label}))
+
+        # Threshold: at least 3 of the top-5 items must carry a non-null
+        # flow. Fewer = add a metadata note so the caller can tell the
+        # annotation layer ran but the data was insufficient.
+        top_slice = annotated[:5]
+        flow_count = sum(1 for i in top_slice if i.flow)
+        if flow_count < 3:
+            note = (
+                f"flows available for only {flow_count} of top {len(top_slice)} items; "
+                "consider re-indexing or widening the query"
+            )
+            return annotated, note
+        return annotated, None
 
     @staticmethod
     def _is_test_file(file_path: str) -> bool:

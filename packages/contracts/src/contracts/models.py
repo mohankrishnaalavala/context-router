@@ -41,6 +41,12 @@ class ContextItem(BaseModel):
     # Populated by the orchestrator's review branch from git-diff membership +
     # file-size/complexity proxies. For non-review modes this stays "none".
     risk: Literal["none", "low", "medium", "high"] = "none"
+    # Phase 4 Wave 1: flow-level context annotation for debug-mode packs.
+    # Populated by the orchestrator from :func:`graph_index.flows.get_affected_flows`
+    # for items whose underlying symbol participates in an entry -> leaf call
+    # chain (e.g. "getOwner -> findById"). For non-debug modes and items
+    # whose symbol can't be resolved, this stays ``None``.
+    flow: str | None = None
 
     def to_compact_line(self) -> str:
         """Return a compact single-item representation (no JSON metadata overhead)."""
