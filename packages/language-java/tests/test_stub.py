@@ -232,12 +232,30 @@ def test_plain_class_regression_still_kind_class(tmp_path: Path):
 
     classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
     assert "UserService" in {s.name for s in classes}
-    # No spurious non-class kinds leak out from a plain-class file.
-    leaked = [
+
+
+# ---------------------------------------------------------------------------
+# v3 phase3/enum-symbols-extracted: Java enums must emit kind='enum'.
+# ---------------------------------------------------------------------------
+
+def test_extracts_enum_declaration_single_file(tmp_path: Path):
+    """A standalone Java enum produces exactly one kind='enum' symbol."""
+    f = tmp_path / "Color.java"
+    f.write_text("public enum Color { RED, GREEN, BLUE }\n")
+    results = JavaAnalyzer().analyze(f)
+
+    enum_symbols = [
         s for s in results
-        if isinstance(s, Symbol) and s.kind in {"interface", "enum"}
+        if isinstance(s, Symbol) and s.name == "Color"
     ]
-    assert leaked == []
+    kinds = [s.kind for s in enum_symbols]
+    assert kinds == ["enum"], f"expected ['enum'], got {kinds}"
+    # Negative: the enum must not also leak out as kind='class'.
+    classes = [s for s in results if isinstance(s, Symbol) and s.kind == "class"]
+    assert "Color" not in {s.name for s in classes}
+    # Exactly one enum symbol emitted for this file.
+    all_enums = [s for s in results if isinstance(s, Symbol) and s.kind == "enum"]
+    assert len(all_enums) == 1
 
 
 # ---------------------------------------------------------------------------

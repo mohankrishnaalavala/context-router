@@ -279,7 +279,8 @@ def _walk(
         return
 
     if node.type in ("class_declaration", "interface_declaration",
-                      "struct_declaration", "record_declaration"):
+                      "struct_declaration", "record_declaration",
+                      "enum_declaration"):
         name_node = _first_child_of_type(node, "identifier")
         name = _text(name_node) if name_node else "<unknown>"
         attrs = _collect_attributes(node)
@@ -289,11 +290,14 @@ def _walk(
         # v3 phase1/interface-kind-label: emit the correct kind per node type.
         # Previously every type declaration was flattened to kind='class',
         # which hid interfaces and records from kind-based queries / ranking.
+        # v3 phase3/enum-symbols-extracted: ``enum_declaration`` now also
+        # emits kind='enum' so callers can filter by enumeration types.
         _DOTNET_KIND_BY_NODE = {
             "class_declaration": "class",
             "interface_declaration": "interface",
             "struct_declaration": "struct",
             "record_declaration": "record",
+            "enum_declaration": "enum",
         }
         kind = _DOTNET_KIND_BY_NODE[node.type]
         kind_word = kind  # Signature keyword mirrors the emitted kind.
