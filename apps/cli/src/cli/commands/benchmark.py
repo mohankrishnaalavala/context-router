@@ -49,6 +49,17 @@ def benchmark_run(
             ),
         ),
     ] = "generic",
+    runs: Annotated[
+        int,
+        typer.Option(
+            "--runs",
+            help=(
+                "Repetitions per task. Must be >=10 to get non-null 95% "
+                "confidence intervals; lower values produce ci95=null plus a "
+                "stderr warning. Defaults to 10."
+            ),
+        ),
+    ] = 10,
 ) -> None:
     """Run a benchmark task suite and produce a JSON + Markdown report.
 
@@ -76,9 +87,12 @@ def benchmark_run(
         raise typer.Exit(1)
 
     if not json_output:
-        typer.echo(f"Running {len(tasks)}-task '{task_suite}' benchmark suite...")
+        typer.echo(
+            f"Running {len(tasks)}-task '{task_suite}' benchmark suite "
+            f"({runs} runs/task)..."
+        )
     runner = BenchmarkRunner(project_root=root)
-    report = runner.run_suite(tasks=tasks)
+    report = runner.run_suite(tasks=tasks, n_runs=runs)
 
     naive_tok = naive_tokens(root) if naive else 0
     keyword_tok = 0

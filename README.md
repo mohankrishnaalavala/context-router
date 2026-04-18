@@ -37,7 +37,7 @@ AI coding agents work best with focused, relevant context rather than entire cod
 | **Call flow analysis** | Symbol-level `EdgeRepository.get_call_chain_symbols` (BFS with per-hop depth); debug mode walks `calls` edges up to 3 hops and surfaces `call_chain` items with decaying confidence (0.45 → 0.315 → 0.22) |
 | **MCP server** | **16 tools** over stdio JSON-RPC 2.0 with validated `inputSchema.required` and `outputSchema` on every tool; `resources` capability for addressable pack history (`context-router://packs/<uuid>`); `notifications/progress` for large packs; compatible with Claude Code, Cursor, Windsurf |
 | **Agent adapters** | Claude system prompt, Copilot instructions, Codex task prompt |
-| **Benchmarks** | Generic 20-task suite plus language-specific suites (React, Spring Boot, ASP.NET Core — `--task-suite` flag), 3 baselines, external repo testing, Markdown report with 95% CIs |
+| **Benchmarks** | Generic 20-task suite plus language-specific suites (React, Spring Boot, ASP.NET Core — `--task-suite` flag), 3 baselines, external repo testing, JSON + Markdown report with 95% CIs per metric (`--runs N`, N≥10 → non-null `ci95`; below 10 emits `ci95: null` plus a stderr warning) |
 
 ## Requirements
 
@@ -482,9 +482,11 @@ uv run context-router workspace pack --mode review
 Run the built-in 20-task suite and measure token reduction vs naive/keyword baselines.
 
 ```
-context-router benchmark run [--project-root PATH] [--output PATH] [--json]
+context-router benchmark run [--project-root PATH] [--output PATH] [--json] [--runs N]
 context-router benchmark report [--project-root PATH] [--input PATH] [--json]
 ```
+
+`--runs N` (default **10**) controls how many times each task is executed; 95% confidence intervals are published in the JSON output at `metrics[].ci95` when `N >= 10`. At `N < 10` the CLI prints a stderr warning (`warning: benchmark ran with n=<N> runs; ci95 is null …`) and every `ci95` field is `null` — honest nulls beat noisy intervals.
 
 See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real numbers on external codebases (**49–81% average token reduction**, quality metrics, and per-mode breakdown). Token reduction is highest on large repos (project_handover: 79%, context-router self: 81%). Hit-rate benchmarks use a Python-optimized task suite; accuracy on non-Python repos improves with language-specific task suites.
 

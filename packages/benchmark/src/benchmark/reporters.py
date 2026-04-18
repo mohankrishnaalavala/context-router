@@ -50,6 +50,7 @@ def to_markdown(
         f"**Project:** `{report.project_root}`  ",
         f"**Date:** {ran_at}  ",
         f"**Tasks:** {s.get('total_tasks', 0)}  ",
+        f"**Runs per task:** {report.n_runs}  ",
         f"**Success rate:** {s.get('success_rate', 0):.1f}%",
         "",
         "---",
@@ -66,6 +67,26 @@ def to_markdown(
         f"| Hit rate (random baseline) | {rand_pct:.1f}% |",
         f"| Rank quality (conf ≥ 0.70) | {rank_pct:.1f}% |",
     ]
+
+    # Per-metric 95% confidence intervals (top-level ``metrics[]`` —
+    # consumed by ship-check's jq-based verifier).
+    if report.metrics:
+        lines += [
+            "",
+            "## Per-Metric 95% Confidence Intervals",
+            "",
+            "| Metric | Mean | 95% CI | n |",
+            "|--------|-----:|:------:|--:|",
+        ]
+        for m in report.metrics:
+            if m.ci95 is None:
+                ci_cell = "— (n < 10)"
+            else:
+                low, high = m.ci95
+                ci_cell = f"[{low:.2f}, {high:.2f}]"
+            lines.append(
+                f"| `{m.name}` | {m.mean:.2f} | {ci_cell} | {m.n} |"
+            )
 
     if naive_tok or keyword_tok:
         lines += ["", "## Baseline Comparison", ""]

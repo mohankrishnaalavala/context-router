@@ -129,3 +129,67 @@ class TestBenchmarkReport:
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "tasks" in data
+
+
+# ---------------------------------------------------------------------------
+# benchmark run --runs <N> (95% CI emission — P1 outcome)
+# ---------------------------------------------------------------------------
+
+class TestBenchmarkRunsFlag:
+    """CLI-level contract for ``--runs`` and the top-level ci95 output.
+
+    Mirrors the ship-check registry entry ``benchmark-ci-emits-ci95``: its
+    verify command is
+    ``uv run context-router benchmark run --json --runs 10 | jq '.metrics[0].ci95 != null'``
+    which is exactly what these tests exercise end-to-end (minus the jq).
+    """
+
+    def test_runs_ten_emits_top_level_ci95(self, tmp_path):
+        _init_repo(tmp_path)
+        # Single-task suite to keep runtime <60s even at 10 runs/task.
+        # We fake this by hitting the full generic suite but asserting on
+        # the top-level metrics[] aggregation shape, which is n_runs-gated,
+        # not len(tasks)-gated.
+        result = _cr(
+            "benchmark", "run",
+            "--project-root", str(tmp_path),
+            "--no-naive", "--no-keyword",
+            "--runs", "10",
+            "--json",
+        )
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert "metrics" in data
+        assert isinstance(data["metrics"], list)
+        assert len(data["metrics"]) >= 1
+        # Every top-level metric should have non-null ci95 at n=10.
+        for m in data["metrics"]:
+            assert m["ci95"] is not None, f"metric {m['name']} has null ci95 at n=10"
+            assert isinstance(m["ci95"], list) and len(m["ci95"]) == 2
+            assert m["n"] == 10
+
+    def test_runs_three_emits_null_ci95(self, tmp_path):
+        _init_repo(tmp_path)
+        result = _cr(
+            "benchmark", "run",
+            "--project-root", str(tmp_path),
+            "--no-naive", "--no-keyword",
+            "--runs", "3",
+            "--json",
+        )
+        assert result.exit_code == 0
+        # At --runs 3 the harness prints a stderr warning. Typer's CliRunner
+        # folds stderr into result.output as a trailing line appended after
+        # the JSON body (click buffers stderr and flushes last). Grab the
+        # JSON by reading up to the final closing brace.
+        output = result.output
+        end = output.rfind("}")
+        assert end != -1, f"No JSON body found in output: {output!r}"
+        payload = output[: end + 1]
+        data = json.loads(payload)
+        # Warning must be present — silent failure is a bug.
+        assert "warning" in output.lower()
+        assert "n=3" in output
+        for m in data["metrics"]:
+            assert m["ci95"] is None
+            assert m["n"] == 3
