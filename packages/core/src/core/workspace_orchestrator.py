@@ -11,13 +11,18 @@ Builds a unified ContextPack by:
 
 from __future__ import annotations
 
+import logging
+import sqlite3
+import sys
 from pathlib import Path
 
 from contracts.config import load_config
-from contracts.models import ContextItem, ContextPack, ContractLink
+from contracts.models import ContextItem, ContextPack, ContractLink, RepoDescriptor
 from ranking import ContextRanker
 
 from core.orchestrator import Orchestrator, _find_project_root
+
+_logger = logging.getLogger(__name__)
 
 # How much to boost items in repos that are directly linked from another
 _LINK_BOOST = 0.10
@@ -99,6 +104,85 @@ def _prefix_title(item: ContextItem, repo_name: str) -> ContextItem:
     if item.title.startswith(f"[{repo_name}]"):
         return item  # already prefixed
     return item.model_copy(update={"title": f"[{repo_name}] {item.title}"})
+
+
+def _count_cross_community_edges_in_repo(db_path: Path, repo_name: str) -> tuple[int, str | None]:
+    """Count ``calls``/``imports`` edges whose endpoints live in different
+    communities inside a single repo's SQLite database.
+
+    Args:
+        db_path: Path to ``<repo>/.context-router/context-router.db``.
+        repo_name: The repo name as stored in the ``symbols.repo`` column.
+
+    Returns:
+        A tuple ``(count, skip_reason)``. ``skip_reason`` is ``None`` on
+        success; otherwise it explains why the repo contributed 0 (missing
+        DB, missing ``community_id`` column, no communities assigned, or a
+        query error). Callers use the reason for debug-level logging so
+        missing community info is a silent-no-op-free degradation.
+    """
+    if not db_path.exists():
+        return 0, f"db missing at {db_path}"
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            # Verify community_id column exists (migration 0002 must have run).
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(symbols)")}
+            if "community_id" not in cols:
+                return 0, "symbols.community_id column missing"
+            # Verify at least one symbol has a community assigned.
+            assigned = conn.execute(
+                "SELECT COUNT(*) AS n FROM symbols "
+                "WHERE repo = ? AND community_id IS NOT NULL",
+                (repo_name,),
+            ).fetchone()["n"]
+            if assigned == 0:
+                return 0, "no community_id assignments for repo"
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS n
+                FROM edges e
+                JOIN symbols sf ON sf.id = e.from_symbol_id
+                JOIN symbols st ON st.id = e.to_symbol_id
+                WHERE e.repo = ?
+                  AND sf.repo = ?
+                  AND st.repo = ?
+                  AND sf.community_id IS NOT NULL
+                  AND st.community_id IS NOT NULL
+                  AND sf.community_id != st.community_id
+                  AND e.edge_type IN ('calls', 'imports')
+                """,
+                (repo_name, repo_name, repo_name),
+            ).fetchone()
+            return int(row["n"]), None
+    except sqlite3.Error as exc:  # pragma: no cover - defensive
+        return 0, f"sqlite error: {exc}"
+
+
+def _detect_cross_community_coupling(
+    repos: list[RepoDescriptor],
+) -> tuple[int, list[str]]:
+    """Sum cross-community ``calls``/``imports`` edges across every repo
+    in a workspace.
+
+    Args:
+        repos: The ``WorkspaceDescriptor.repos`` list.
+
+    Returns:
+        A tuple ``(total_count, skip_reasons)``. Each element of
+        ``skip_reasons`` is a human-readable string naming one repo that
+        could not be inspected (so the caller can log it at debug level
+        rather than masking a silent no-op).
+    """
+    total = 0
+    reasons: list[str] = []
+    for repo in repos:
+        db_path = repo.path / ".context-router" / "context-router.db"
+        count, reason = _count_cross_community_edges_in_repo(db_path, repo.name)
+        total += count
+        if reason is not None:
+            reasons.append(f"{repo.name}: {reason}")
+    return total, reasons
 
 
 class WorkspaceOrchestrator:
@@ -201,6 +285,26 @@ class WorkspaceOrchestrator:
         cr_dir = self._root / ".context-router"
         cr_dir.mkdir(exist_ok=True)
         (cr_dir / "last-pack.json").write_text(pack.model_dump_json(indent=2))
+
+        # Phase-4 outcome ``cross-community-coupling``: warn when the
+        # workspace exceeds the configured number of cross-community
+        # edges. Multi-repo only — single-repo invocations never trip
+        # this branch. Missing community info logs at debug level so the
+        # absence is observable without spamming stderr.
+        if len(ws.repos) > 1:
+            coupling_count, skip_reasons = _detect_cross_community_coupling(
+                list(ws.repos)
+            )
+            for reason in skip_reasons:
+                _logger.debug("cross-community-coupling: skipped %s", reason)
+            threshold = config.capabilities.coupling_warn_threshold
+            if coupling_count >= threshold:
+                sys.stderr.write(
+                    f"warning: {coupling_count} cross-community edges detected "
+                    f"across the workspace (threshold: {threshold}). "
+                    f"This can indicate tightly-coupled modules that resist "
+                    f"independent refactoring.\n"
+                )
 
         return pack
 

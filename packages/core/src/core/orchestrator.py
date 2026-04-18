@@ -18,19 +18,24 @@ from __future__ import annotations
 
 import hashlib
 import re
+import sys
 import threading
 import warnings
 from pathlib import Path
 from typing import Any, Callable
 
 from cachetools import TTLCache
-
 from contracts.config import ContextRouterConfig, load_config
 from contracts.models import ContextItem, ContextPack, RuntimeSignal
 from graph_index.git_diff import GitDiffParser
 from ranking import ContextRanker, estimate_tokens
 from storage_sqlite.database import Database
-from storage_sqlite.repositories import EdgeRepository, SymbolRepository
+from storage_sqlite.repositories import (
+    ContractRepository,
+    EdgeRepository,
+    PackCacheRepository,
+    SymbolRepository,
+)
 
 # ---------------------------------------------------------------------------
 # Token estimation
@@ -41,9 +46,79 @@ from storage_sqlite.repositories import EdgeRepository, SymbolRepository
 _METADATA_OVERHEAD_TOKENS: int = 40
 
 
+def _dedup_ranked(items: list[ContextItem]) -> tuple[list[ContextItem], int]:
+    """Remove duplicate (title, path_or_ref) items from a ranked list.
+
+    Keeps the first occurrence (highest-confidence after sort) and drops
+    later duplicates. Returns the deduped list and the count dropped so
+    callers can surface "N duplicates hidden" to users.
+
+    v3 phase-1 follow-up: dedup lives here so MCP, explain last-pack, and
+    --json consumers see the same deduped pack the CLI table shows.
+    """
+    seen: set[tuple[str, str]] = set()
+    out: list[ContextItem] = []
+    dropped = 0
+    for item in items:
+        key = (item.title.strip(), item.path_or_ref.strip().lstrip("./").lower())
+        if key in seen:
+            dropped += 1
+            continue
+        seen.add(key)
+        out.append(item)
+    return out, dropped
+
+
 def _estimate_item_tokens(title: str, excerpt: str) -> int:
     """Estimate token cost of a ContextItem including JSON metadata overhead."""
     return estimate_tokens(title + " " + excerpt) + _METADATA_OVERHEAD_TOKENS
+
+
+# ---------------------------------------------------------------------------
+# Review-mode risk scoring (Phase 3 Wave 2)
+# ---------------------------------------------------------------------------
+
+# Risk is a cheap per-item display overlay for review-mode packs: it tells
+# reviewers where to look first by combining diff membership with a
+# file-size proxy for complexity and the candidate's bm25/ranker confidence.
+# It is NOT a ranking signal — the ranker never sees it.
+_RISK_SIZE_MEDIUM_THRESHOLD: int = 500
+_RISK_SIZE_HIGH_THRESHOLD: int = 2000
+_RISK_HIGH_CONFIDENCE_THRESHOLD: float = 0.8
+
+
+def _count_lines(path: Path) -> int:
+    """Return the line count of *path*, or 0 if the file cannot be read."""
+    try:
+        with path.open("rb") as fh:
+            return sum(1 for _ in fh)
+    except (OSError, ValueError):
+        return 0
+
+
+def _compute_risk(
+    item: ContextItem,
+    diff_files: set[str],
+    file_size: dict[str, int],
+) -> str:
+    """Cheap per-item risk label for review mode.
+
+    Returns one of ``none``, ``low``, ``medium``, ``high``::
+
+      none    = file not in current diff
+      low     = in diff, small file (< 500 lines)
+      medium  = in diff, medium file (500-2000 lines)
+      high    = in diff AND large file (> 2000 lines) OR
+                in diff AND high bm25/ranker confidence (>= 0.8)
+    """
+    if item.path_or_ref not in diff_files:
+        return "none"
+    size = file_size.get(item.path_or_ref, 0)
+    if size > _RISK_SIZE_HIGH_THRESHOLD or item.confidence >= _RISK_HIGH_CONFIDENCE_THRESHOLD:
+        return "high"
+    if size > _RISK_SIZE_MEDIUM_THRESHOLD:
+        return "medium"
+    return "low"
 
 
 def _warn_optional_subsystem_failure(
@@ -132,11 +207,26 @@ _DEFAULT_WEIGHTS: dict[str, dict[str, float]] = {
     "implement": _IMPLEMENT_CONFIDENCE,
     "debug": _DEBUG_CONFIDENCE,
     "handover": _HANDOVER_CONFIDENCE,
+    # Minimal mode reuses implement weights — see build_pack() minimal branch.
+    "minimal": _IMPLEMENT_CONFIDENCE,
 }
 
 # Community anchor boost (P2-1): items in the same community as the highest
 # -confidence seed item get this additive bump (capped at 1.0).
 _COMMUNITY_BOOST: float = 0.10
+
+# Phase-2 contracts-consumer boost: items whose file references an OpenAPI
+# endpoint declared in the same repo get this additive bump (clamped at the
+# same 0.95 ceiling used by ``workspace_orchestrator``). Tightening the cap
+# below 1.0 keeps the absolute "guaranteed-relevant" tier reserved for
+# changed_file / runtime_signal sources.
+_CONTRACTS_BOOST: float = 0.10
+_CONTRACTS_BOOST_MAX_CONFIDENCE: float = 0.95
+
+# Cap on how many bytes we read per candidate file when scanning for
+# endpoint references. Keeps the boost cheap on monorepos with multi-MB
+# generated files (vendored bundles, lock files renamed *.py, etc.).
+_CONTRACTS_FILE_READ_LIMIT: int = 256 * 1024
 
 
 def _resolve_weights(
@@ -156,6 +246,50 @@ def _resolve_weights(
     merged = dict(defaults)
     merged.update({k: float(v) for k, v in override.items()})
     return merged
+
+
+def _suggest_next_tool(items: list[ContextItem], query: str) -> str:
+    """Return a short next-tool hint for a minimal-mode pack.
+
+    The heuristic keeps the rule-set intentionally narrow so the suggestion
+    stays predictable:
+
+    * Top item lives under ``tests/`` or filename starts with ``test_``
+      → route the caller to ``get_debug_pack`` (they likely have a failing test).
+    * Majority of items are config/yaml/toml/ini/json → recommend
+      ``get_context_pack(mode='review')`` for deeper review of config shape.
+    * Fallback → recommend ``get_context_pack(mode='implement')`` with the
+      original query so the caller has a single copy-pasteable follow-up.
+    """
+    if not items:
+        return (
+            "run get_context_pack(mode='implement', query=...) for full context"
+        )
+
+    top = items[0]
+    top_path = top.path_or_ref.lower()
+    top_name = Path(top_path).name
+    is_test = (
+        "/tests/" in f"/{top_path}/"
+        or top_name.startswith("test_")
+        or top_name.endswith("_test.py")
+    )
+    if is_test:
+        return "run get_debug_pack to see the failing call chain"
+
+    config_exts = {".yml", ".yaml", ".toml", ".ini", ".json", ".cfg"}
+    config_hits = sum(
+        1 for item in items if Path(item.path_or_ref).suffix.lower() in config_exts
+    )
+    if config_hits >= max(2, len(items) // 2):
+        return "run get_context_pack(mode='review') for deeper review"
+
+    # Echo the caller's query in the fallback so the next call is one-hop away.
+    safe_query = query.strip() or "<task>"
+    return (
+        f"run get_context_pack(mode='implement', query={safe_query!r}) "
+        "for full context"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -257,15 +391,29 @@ class Orchestrator:
     def _compute_repo_id(self, repo_name: str = "default") -> str:
         """Return a cache-busting repo identifier.
 
-        ``sha1(indexed_at || repo_name)`` — ``indexed_at`` uses the SQLite DB
-        file's mtime, which changes on every ``build_index`` / ``update_index``
-        write, giving us automatic cache invalidation without a migration.
-        Falls back to ``"unindexed"`` if the DB does not yet exist.
+        ``sha1(symbol_shape || repo_name)`` — ``symbol_shape`` is derived
+        from ``(COUNT(*), MAX(id))`` of the ``symbols`` table, which only
+        moves on a real ``build_index`` / ``update_index`` run. (The DB
+        file's mtime would also catch cache writes to ``pack_cache``, which
+        would poison the L2 lookup — symbols-table shape is stable across
+        non-index writes.)
+
+        Falls back to ``"unindexed"`` if the DB does not yet exist or the
+        ``symbols`` table is unavailable.
         """
         db_path = self._root / ".context-router" / "context-router.db"
         try:
-            indexed_at = str(db_path.stat().st_mtime_ns)
-        except OSError:
+            if not db_path.exists():
+                indexed_at = "unindexed"
+            else:
+                import sqlite3
+
+                with sqlite3.connect(db_path) as conn:
+                    row = conn.execute(
+                        "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM symbols"
+                    ).fetchone()
+                indexed_at = f"{row[0]}:{row[1]}" if row else "unindexed"
+        except Exception:  # noqa: BLE001 — be conservative on DB errors
             indexed_at = "unindexed"
         h = hashlib.sha1()
         h.update(indexed_at.encode("utf-8"))
@@ -284,9 +432,116 @@ class Orchestrator:
         return h.hexdigest()
 
     def invalidate_cache(self) -> None:
-        """Drop all cached packs. Call after ``build_index``/``update_index``."""
+        """Drop all cached packs (L1 in-process + L2 SQLite).
+
+        Call after ``build_index``/``update_index``. The L2 ``pack_cache``
+        table is cleared for the current ``repo_id`` (and implicitly
+        invalidated for all future repo_ids by the mtime-derived key
+        rotation). If the SQLite layer is unavailable we emit a stderr
+        warning — per CLAUDE.md, silent failure is a bug.
+        """
         with self._pack_cache_lock:
             self._pack_cache.clear()
+        db_path = self._root / ".context-router" / "context-router.db"
+        if not db_path.exists():
+            return
+        try:
+            with Database(db_path) as db:
+                PackCacheRepository(db.connection).invalidate_all()
+        except Exception as exc:  # noqa: BLE001 — persistent cache is best-effort
+            _warn_optional_subsystem_failure(
+                "Persistent pack cache invalidation",
+                "stale entries in .context-router/context-router.db pack_cache "
+                "may survive until TTL expires",
+                exc,
+            )
+
+    # ------------------------------------------------------------------
+    # Persistent (L2) pack cache helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _cache_key_string(
+        mode: str,
+        query_hash: str,
+        token_budget: int,
+        use_embeddings: bool,
+        items_hash: str,
+    ) -> str:
+        """Fold the cache-key tuple into a stable string for L2 storage.
+
+        Kept separate from the L1 tuple so that the L2 primary-key column
+        stays a single TEXT — the DB does not need to understand the
+        structure, only compare bytes.
+        """
+        h = hashlib.sha1()
+        for part in (
+            mode,
+            query_hash,
+            str(token_budget),
+            "1" if use_embeddings else "0",
+            items_hash,
+        ):
+            h.update(part.encode("utf-8"))
+            h.update(b"|")
+        return h.hexdigest()
+
+    def _l2_get(
+        self, cache_key_str: str, repo_id: str, db_path: Path
+    ) -> ContextPack | None:
+        """Look up the persistent L2 cache; return None on miss or error.
+
+        Warns to stderr (never silently skips) if the DB read fails — this
+        is required by the CLAUDE.md "silent failure is a bug" rule.
+        """
+        try:
+            with Database(db_path) as db:
+                raw = PackCacheRepository(db.connection).get(
+                    cache_key_str,
+                    repo_id,
+                    float(self._PACK_CACHE_TTL_SECONDS),
+                )
+        except Exception as exc:  # noqa: BLE001 — fall back to fresh build
+            _warn_optional_subsystem_failure(
+                "Persistent pack cache read",
+                "falling back to a fresh build; the CLI repeat-call speedup "
+                "will not apply for this invocation",
+                exc,
+            )
+            return None
+        if raw is None:
+            return None
+        try:
+            return ContextPack.model_validate_json(raw)
+        except Exception as exc:  # noqa: BLE001 — schema drift → fresh build
+            _warn_optional_subsystem_failure(
+                "Persistent pack cache deserialize",
+                "schema mismatch likely — rebuilding the pack and overwriting "
+                "the stored row on next cache write",
+                exc,
+            )
+            return None
+
+    def _l2_put(
+        self,
+        cache_key_str: str,
+        repo_id: str,
+        pack: ContextPack,
+        db_path: Path,
+    ) -> None:
+        """Write to the persistent L2 cache. Best-effort; warns on error."""
+        try:
+            with Database(db_path) as db:
+                PackCacheRepository(db.connection).put(
+                    cache_key_str, repo_id, pack.model_dump_json()
+                )
+        except Exception as exc:  # noqa: BLE001 — persistent cache is best-effort
+            _warn_optional_subsystem_failure(
+                "Persistent pack cache write",
+                "CLI repeat-call speedup will not apply across processes until "
+                "a subsequent build succeeds",
+                exc,
+            )
 
     # ------------------------------------------------------------------
     # Public API
@@ -303,6 +558,7 @@ class Orchestrator:
         progress: bool = True,
         progress_cb: "Callable[[str, int, int], None] | None" = None,
         download_progress_cb: Callable[[str], None] | None = None,
+        token_budget: int | None = None,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -310,7 +566,10 @@ class Orchestrator:
         ``context-router explain last-pack`` can read it without re-running.
 
         Args:
-            mode: One of "review", "debug", "implement", "handover".
+            mode: One of "review", "debug", "implement", "handover", "minimal".
+                Minimal mode returns a tightly-budgeted (≤800 token) preview
+                with at most 5 items and a ``next_tool_suggestion`` hint under
+                ``pack.metadata`` — it is the CRG-parity triage entry point.
             query: Free-text description of the task.
             error_file: Optional path to an error file (JUnit XML, stack trace,
                 log).  Used by debug mode to parse RuntimeSignals.
@@ -333,6 +592,10 @@ class Orchestrator:
                 by the CLI to a ``rich.progress.Progress`` instance for
                 first-time sentence-transformers model download. Ignored
                 when ``progress=False``.
+            token_budget: Optional per-call override for the ranker's token
+                budget. When ``None`` (default), uses
+                ``config.token_budget``; minimal mode defaults to 800
+                when omitted.
 
         Returns:
             A populated and ranked ContextPack.
@@ -352,19 +615,35 @@ class Orchestrator:
                 "Run 'context-router index' first."
             )
 
-        # P3-1: cache lookup — identical inputs return the previously built
+        # Resolve the effective caller-level token budget. `None` means "use
+        # config default" for backward compatibility. Minimal mode is capped
+        # at 800 tokens by default to match the CRG-parity triage contract.
+        if token_budget is None:
+            if mode == "minimal":
+                caller_budget = 800
+            else:
+                caller_budget = int(config.token_budget)
+        else:
+            caller_budget = int(token_budget)
+
+        # Cache lookup — identical inputs return the previously built
         # ContextPack without re-running candidate building or ranking.
+        # L1 (in-process TTLCache) benefits the long-lived MCP server;
+        # L2 (SQLite-backed, migration 0012) persists across CLI processes
+        # so a second `context-router pack` run for the same query skips
+        # the full pipeline.
         query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
         items_hash = self._compute_items_hash(
             error_file=error_file if error_file is None else str(error_file),
             page=page,
             page_size=page_size,
         )
+        repo_id = self._compute_repo_id()
         cache_key = (
-            self._compute_repo_id(),
+            repo_id,
             mode,
             query_hash,
-            int(config.token_budget),
+            caller_budget,
             bool(use_embeddings),
             items_hash,
         )
@@ -372,6 +651,21 @@ class Orchestrator:
             cached = self._pack_cache.get(cache_key)
         if cached is not None:
             return cached
+
+        # L2 lookup — persists across CLI invocations.
+        cache_key_str = self._cache_key_string(
+            mode,
+            query_hash,
+            caller_budget,
+            bool(use_embeddings),
+            items_hash,
+        )
+        l2_pack = self._l2_get(cache_key_str, repo_id, db_path)
+        if l2_pack is not None:
+            # Re-hydrate L1 so subsequent same-process calls are fastest.
+            with self._pack_cache_lock:
+                self._pack_cache[cache_key] = l2_pack
+            return l2_pack
 
         # Model-download progress callback for the CLI's rich spinner
         # (disabled for MCP stdio transport, which has progress=False).
@@ -467,12 +761,47 @@ class Orchestrator:
             baseline = sum(c.est_tokens for c in candidates)
             # Always apply at least 50% reduction so small repos benefit too
             effective_budget = min(config.token_budget, max(1000, baseline // 2))
+            # Minimal mode is a cheap triage view — honor the tight caller
+            # budget verbatim (no "at least 1000 tokens" floor) so callers can
+            # actually shrink the pack to fit their prompt window.
+            if mode == "minimal":
+                effective_budget = min(effective_budget, caller_budget)
+            elif token_budget is not None:
+                effective_budget = min(effective_budget, caller_budget)
             ranker = ContextRanker(
                 token_budget=effective_budget,
                 use_embeddings=use_embeddings,
                 progress_cb=effective_cb,
             )
             all_ranked = ranker.rank(candidates, query, mode)
+            all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
+
+            # Phase-2 contracts boost — applied AFTER ranking + dedup so the
+            # boost lifts items that already survived budget enforcement,
+            # and BEFORE pagination so the boosted item lands in page 0.
+            # Re-sort by confidence to keep highest-confidence first.
+            all_ranked = self._apply_contracts_boost(
+                all_ranked, self._root, repo_name="default", config=config
+            )
+            all_ranked.sort(key=lambda i: i.confidence, reverse=True)
+
+            # Phase 3 Wave 2: review-mode risk overlay. Pure display metadata
+            # — not a ranking signal — so it runs AFTER rank+dedup+boosts
+            # but BEFORE pagination so every page sees the labels.
+            if mode == "review":
+                all_ranked = self._apply_review_risk(all_ranked)
+
+            # Phase 4 Wave 1: debug-mode flow-level annotation. Runs after
+            # ranking + dedup + boosts so the top-N items are finalized, and
+            # BEFORE pagination so each page carries its ``flow`` labels.
+            # Returns the annotated list plus an optional explanatory note
+            # that is folded into ``pack.metadata`` below.
+            debug_flow_note: str | None = None
+            if mode == "debug":
+                all_ranked, debug_flow_note = self._apply_debug_flows(
+                    all_ranked, sym_repo, edge_repo, repo_name="default"
+                )
+
             total_items_count = len(all_ranked)
 
             if progress_cb is not None:
@@ -497,6 +826,22 @@ class Orchestrator:
             page_items = all_ranked
             has_more = False
 
+        # Minimal mode: hard-cap to top-5 items by confidence (ranker already
+        # sorts by confidence desc) and attach a next-tool suggestion so the
+        # caller can escalate to a deeper pack when the preview isn't enough.
+        pack_metadata: dict[str, Any] = {}
+        if mode == "minimal":
+            page_items = page_items[:5]
+            has_more = False
+            pack_metadata["next_tool_suggestion"] = _suggest_next_tool(page_items, query)
+
+        # Phase 4 Wave 1: surface flow-detection status in the debug pack so
+        # consumers can tell the difference between "no flows available" and
+        # "flows available on every item". ``debug_flow_note`` is ``None``
+        # when the threshold (>=3 annotated top-5 items) is met.
+        if mode == "debug" and debug_flow_note:
+            pack_metadata["note"] = debug_flow_note
+
         total = sum(i.est_tokens for i in page_items)
         reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
 
@@ -509,14 +854,19 @@ class Orchestrator:
             reduction_pct=reduction,
             has_more=has_more,
             total_items=total_items_count if page_size > 0 else 0,
+            duplicates_hidden=_dup_dropped,
+            metadata=pack_metadata,
         )
 
         last_pack_path = self._root / ".context-router" / "last-pack.json"
         last_pack_path.write_text(pack.model_dump_json(indent=2))
 
-        # P3-1: populate the result cache so the next identical call is a hit.
+        # Populate both cache tiers so the next identical call is a hit.
+        # L1 serves same-process (MCP long-lived) callers; L2 persists the
+        # pack to SQLite so a CLI repeat invocation (new process) hits too.
         with self._pack_cache_lock:
             self._pack_cache[cache_key] = pack
+        self._l2_put(cache_key_str, repo_id, pack, db_path)
 
         # Emit intermediate chunk progress for large packs so UIs can render a
         # live bar while the serialised payload is persisted downstream.
@@ -614,6 +964,12 @@ class Orchestrator:
             items = self._review_candidates(sym_repo, edge_repo, repo_name, weights)
         elif mode == "implement":
             items = self._implement_candidates(sym_repo, repo_name, weights)
+        elif mode == "minimal":
+            # Minimal mode reuses implement candidate selection — the goal is a
+            # cheap triage view ranked by relevance to the task, not a distinct
+            # signal source. The orchestrator later caps to top-5 and emits a
+            # next_tool_suggestion for follow-up.
+            items = self._implement_candidates(sym_repo, repo_name, weights)
         elif mode == "debug":
             items = self._debug_candidates(
                 sym_repo, edge_repo, repo_name, weights, signals, past_files
@@ -684,6 +1040,147 @@ class Orchestrator:
             else:
                 boosted.append(item)
         return boosted
+
+    # ------------------------------------------------------------------
+    # Contracts-consumer boost (Phase 2 — single-repo packs)
+    # ------------------------------------------------------------------
+
+    def _load_repo_endpoint_paths(
+        self, db_path: Path, repo_name: str
+    ) -> list[str]:
+        """Return the distinct OpenAPI endpoint paths declared in *repo_name*.
+
+        Falls back to a one-shot ``extract_contracts(self._root)`` walk when
+        the ``api_endpoints`` table is empty. The single-repo CLI ``index``
+        command does not yet populate this table — running the parser at
+        boost time keeps the feature working for any repo with a static
+        OpenAPI spec, without forcing a re-index.
+
+        Returns a deduplicated list (order preserved); empty when neither
+        the table nor the on-disk walk yields any endpoints.
+        """
+        paths: list[str] = []
+        seen: set[str] = set()
+
+        # Step 1 — preferred source: the persisted api_endpoints table.
+        try:
+            with Database(db_path) as db:
+                rows = ContractRepository(db.connection).list_api_endpoints(repo_name)
+            for row in rows:
+                p = row.get("path") or ""
+                if p and p not in seen:
+                    seen.add(p)
+                    paths.append(p)
+        except Exception as exc:  # noqa: BLE001 — DB read is best-effort
+            _warn_optional_subsystem_failure(
+                "Contracts boost endpoint lookup",
+                "falling back to on-disk OpenAPI extraction for this build",
+                exc,
+            )
+
+        if paths:
+            return paths
+
+        # Step 2 — fallback: parse the repo's OpenAPI specs directly.
+        try:
+            from contracts_extractor import ApiEndpoint, extract_contracts
+            for c in extract_contracts(self._root):
+                if isinstance(c, ApiEndpoint) and c.path and c.path not in seen:
+                    seen.add(c.path)
+                    paths.append(c.path)
+        except Exception as exc:  # noqa: BLE001 — fallback is best-effort
+            _warn_optional_subsystem_failure(
+                "Contracts boost on-disk extraction",
+                "the contracts-consumer boost will be skipped for this build",
+                exc,
+            )
+
+        return paths
+
+    def _apply_contracts_boost(
+        self,
+        items: list[ContextItem],
+        repo_root: Path,
+        repo_name: str = "default",
+        config: ContextRouterConfig | None = None,
+    ) -> list[ContextItem]:
+        """Boost items whose source file consumes a same-repo OpenAPI endpoint.
+
+        Mirrors :func:`workspace_orchestrator._boost_contract_linked_items`
+        for the single-repo case: there is no "other repo" to anchor on, so
+        the producer side IS the same repo. Items receive ``+0.10``
+        confidence (clamped at 0.95) when their file references one of the
+        endpoint paths via a quote-anchored URL literal — see
+        :func:`contracts_extractor.file_references_endpoint` for the regex.
+
+        The boost is a no-op when:
+          * the ``capabilities.contracts_boost`` config flag is False,
+          * the repo declares no API endpoints (logged once to stderr), or
+          * the candidate list is empty.
+
+        Returns a NEW list (originals are immutable per pydantic model_copy);
+        the caller is responsible for re-sorting by confidence if order
+        matters.
+        """
+        if not items:
+            return items
+        if config is not None and not config.capabilities.contracts_boost:
+            return items
+
+        db_path = repo_root / ".context-router" / "context-router.db"
+        endpoint_paths = self._load_repo_endpoint_paths(db_path, repo_name)
+        if not endpoint_paths:
+            # Per CLAUDE.md silent-failure rule, name the no-op explicitly.
+            print(
+                "contracts boost skipped (0 endpoints indexed)",
+                file=sys.stderr,
+            )
+            return items
+
+        from contracts_extractor import file_references_endpoint
+
+        # Cache per-file reads — many candidate items share a file (one per
+        # symbol) and re-reading is the dominant cost.
+        file_text_cache: dict[str, str] = {}
+
+        def _read(path_str: str) -> str:
+            if path_str in file_text_cache:
+                return file_text_cache[path_str]
+            text = ""
+            try:
+                p = Path(path_str)
+                if not p.is_absolute():
+                    p = repo_root / p
+                if p.is_file():
+                    # Read at most _CONTRACTS_FILE_READ_LIMIT bytes; this is
+                    # plenty for the imports-and-handler section that holds
+                    # any URL literal worth matching.
+                    with p.open("rb") as fh:
+                        raw = fh.read(_CONTRACTS_FILE_READ_LIMIT)
+                    text = raw.decode("utf-8", errors="replace")
+            except (OSError, ValueError):
+                text = ""
+            file_text_cache[path_str] = text
+            return text
+
+        out: list[ContextItem] = []
+        for item in items:
+            text = _read(item.path_or_ref)
+            if not text:
+                out.append(item)
+                continue
+            matched = any(
+                file_references_endpoint(text, ep) for ep in endpoint_paths
+            )
+            if matched:
+                new_conf = min(
+                    _CONTRACTS_BOOST_MAX_CONFIDENCE,
+                    item.confidence + _CONTRACTS_BOOST,
+                )
+                out.append(item.model_copy(update={"confidence": new_conf}))
+            else:
+                out.append(item)
+        return out
 
     # ------------------------------------------------------------------
     # Review mode
@@ -781,6 +1278,220 @@ class Orchestrator:
             return {str(self._root / cf.path) for cf in changed}
         except (RuntimeError, OSError):
             return set()
+
+    def _apply_review_risk(self, items: list[ContextItem]) -> list[ContextItem]:
+        """Return *items* with per-item ``risk`` populated for review mode.
+
+        Pulls the current diff via :class:`GitDiffParser` and pairs each
+        changed file with a cheap size-based complexity proxy. Items whose
+        ``path_or_ref`` is not in the diff stay at ``risk="none"``.
+
+        The diff set intentionally contains BOTH the absolute path and the
+        repo-relative path for each changed file so the membership check
+        matches symbol records regardless of whether they were indexed
+        with relative or absolute paths (existing stores do both).
+
+        Silent-failure rule (CLAUDE.md): if the diff lookup fails (not a
+        git repo, first commit on branch, etc.) we emit a one-line stderr
+        debug note so reviewers can tell the risk column is intentionally
+        blank rather than silently skipped. Risk stays ``"none"`` for all
+        items in that case.
+        """
+        if not items:
+            return items
+        try:
+            raw_diff = self._get_changed_files()
+        except Exception as exc:  # noqa: BLE001 — risk is best-effort
+            print(
+                f"review-mode risk overlay skipped (git diff lookup failed: {exc})",
+                file=sys.stderr,
+            )
+            return items
+        if not raw_diff:
+            # Negative case: no diff → every item stays risk="none".
+            # Avoid per-item copies — defaults already satisfy the contract.
+            return items
+
+        # Build a membership set that works for both absolute-path items
+        # (MCP contract) and relative-path items (most symbol repositories
+        # persist repo-relative paths). For each changed file we also
+        # record its size keyed by BOTH forms so the lookup in
+        # _compute_risk hits regardless of how the item was stored.
+        #
+        # NOTE: self._root may be a relative path (e.g. ``Path(".")`` when
+        # the CLI is invoked with ``--project-root .``). We resolve to an
+        # absolute form so membership checks hit items whose
+        # ``path_or_ref`` is stored in canonical absolute form.
+        diff_files: set[str] = set()
+        file_size: dict[str, int] = {}
+        try:
+            root_abs = self._root.resolve()
+        except (OSError, RuntimeError):
+            root_abs = self._root
+        for fp in raw_diff:
+            p = Path(fp)
+            if p.is_absolute():
+                abs_path = p
+            else:
+                abs_path = (self._root / p)
+            try:
+                abs_resolved = abs_path.resolve()
+            except (OSError, RuntimeError):
+                abs_resolved = abs_path
+            abs_str = str(abs_resolved)
+            nonresolved_abs = str(abs_path)
+            try:
+                rel_str = str(abs_resolved.relative_to(root_abs))
+            except ValueError:
+                # Path lives outside the project root; keep absolute form.
+                rel_str = abs_str
+            lines = _count_lines(abs_resolved)
+            for key in {abs_str, nonresolved_abs, rel_str, fp}:
+                diff_files.add(key)
+                file_size[key] = lines
+            # Also record a leading-"./" form which some CLIs emit.
+            if not rel_str.startswith(("/", ".")):
+                dot_rel = f"./{rel_str}"
+                diff_files.add(dot_rel)
+                file_size[dot_rel] = lines
+
+        return [
+            item.model_copy(update={"risk": _compute_risk(item, diff_files, file_size)})
+            for item in items
+        ]
+
+    def _apply_debug_flows(
+        self,
+        items: list[ContextItem],
+        sym_repo: SymbolRepository,
+        edge_repo: EdgeRepository,
+        repo_name: str = "default",
+    ) -> tuple[list[ContextItem], str | None]:
+        """Return *items* with ``flow`` annotated for debug-mode packs.
+
+        For each item whose underlying symbol can be resolved (by
+        ``path_or_ref`` + the leading token of ``title``), look up the
+        affected flows via :func:`graph_index.flows.get_affected_flows` and
+        label the item with a compact ``entry -> leaf`` string. The shortest
+        flow wins when several flows pass through the same symbol.
+
+        Returns a tuple ``(annotated_items, note_or_none)``. ``note_or_none``
+        is a short explanation for ``pack.metadata["note"]`` when fewer than
+        3 of the top-5 items could be annotated (the outcome's threshold) or
+        when no flows are available at all. It is ``None`` when the threshold
+        is met — in that case callers add no metadata note.
+
+        Silent-failure rule: any unexpected error returns ``(items, note)``
+        so the debug pack still rolls out without flow labels. A stderr
+        warning is emitted so the missing annotations are never silent.
+        """
+        # Local import to avoid introducing a package-level dependency cycle
+        # between core and graph-index.
+        from graph_index.flows import list_flows
+
+        if not items:
+            return items, None
+
+        # Pre-compute all flows once so per-item lookups stay O(total_flows).
+        # Re-using a cached list across items also means a single stderr
+        # warning (if any) is emitted rather than one per item.
+        try:
+            all_flows = list_flows(repo_name, sym_repo, edge_repo)
+        except Exception as exc:  # noqa: BLE001 — silent-failure contract
+            print(
+                f"warning: debug flow annotation skipped "
+                f"(list_flows failed: {exc})",
+                file=sys.stderr,
+            )
+            return items, (
+                "flows unavailable: list_flows failed (see stderr); "
+                "items carry no ``flow`` labels"
+            )
+
+        if not all_flows:
+            # Negative case required by the outcome: "no flows detected →
+            # fall back to today's behavior with a note in explain.why".
+            # Every item keeps flow=None.
+            return items, (
+                "no flows detected in the indexed graph; "
+                "debug pack falls back to file-level context"
+            )
+
+        # Build a (file_path, symbol_name) -> symbol_id lookup so we can map
+        # items back to symbols without a per-item SQL roundtrip.
+        try:
+            all_symbols = sym_repo.get_all(repo_name)
+        except Exception as exc:  # noqa: BLE001 — silent-failure contract
+            print(
+                f"warning: debug flow annotation skipped "
+                f"(symbol lookup failed: {exc})",
+                file=sys.stderr,
+            )
+            return items, (
+                "flows unavailable: symbol lookup failed (see stderr); "
+                "items carry no ``flow`` labels"
+            )
+
+        file_name_to_id: dict[tuple[str, str], int] = {}
+        for sym in all_symbols:
+            if sym.id is None:
+                continue
+            file_name_to_id[(str(sym.file), sym.name)] = sym.id
+            # Also index by just-the-basename so items with bare file names
+            # resolve too.
+            file_name_to_id[(Path(sym.file).name, sym.name)] = sym.id
+
+        # Group flows by symbol id for cheap per-item affected-flow lookup.
+        by_symbol: dict[int, list] = {}
+        for f in all_flows:
+            for sid in f.path:
+                by_symbol.setdefault(sid, []).append(f)
+
+        annotated: list[ContextItem] = []
+        for item in items:
+            # Extract the symbol name from the item title. Our ``_make_item``
+            # helper formats titles as ``"{name} ({filename})"`` — split on
+            # " (" to recover the leading symbol name. Call-chain /
+            # runtime-signal items that lack this format simply won't match
+            # the lookup, which is correct — they point to files, not
+            # symbols, so there's no single symbol to anchor a flow to.
+            sym_name = item.title.split(" (", 1)[0].strip()
+            candidate_keys = (
+                (item.path_or_ref, sym_name),
+                (Path(item.path_or_ref).name, sym_name),
+            )
+            sym_id: int | None = None
+            for key in candidate_keys:
+                if key in file_name_to_id:
+                    sym_id = file_name_to_id[key]
+                    break
+
+            if sym_id is None:
+                annotated.append(item)
+                continue
+
+            flows = by_symbol.get(sym_id, [])
+            if not flows:
+                annotated.append(item)
+                continue
+
+            # Prefer the shortest flow for a compact label; ties broken by
+            # (entry_name, leaf_name) so the label is stable across runs.
+            best = min(flows, key=lambda f: (f.length, f.entry_name, f.leaf_name))
+            annotated.append(item.model_copy(update={"flow": best.label}))
+
+        # Threshold: at least 3 of the top-5 items must carry a non-null
+        # flow. Fewer = add a metadata note so the caller can tell the
+        # annotation layer ran but the data was insufficient.
+        top_slice = annotated[:5]
+        flow_count = sum(1 for i in top_slice if i.flow)
+        if flow_count < 3:
+            note = (
+                f"flows available for only {flow_count} of top {len(top_slice)} items; "
+                "consider re-indexing or widening the query"
+            )
+            return annotated, note
+        return annotated, None
 
     @staticmethod
     def _is_test_file(file_path: str) -> bool:

@@ -141,3 +141,138 @@ class TestComputeSummary:
         assert report.summary["success_rate"] == 100.0
         assert report.summary["avg_reduction_pct"] == 70.0
         assert report.summary["avg_est_tokens"] == 150
+
+
+# ---------------------------------------------------------------------------
+# ci95() helper
+# ---------------------------------------------------------------------------
+
+class TestCi95Helper:
+    """Contract tests for :func:`benchmark.models.ci95`."""
+
+    def test_returns_none_for_empty(self):
+        from benchmark.models import ci95
+        assert ci95([]) is None
+
+    def test_returns_none_for_single_sample(self):
+        from benchmark.models import ci95
+        assert ci95([42.0]) is None
+
+    def test_returns_tuple_for_two_samples(self):
+        from benchmark.models import ci95
+        result = ci95([1.0, 2.0])
+        assert result is not None
+        low, high = result
+        assert low < high
+
+    def test_returns_non_null_with_ten_samples(self):
+        from benchmark.models import ci95
+        samples = [float(i) for i in range(1, 11)]  # 1..10
+        result = ci95(samples)
+        assert result is not None
+        low, high = result
+        # Mean of 1..10 is 5.5 and stdev is ~3.03; the 95% CI should straddle 5.5.
+        assert low < 5.5 < high
+
+    def test_interval_shrinks_with_more_samples(self):
+        from benchmark.models import ci95
+        ten = ci95([1.0] * 5 + [2.0] * 5)  # noisy
+        twenty = ci95([1.0] * 10 + [2.0] * 10)
+        assert ten is not None and twenty is not None
+        assert (twenty[1] - twenty[0]) < (ten[1] - ten[0])
+
+
+# ---------------------------------------------------------------------------
+# Harness CI95 integration
+# ---------------------------------------------------------------------------
+
+class TestHarnessCi95:
+    """The harness must emit non-null ci95 at n>=10 and null+warning below."""
+
+    def test_runs_ten_emits_non_null_top_level_metrics(self, project_root, capfd):
+        from benchmark import BenchmarkRunner
+        from benchmark.task_suite import TASK_SUITE
+        runner = BenchmarkRunner(project_root)
+        # Keep cost manageable: one task, 10 runs.
+        report = runner.run_suite(tasks=TASK_SUITE[:1], n_runs=10)
+        assert report.n_runs == 10
+        assert report.metrics, "Expected top-level metrics[] populated"
+        # Every metric should have a non-null ci95 at n=10.
+        for m in report.metrics:
+            assert m.ci95 is not None, f"metric {m.name} has null ci95 at n=10"
+            low, high = m.ci95
+            assert isinstance(low, float) and isinstance(high, float)
+            assert low <= high
+            assert m.n == 10
+        # No warning should be printed at n=10.
+        err = capfd.readouterr().err
+        assert "ci95 is null" not in err
+
+    def test_runs_three_emits_null_and_warns(self, project_root, capfd):
+        from benchmark import BenchmarkRunner
+        from benchmark.task_suite import TASK_SUITE
+        runner = BenchmarkRunner(project_root)
+        report = runner.run_suite(tasks=TASK_SUITE[:1], n_runs=3)
+        assert report.n_runs == 3
+        assert report.metrics, "metrics[] should still populate at n=3"
+        for m in report.metrics:
+            assert m.ci95 is None, f"metric {m.name} should be null at n=3"
+        # stderr warning is mandatory (silent-failure policy).
+        err = capfd.readouterr().err
+        assert "warning" in err.lower()
+        assert "n=3" in err
+        assert "ci95 is null" in err
+
+    def test_per_task_ci95_null_at_low_n(self, project_root):
+        from benchmark import BenchmarkRunner
+        from benchmark.task_suite import TASK_SUITE
+        runner = BenchmarkRunner(project_root)
+        report = runner.run_suite(tasks=TASK_SUITE[:1], n_runs=3)
+        task = report.tasks[0]
+        assert task.latency_ci95 is None
+        assert task.reduction_ci95 is None
+        assert task.tokens_ci95 is None
+
+    def test_per_task_ci95_non_null_at_high_n(self, project_root):
+        from benchmark import BenchmarkRunner
+        from benchmark.task_suite import TASK_SUITE
+        runner = BenchmarkRunner(project_root)
+        report = runner.run_suite(tasks=TASK_SUITE[:1], n_runs=10)
+        task = report.tasks[0]
+        # If all 10 runs failed, ci95 is null (success list empty); we expect
+        # the fixture project init + build_pack to succeed.
+        assert task.success is True
+        assert task.latency_ci95 is not None
+        low, high = task.latency_ci95
+        assert low <= high
+
+
+class TestReportSerialisation:
+    """JSON dump of the report must include the top-level ``metrics`` array."""
+
+    def test_json_has_top_level_metrics_field(self):
+        import json
+
+        from benchmark.models import BenchmarkReport, TaskMetrics
+        from benchmark.reporters import to_json
+        report = BenchmarkReport(
+            project_root="/tmp",
+            n_runs=10,
+            tasks=[
+                TaskMetrics(task_id=f"t{i}", mode="review", query="q",
+                            est_tokens=100 + i, baseline_tokens=500,
+                            reduction_pct=70.0 + i, latency_ms=50.0 + i,
+                            items_selected=5, success=True)
+                for i in range(5)
+            ],
+        )
+        report.compute_summary()
+        parsed = json.loads(to_json(report))
+        assert "metrics" in parsed
+        assert isinstance(parsed["metrics"], list)
+        assert len(parsed["metrics"]) == 3  # wall_ms, reduction_pct, est_tokens
+        first = parsed["metrics"][0]
+        assert {"name", "mean", "ci95", "n"} <= set(first.keys())
+        # At n_runs=10, ci95 should be non-null (serialised as a 2-element list).
+        assert first["ci95"] is not None
+        assert len(first["ci95"]) == 2

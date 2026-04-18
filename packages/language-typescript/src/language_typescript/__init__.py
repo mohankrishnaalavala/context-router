@@ -1,11 +1,18 @@
 """context-router-language-typescript: TypeScript/JavaScript language analyzer plugin.
 
-Uses tree-sitter to extract functions, classes, interfaces, imports, and call
-edges from TypeScript and TSX source files.
+Uses tree-sitter to extract functions, classes, interfaces, imports, call
+edges, and inheritance / test-linkage edges from TypeScript and TSX source
+files.
+
+v3 phase3/edge-kinds-extended: emits ``extends`` (class → base class,
+interface → super-interfaces), ``implements`` (class → interface), and
+``tested_by`` (source symbol → test symbol via ``*.test.ts`` / ``*.spec.ts``
+files that import source symbols) edges.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from contracts.interfaces import DependencyEdge, Symbol
@@ -48,6 +55,40 @@ _BUILTINS = frozenset(
         "Buffer",
     }
 )
+
+
+def _looks_like_test_name(name: str) -> bool:
+    """Heuristic: function names emitted inside ``it(...)``/``test(...)`` blocks
+    are often anonymous arrow functions.  For named symbols we look for
+    common prefixes (``test``, ``it``, ``should``).
+    """
+    if not name:
+        return False
+    if name.startswith("test") or name.startswith("it_") or name.startswith("should"):
+        return True
+    # Explicit helper: Jest / Vitest describe+it generate no named func, but
+    # the invocation identifier is ``test`` / ``it``.  Callers of
+    # ``_looks_like_test_name`` apply this only when ``current_func`` has a
+    # name — so we also trust any top-level test function that imports real
+    # symbols.
+    return False
+
+
+def _is_test_file(file: Path) -> bool:
+    """Return True if *file* is a TS/JS test file by naming convention.
+
+    Matches ``*.test.ts``, ``*.test.tsx``, ``*.test.js``, ``*.spec.ts``,
+    ``*.spec.tsx``, ``*.spec.js``.  A ``__tests__`` directory also counts.
+    """
+    suffixes = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"}
+    if file.suffix not in suffixes:
+        return False
+    stem = file.stem  # "foo.test" for foo.test.ts
+    return (
+        stem.endswith(".test")
+        or stem.endswith(".spec")
+        or any(part == "__tests__" for part in file.parts)
+    )
 
 
 def _text(node: object) -> str:
@@ -131,11 +172,98 @@ def _collect_decorator_names(node: object) -> list[str]:
     return result
 
 
+def _ts_type_names(node: object) -> list[str]:
+    """Return identifier names from a TS clause (extends_clause / implements_clause).
+
+    Handles ``identifier``, ``type_identifier``, and dotted ``member_expression``
+    (``other.module.Base`` → ``Base``).  Generic arguments are skipped —
+    ``Foo<T>`` contributes ``Foo`` only.
+    """
+    names: list[str] = []
+    for c in node.children:  # type: ignore[attr-defined]
+        t = c.type  # type: ignore[attr-defined]
+        if t in ("identifier", "type_identifier"):
+            names.append(_text(c))
+        elif t == "member_expression":
+            # property side is the leaf (e.g. "Base" in "other.module.Base")
+            prop = _child_by_field(c, "property")
+            if prop:
+                names.append(_text(prop))
+        elif t == "generic_type":
+            # generic_type has a "name" field with the type_identifier
+            name_sub = _child_by_field(c, "name")
+            if name_sub:
+                names.append(_text(name_sub))
+            else:
+                # Fallback: first type_identifier child
+                for sub in c.children:  # type: ignore[attr-defined]
+                    if sub.type in ("identifier", "type_identifier"):  # type: ignore[attr-defined]
+                        names.append(_text(sub))
+                        break
+        # Skip commas and keywords like ``extends``/``implements``.
+    return names
+
+
+def _emit_ts_inheritance_edges(
+    node: object,
+    class_name: str,
+    results: list[Symbol | DependencyEdge],
+) -> None:
+    """Emit ``extends`` / ``implements`` edges for a TS class/interface declaration.
+
+    * ``class_declaration`` with ``class_heritage`` child: one ``extends``
+      edge from ``extends_clause``, one ``implements`` edge per identifier
+      in ``implements_clause``.
+    * ``interface_declaration`` with ``extends_type_clause``: one ``extends``
+      edge per super-interface.
+    """
+    nt = node.type  # type: ignore[attr-defined]
+    if nt == "class_declaration":
+        heritage = _first_child_of_type(node, "class_heritage")
+        if heritage is None:
+            return
+        for sub in heritage.children:  # type: ignore[attr-defined]
+            st = sub.type  # type: ignore[attr-defined]
+            if st == "extends_clause":
+                for base in _ts_type_names(sub):
+                    results.append(
+                        DependencyEdge(
+                            from_symbol=class_name,
+                            to_symbol=base,
+                            edge_type="extends",
+                        )
+                    )
+            elif st == "implements_clause":
+                for iface in _ts_type_names(sub):
+                    results.append(
+                        DependencyEdge(
+                            from_symbol=class_name,
+                            to_symbol=iface,
+                            edge_type="implements",
+                        )
+                    )
+    elif nt == "interface_declaration":
+        ext = _first_child_of_type(node, "extends_type_clause")
+        if ext is None:
+            return
+        for base in _ts_type_names(ext):
+            results.append(
+                DependencyEdge(
+                    from_symbol=class_name,
+                    to_symbol=base,
+                    edge_type="extends",
+                )
+            )
+
+
 def _walk_ts(
     node: object,
     results: list[Symbol | DependencyEdge],
     file: Path,
     current_func: str | None = None,
+    is_test_file: bool = False,
+    imported_names: set[str] | None = None,
+    has_emitted_test_edge: list[bool] | None = None,
 ) -> None:
     """Recursively walk a TypeScript tree-sitter node tree.
 
@@ -164,7 +292,15 @@ def _walk_ts(
                 )
             )
             for child in node.children:  # type: ignore[attr-defined]
-                _walk_ts(child, results, file, current_func=name)
+                _walk_ts(
+                    child,
+                    results,
+                    file,
+                    current_func=name,
+                    is_test_file=is_test_file,
+                    imported_names=imported_names,
+                    has_emitted_test_edge=has_emitted_test_edge,
+                )
             return
 
     if node_type == "method_definition":
@@ -187,7 +323,15 @@ def _walk_ts(
                 )
             )
             for child in node.children:  # type: ignore[attr-defined]
-                _walk_ts(child, results, file, current_func=name)
+                _walk_ts(
+                    child,
+                    results,
+                    file,
+                    current_func=name,
+                    is_test_file=is_test_file,
+                    imported_names=imported_names,
+                    has_emitted_test_edge=has_emitted_test_edge,
+                )
             return
 
     if node_type == "class_declaration":
@@ -210,8 +354,18 @@ def _walk_ts(
                     signature=signature,
                 )
             )
+            # v3 phase3/edge-kinds-extended: emit inheritance edges.
+            _emit_ts_inheritance_edges(node, name, results)
         for child in node.children:  # type: ignore[attr-defined]
-            _walk_ts(child, results, file, current_func)
+            _walk_ts(
+                child,
+                results,
+                file,
+                current_func,
+                is_test_file=is_test_file,
+                imported_names=imported_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node_type == "enum_declaration":
@@ -232,7 +386,15 @@ def _walk_ts(
                 )
             )
         for child in node.children:  # type: ignore[attr-defined]
-            _walk_ts(child, results, file, current_func)
+            _walk_ts(
+                child,
+                results,
+                file,
+                current_func,
+                is_test_file=is_test_file,
+                imported_names=imported_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node_type == "interface_declaration":
@@ -251,8 +413,19 @@ def _walk_ts(
                     language="typescript",
                 )
             )
+            # v3 phase3/edge-kinds-extended: interfaces can extend multiple
+            # super-interfaces via an ``extends_type_clause``.
+            _emit_ts_inheritance_edges(node, name, results)
         for child in node.children:  # type: ignore[attr-defined]
-            _walk_ts(child, results, file, current_func)
+            _walk_ts(
+                child,
+                results,
+                file,
+                current_func,
+                is_test_file=is_test_file,
+                imported_names=imported_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node_type == "type_alias_declaration":
@@ -272,7 +445,15 @@ def _walk_ts(
                 )
             )
         for child in node.children:  # type: ignore[attr-defined]
-            _walk_ts(child, results, file, current_func)
+            _walk_ts(
+                child,
+                results,
+                file,
+                current_func,
+                is_test_file=is_test_file,
+                imported_names=imported_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node_type == "variable_declarator":
@@ -297,11 +478,27 @@ def _walk_ts(
                     )
                 )
                 for child in value_node.children:  # type: ignore[attr-defined]
-                    _walk_ts(child, results, file, current_func=name)
+                    _walk_ts(
+                        child,
+                        results,
+                        file,
+                        current_func=name,
+                        is_test_file=is_test_file,
+                        imported_names=imported_names,
+                        has_emitted_test_edge=has_emitted_test_edge,
+                    )
                 return
         # Default: recurse for destructuring / non-arrow declarations
         for child in node.children:  # type: ignore[attr-defined]
-            _walk_ts(child, results, file, current_func)
+            _walk_ts(
+                child,
+                results,
+                file,
+                current_func,
+                is_test_file=is_test_file,
+                imported_names=imported_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     if node_type == "import_statement":
@@ -316,6 +513,28 @@ def _walk_ts(
                     edge_type="imports",
                 )
             )
+        # v3 phase3/edge-kinds-extended: in a test file, record the
+        # imported names so ``call_expression`` can later emit tested_by
+        # edges when a test function invokes one of them.
+        if is_test_file and imported_names is not None:
+            import_clause = _first_child_of_type(node, "import_clause")
+            if import_clause is not None:
+                for c in import_clause.children:  # type: ignore[attr-defined]
+                    ct = c.type  # type: ignore[attr-defined]
+                    if ct == "identifier":
+                        imported_names.add(_text(c))
+                    elif ct == "named_imports":
+                        for spec in c.children:  # type: ignore[attr-defined]
+                            if spec.type == "import_specifier":  # type: ignore[attr-defined]
+                                n = _child_by_field(spec, "name")
+                                alias = _child_by_field(spec, "alias")
+                                target = alias if alias else n
+                                if target is not None:
+                                    imported_names.add(_text(target))
+                    elif ct == "namespace_import":
+                        for sub in c.children:  # type: ignore[attr-defined]
+                            if sub.type == "identifier":  # type: ignore[attr-defined]
+                                imported_names.add(_text(sub))
         return
 
     if node_type == "call_expression" and current_func is not None:
@@ -337,13 +556,48 @@ def _walk_ts(
                     edge_type="calls",
                 )
             )
+            # v3 phase3/edge-kinds-extended: in a test file, if the caller
+            # is a test function and the callee is an imported source
+            # symbol, emit ``tested_by`` from the imported symbol → test
+            # function.  This mirrors CRG's TESTED_BY semantics.
+            if (
+                is_test_file
+                and imported_names is not None
+                and called in imported_names
+                and _looks_like_test_name(current_func)
+            ):
+                results.append(
+                    DependencyEdge(
+                        from_symbol=called,
+                        to_symbol=current_func,
+                        edge_type="tested_by",
+                    )
+                )
+                if has_emitted_test_edge is not None:
+                    has_emitted_test_edge[0] = True
         for child in node.children:  # type: ignore[attr-defined]
-            _walk_ts(child, results, file, current_func)
+            _walk_ts(
+                child,
+                results,
+                file,
+                current_func,
+                is_test_file=is_test_file,
+                imported_names=imported_names,
+                has_emitted_test_edge=has_emitted_test_edge,
+            )
         return
 
     # Default: recurse into children
     for child in node.children:  # type: ignore[attr-defined]
-        _walk_ts(child, results, file, current_func)
+        _walk_ts(
+            child,
+            results,
+            file,
+            current_func,
+            is_test_file=is_test_file,
+            imported_names=imported_names,
+            has_emitted_test_edge=has_emitted_test_edge,
+        )
 
 
 class TypeScriptAnalyzer:
@@ -378,5 +632,33 @@ class TypeScriptAnalyzer:
         parser = Parser(language)
         tree = parser.parse(source)
         results: list[Symbol | DependencyEdge] = []
-        _walk_ts(tree.root_node, results, path)
+
+        # v3 phase3/edge-kinds-extended: record whether *path* is a test
+        # file so the walker can emit ``tested_by`` edges when a named
+        # test function calls an imported source symbol.
+        is_test = _is_test_file(path)
+        imported_names: set[str] = set()
+        has_emitted_test_edge: list[bool] = [False]
+
+        _walk_ts(
+            tree.root_node,
+            results,
+            path,
+            is_test_file=is_test,
+            imported_names=imported_names,
+            has_emitted_test_edge=has_emitted_test_edge,
+        )
+
+        # Silent-failure rule: test file with imported source symbols but no
+        # ``tested_by`` edges emitted — log a debug note so operators can
+        # audit the gap without spamming a warning (low signal; many TS
+        # suites use anonymous arrow callbacks).
+        if is_test and imported_names and not has_emitted_test_edge[0]:
+            print(
+                f"[language-typescript] debug: could not emit tested_by for "
+                f"test file {path} (no named test function invoking an "
+                f"imported symbol)",
+                file=sys.stderr,
+            )
+
         return results

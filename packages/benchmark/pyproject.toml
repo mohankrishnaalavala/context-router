@@ -1,6 +1,6 @@
 [project]
 name = "context-router-benchmark"
-version = "2.0.0"
+version = "3.0.0"
 requires-python = ">=3.12"
 description = "Benchmark harness and sample task suite for context-router (Phase 8)"
 dependencies = ["context-router-contracts", "context-router-core"]

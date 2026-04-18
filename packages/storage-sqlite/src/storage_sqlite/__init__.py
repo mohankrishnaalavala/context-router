@@ -8,7 +8,9 @@ from storage_sqlite.repositories import (
     ContractRepository,
     DecisionRepository,
     EdgeRepository,
+    EmbeddingRepository,
     ObservationRepository,
+    PackCacheRepository,
     RuntimeSignalRepository,
     SymbolRepository,
 )
@@ -19,7 +21,9 @@ __all__ = [
     "ContractRepository",
     "DecisionRepository",
     "EdgeRepository",
+    "EmbeddingRepository",
     "ObservationRepository",
+    "PackCacheRepository",
     "RuntimeSignalRepository",
     "SymbolRepository",
 ]

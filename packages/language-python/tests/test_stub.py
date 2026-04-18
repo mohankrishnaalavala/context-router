@@ -149,3 +149,107 @@ def process(items):
     tos = {e.to_symbol for e in calls}
     assert "len" not in tos
     assert "str" not in tos
+
+
+# ---------------------------------------------------------------------------
+# v3 phase3/edge-kinds-extended: extends / tested_by edges.
+# ---------------------------------------------------------------------------
+
+SAMPLE_PY_INHERITANCE = '''\
+class Animal:
+    pass
+
+class Dog(Animal):
+    pass
+
+class Retriever(Dog, Trainable):
+    pass
+
+class ConfigMeta(metaclass=Meta):
+    """Has a keyword arg — must not produce extends edges."""
+    pass
+
+class Leaf(some.module.Base):
+    pass
+'''
+
+
+def test_extends_edges_from_class_definitions(tmp_path: Path):
+    """``class Dog(Animal)`` emits one ``extends`` edge; multi-base classes
+    emit one per positional base.  Keyword arguments (metaclass) are
+    skipped.  Dotted bases contribute only the leaf identifier."""
+    f = tmp_path / "animals.py"
+    f.write_text(SAMPLE_PY_INHERITANCE)
+    results = PythonAnalyzer().analyze(f)
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "extends"]
+    pairs = {(e.from_symbol, e.to_symbol) for e in edges}
+
+    assert ("Dog", "Animal") in pairs
+    assert ("Retriever", "Dog") in pairs
+    assert ("Retriever", "Trainable") in pairs
+    assert ("Leaf", "Base") in pairs  # dotted path stripped to leaf
+    # ConfigMeta has metaclass=Meta (keyword arg) — no extends emitted.
+    assert ("ConfigMeta", "Meta") not in pairs
+    # Base class itself has no bases → no edge from "Animal".
+    assert all(src != "Animal" for src, _ in pairs)
+
+
+def test_tested_by_in_file_for_test_prefix_funcs(tmp_path: Path):
+    """When a test file defines both ``test_foo`` and its SUT ``foo``,
+    we emit a tested_by edge in-file (cross-file linking runs later)."""
+    code = '''\
+def add(x, y):
+    return x + y
+
+def multiply(x, y):
+    return x * y
+
+def test_add():
+    assert add(1, 2) == 3
+
+def test_multiply():
+    assert multiply(3, 4) == 12
+'''
+    f = tmp_path / "test_math.py"
+    f.write_text(code)
+    results = PythonAnalyzer().analyze(f)
+    edges = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "tested_by"]
+    pairs = {(e.from_symbol, e.to_symbol) for e in edges}
+    assert ("add", "test_add") in pairs
+    assert ("multiply", "test_multiply") in pairs
+
+
+def test_no_spec_edges_in_plain_source(tmp_path: Path):
+    """Negative: a plain module without inheritance or tests emits zero of
+    the v3-phase3 edge kinds."""
+    code = '''\
+def plain():
+    return 1
+
+class Standalone:
+    value = 42
+'''
+    f = tmp_path / "plain.py"
+    f.write_text(code)
+    results = PythonAnalyzer().analyze(f)
+    spec_edges = [
+        r for r in results
+        if isinstance(r, DependencyEdge)
+        and r.edge_type in {"extends", "implements", "tested_by"}
+    ]
+    assert spec_edges == []
+
+
+def test_calls_and_imports_unchanged_after_v3(tmp_path: Path):
+    """Regression: existing call-graph fixture still yields the same edges."""
+    f = tmp_path / "calls.py"
+    f.write_text('''\
+def foo():
+    bar()
+
+def bar():
+    pass
+''')
+    results = PythonAnalyzer().analyze(f)
+    calls = [r for r in results if isinstance(r, DependencyEdge) and r.edge_type == "calls"]
+    assert any(e.from_symbol == "foo" and e.to_symbol == "bar" for e in calls)

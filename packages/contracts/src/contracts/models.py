@@ -8,14 +8,14 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 
 def _utcnow() -> datetime:
     """Return the current UTC time as a timezone-aware datetime."""
     return datetime.now(UTC)
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class ContextItem(BaseModel):
@@ -37,6 +37,16 @@ class ContextItem(BaseModel):
     est_tokens: int = 0
     freshness: datetime = Field(default_factory=_utcnow)
     tags: list[str] = Field(default_factory=list)
+    # Phase 3 Wave 2: per-item risk label for review-mode packs.
+    # Populated by the orchestrator's review branch from git-diff membership +
+    # file-size/complexity proxies. For non-review modes this stays "none".
+    risk: Literal["none", "low", "medium", "high"] = "none"
+    # Phase 4 Wave 1: flow-level context annotation for debug-mode packs.
+    # Populated by the orchestrator from :func:`graph_index.flows.get_affected_flows`
+    # for items whose underlying symbol participates in an entry -> leaf call
+    # chain (e.g. "getOwner -> findById"). For non-debug modes and items
+    # whose symbol can't be resolved, this stays ``None``.
+    flow: str | None = None
 
     def to_compact_line(self) -> str:
         """Return a compact single-item representation (no JSON metadata overhead)."""
@@ -52,7 +62,7 @@ class ContextPack(BaseModel):
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    mode: Literal["review", "debug", "implement", "handover"]
+    mode: Literal["review", "debug", "implement", "handover", "minimal"]
     query: str
     selected_items: list[ContextItem] = Field(default_factory=list)
     total_est_tokens: int = 0
@@ -62,6 +72,12 @@ class ContextPack(BaseModel):
     # Pagination fields (populated when page_size > 0 is requested)
     has_more: bool = False
     total_items: int = 0  # 0 = pagination not used
+    # v3 phase-1 follow-up: number of duplicate (title, path_or_ref) items
+    # removed in the orchestrator before rendering / serialization. Surfaced
+    # so CLI / MCP consumers can display "(N duplicate(s) hidden)".
+    duplicates_hidden: int = 0
+    # Arbitrary mode-specific hints (e.g. next_tool_suggestion for minimal mode).
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     def to_compact_text(self) -> str:
         """Return a compact plain-text representation of the pack.

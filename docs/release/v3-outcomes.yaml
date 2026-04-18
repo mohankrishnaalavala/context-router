@@ -1,0 +1,320 @@
+# Feature outcome registry — v3.0.0
+#
+# Single source of truth for every v3 feature's user-visible outcome plus the
+# exact command that proves it works. `scripts/smoke-v3.sh` reads this file
+# and treats any missing / failing `verify.cmd` as a release blocker.
+#
+# Rules (enforced by the ship-check skill):
+#   - Every item in internal_docs/production-readiness-review-v2.md's priority
+#     queue must have a matching entry here before v3.0.0 tags.
+#   - Each entry must have all four DoD fields filled (outcome, threshold,
+#     negative_case, verify).
+#   - `verify.cmd` MUST be runnable against one of the fixture repos in
+#     project_context/ (bulletproof-react, eShopOnWeb, spring-petclinic) or
+#     against this repo itself.
+#   - `expected_stdout_contains` MUST be a specific substring — not "Success",
+#     not "OK". If you can't name a specific string, the outcome isn't
+#     well-defined.
+#
+# Severities mirror the v2 review:
+#   P0 = release blocker. P1 = hotfix. P2 = v3 polish. P3 = nice-to-have.
+
+version: "3.0.0"
+
+fixtures:
+  bulletproof_react: "${PROJECT_CONTEXT_ROOT}/bulletproof-react"
+  eshop: "${PROJECT_CONTEXT_ROOT}/eShopOnWeb"
+  petclinic: "${PROJECT_CONTEXT_ROOT}/spring-petclinic"
+
+outcomes:
+
+  # ──────────────────── P0 — blockers ────────────────────
+
+  - id: cli-version-flag
+    severity: P0
+    effort: S
+    title: "context-router --version prints the installed version"
+    outcome: "`context-router --version` prints a semver string and exits 0"
+    threshold: "stdout matches ^context-router \\d+\\.\\d+\\.\\d+"
+    negative_case: "unknown flag `--versoin` exits non-zero with typer's usage error"
+    verify:
+      cmd: "uv run context-router --version"
+      expected_stdout_contains: "context-router 3."
+
+  - id: pack-dedup-at-orchestrator
+    severity: P1
+    effort: S
+    title: "Pack dedup happens in build_pack, not only in CLI render"
+    outcome: "MCP get_context_pack, explain last-pack, and pack --json all return the same deduped pack that the CLI table shows"
+    threshold: "pack_from_mcp == pack_from_cli_json — item list has no duplicate (title, path_or_ref) pairs regardless of consumer"
+    negative_case: "dedup count surfaced on ContextPack.metadata for consumers that want to display it"
+    verify:
+      cmd: "scripts/smoke-v3.sh check pack-dedup-at-orchestrator"
+      expected_stdout_contains: "PASS pack-dedup-at-orchestrator"
+
+  - id: pack-table-dedup
+    severity: P0
+    effort: S
+    title: "Pack CLI table shows each symbol at most once"
+    outcome: "Running `pack` never prints the same (title, path) row twice"
+    threshold: "Pagination row appears exactly once on bulletproof-react query 'add pagination'"
+    negative_case: "dedup is suppressed COUNT is surfaced via 'N duplicate(s) hidden' line"
+    # verify.cmd uses an anchored regex so that 'Pagination (' only matches
+    # rows starting with exactly "Pagination (" — not "TablePagination (".
+    verify:
+      cmd: "uv run context-router pack --mode implement --query 'add pagination' --project-root ${bulletproof_react} | grep -cE '^Pagination \\('"
+      expected_stdout_contains: "1"
+
+  - id: interface-kind-label
+    severity: P0
+    effort: S
+    title: "Java interfaces and C# records indexed with correct kind"
+    outcome: "After indexing eShopOnWeb, SQL query on symbols returns kind=interface for at least one known interface"
+    threshold: "count of kind='interface' > 0 after indexing eShopOnWeb"
+    negative_case: "structs remain kind='struct'; classes remain kind='class'"
+    verify:
+      cmd: "uv run context-router index --project-root ${eshop} && sqlite3 ${eshop}/.context-router/db.sqlite \"SELECT count(*) FROM symbols WHERE kind='interface'\""
+      expected_stdout_contains: "1"
+
+  # ──────────────────── P1 — hotfix candidates rolled into v3 ────────────────────
+
+  - id: pack-cache-persists-cli
+    severity: P1
+    effort: S
+    title: "Repeat pack invocations from CLI are measurably faster"
+    outcome: "Second `pack` run for the same query completes in <50% of the first run's wall time"
+    threshold: "second run wall < 0.5 * first run wall, measured via /usr/bin/time"
+    negative_case: "after `context-router index` (index bump), cache is invalidated — third run is as slow as the first"
+    verify:
+      cmd: "scripts/smoke-v3.sh check pack-cache-persists-cli"
+      expected_stdout_contains: "PASS pack-cache-persists-cli"
+
+  - id: with-semantic-warns-outside-implement
+    severity: P1
+    effort: S
+    title: "--with-semantic outside implement mode emits a warning"
+    outcome: "SUPERSEDED in Phase 2 by `semantic-default-with-progress` — the warning was a phase-1 bridge; `--with-semantic` now applies in every mode so no warning is needed."
+    threshold: "N/A (superseded)"
+    negative_case: "N/A (superseded)"
+    status: "superseded"
+    # Verify is kept for historical record; smoke will FAIL this id intentionally
+    # and that is expected. The behavior documented by `semantic-default-with-progress`
+    # is the replacement contract.
+    verify:
+      cmd: "echo 'SUPERSEDED by semantic-default-with-progress (Phase 2)'"
+      expected_stdout_contains: "SUPERSEDED by semantic-default-with-progress"
+
+  - id: contracts-boost-single-repo
+    severity: P1
+    effort: M
+    title: "Contracts consume/produce boost works on single-repo packs"
+    outcome: "In a single-repo fixture with an OpenAPI spec, items that match a `consumes` endpoint score higher than unrelated items"
+    threshold: "item whose file contains `fetch('/api/orders/')` ranks in top 5 for query 'create order' when openapi.yaml defines POST /orders"
+    negative_case: "no OpenAPI spec present → ranking unchanged from baseline"
+    verify:
+      cmd: "scripts/smoke-v3.sh check contracts-boost-single-repo"
+      expected_stdout_contains: "PASS contracts-boost-single-repo"
+
+  - id: benchmark-develop-ci
+    severity: P1
+    effort: S
+    title: "CI runs benchmark harness on every push to develop"
+    outcome: "`.github/workflows/ci.yml` triggers on push to develop"
+    threshold: "workflow file contains `branches: [main, develop]` (or equivalent)"
+    negative_case: "push to feature/* does not trigger heavy benchmark jobs"
+    verify:
+      cmd: "grep -E 'develop' .github/workflows/ci.yml"
+      expected_stdout_contains: "develop"
+
+  - id: benchmark-ci-emits-ci95
+    severity: P1
+    effort: S
+    title: "Benchmark harness emits 95% confidence intervals"
+    outcome: "`context-router benchmark run --json` output includes a `ci95` field for every metric"
+    threshold: "jq '.metrics[0].ci95' on output is a non-null number pair"
+    negative_case: "n<10 runs → ci95 is null with a warning in stderr"
+    verify:
+      cmd: "uv run context-router benchmark run --json --runs 10 | jq '.metrics[0].ci95 != null'"
+      expected_stdout_contains: "true"
+
+  # ──────────────────── P2 — polish ────────────────────
+
+  - id: call-chain-symbols-mcp
+    severity: P2
+    effort: M
+    title: "get_call_chain_symbols exposed via CLI and MCP"
+    outcome: "MCP client calling `get_call_chain` with symbol_id receives a list of symbol objects (not file paths)"
+    threshold: "response[0] has keys: id, name, kind, file, language, line_start"
+    negative_case: "max_depth=0 returns empty list, not an error"
+    verify:
+      cmd: "scripts/smoke-v3.sh check call-chain-symbols-mcp"
+      expected_stdout_contains: "PASS call-chain-symbols-mcp"
+
+  - id: mcp-mimetype-content
+    severity: P2
+    effort: S
+    title: "MCP tools/call content blocks include mimeType"
+    outcome: "Every text content block in a tools/call response has mimeType set"
+    threshold: "jq '.result.content[0].mimeType' returns 'application/json' (or text/plain for plain text)"
+    negative_case: "n/a — mimeType is always set"
+    verify:
+      cmd: "scripts/smoke-v3.sh check mcp-mimetype-content"
+      expected_stdout_contains: "PASS mcp-mimetype-content"
+
+  - id: mcp-serverinfo-version
+    severity: P2
+    effort: S
+    title: "MCP serverInfo.version reflects installed package version"
+    outcome: "`initialize` response's `serverInfo.version` matches `importlib.metadata.version('context-router-mcp-server')`"
+    threshold: "version string matches ^3\\.\\d+\\.\\d+"
+    negative_case: "package not installed → server startup fails with a clear message"
+    verify:
+      cmd: "scripts/smoke-v3.sh check mcp-serverinfo-version"
+      expected_stdout_contains: "PASS mcp-serverinfo-version"
+
+  - id: get-minimal-context-tool
+    severity: P2
+    effort: S
+    title: "get_minimal_context MCP + CLI tool (CRG parity)"
+    outcome: "MCP/CLI exposes `get_minimal_context(task)` returning ≤5 items under a tight token budget"
+    threshold: "output length ≤ 800 tokens for query 'review the ranker' against this repo"
+    negative_case: "empty task string rejected with a usage error"
+    verify:
+      cmd: "uv run context-router pack --mode minimal --query 'review the ranker' --project-root . --max-tokens 800 --json | jq '.items | length <= 5'"
+      expected_stdout_contains: "true"
+
+  - id: hub-bridge-ranking-signals
+    severity: P2
+    effort: M
+    title: "Hub and bridge metrics boost ranking scores"
+    outcome: "For `pack --mode implement`, symbols in the top-decile of hub_score rank higher than matched non-hub peers"
+    threshold: "for query 'add pagination', a file with >5 inbound edges ranks above an equally-matched file with 1 inbound edge"
+    negative_case: "feature off by config flag `capabilities.hub_boost: false` returns baseline order"
+    verify:
+      cmd: "scripts/smoke-v3.sh check hub-bridge-ranking-signals"
+      expected_stdout_contains: "PASS hub-bridge-ranking-signals"
+
+  - id: proactive-embedding-cache
+    severity: P2
+    effort: M
+    title: "Embeddings pre-computed out of pack hot path"
+    outcome: "`context-router embed` computes & stores embeddings; subsequent `pack --with-semantic` runs do not download or compute them"
+    threshold: "second `pack --with-semantic` wall time < 2× the lexical-only pack wall time (today it is >10×)"
+    negative_case: "missing embeddings → `pack --with-semantic` falls back to lexical with a stderr warning"
+    verify:
+      cmd: "scripts/smoke-v3.sh check proactive-embedding-cache"
+      expected_stdout_contains: "PASS proactive-embedding-cache"
+
+  # ──────────────────── P3 — nice-to-have / v3.x ────────────────────
+
+  - id: edge-kinds-extended
+    severity: P3
+    effort: M
+    title: "Analyzers emit extends / implements / tested_by edges"
+    outcome: "After indexing spring-petclinic, SELECT COUNT(*) FROM edges WHERE edge_type IN ('extends','implements','tested_by') > 0 each"
+    threshold: "each of the three edge types has at least 10 rows on spring-petclinic"
+    negative_case: "unchanged languages (yaml) emit zero of these edges — no spurious entries"
+    verify:
+      cmd: "scripts/smoke-v3.sh check edge-kinds-extended"
+      expected_stdout_contains: "PASS edge-kinds-extended"
+
+  - id: edge-source-resolution-fix
+    severity: P1
+    effort: S
+    title: "extends/implements/tested_by edges anchor on class rows (not constructor); C# tested_by targets the method, not the return type"
+    outcome: "On eShopOnWeb, `SELECT from_kind FROM edges WHERE edge_type IN ('extends','implements')` has zero `constructor` rows; `SELECT DISTINCT to_name FROM edges WHERE edge_type='tested_by'` does NOT include `Task`"
+    threshold: "constructor-anchored inherits edges = 0 on eShopOnWeb; `to_name='Task'` rows for `tested_by` = 0"
+    negative_case: "existing `calls`/`imports` edges unchanged (regression guard)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check edge-source-resolution-fix"
+      expected_stdout_contains: "PASS edge-source-resolution-fix"
+
+  - id: enum-symbols-extracted
+    severity: P3
+    effort: S
+    title: "Java + C# enums indexed with kind=enum"
+    outcome: "After indexing a repo with enums, kind='enum' rows exist"
+    threshold: "spring-petclinic: count >= 1; eShopOnWeb: count >= 1"
+    negative_case: "non-enum types unaffected (kind counts for class/interface unchanged pre/post)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check enum-symbols-extracted"
+      expected_stdout_contains: "PASS enum-symbols-extracted"
+
+  - id: review-mode-risk-score
+    severity: P3
+    effort: S
+    title: "pack --mode review surfaces a risk score per changed file"
+    outcome: "review mode output column `risk` populated for every item touched by the current diff"
+    threshold: "values are one of {low, medium, high}; high = file in top-10% by change frequency × complexity"
+    negative_case: "no diff → all items show risk=none"
+    verify:
+      cmd: "uv run context-router pack --mode review --project-root . --json | jq '.items | map(.risk) | unique | length > 1'"
+      expected_stdout_contains: "true"
+
+  - id: audit-untested-hotspots
+    severity: P3
+    effort: M
+    title: "audit --untested-hotspots ranks high-churn, low-coverage files"
+    outcome: "CLI command prints a ranked list of files in top-10% churn with zero TESTED_BY edges"
+    threshold: "on this repo, output contains at least one file + reason line"
+    negative_case: "--project-root without coverage data → clear 'no coverage data' warning, exit 0"
+    verify:
+      cmd: "uv run context-router audit --untested-hotspots --project-root . | head -5"
+      expected_stdout_contains: "untested"
+
+  - id: flow-level-debug
+    severity: P3
+    effort: L
+    title: "Debug mode returns flow-level context (list_flows / get_affected_flows)"
+    outcome: "`get_debug_pack` for a stack trace returns items grouped by flow (entry → leaf)"
+    threshold: "response.items[*].flow is non-null for at least the top 3 items"
+    negative_case: "no flows detected → fall back to today's behavior with a note in `explain.why`"
+    verify:
+      cmd: "scripts/smoke-v3.sh check flow-level-debug"
+      expected_stdout_contains: "PASS flow-level-debug"
+
+  - id: cross-community-coupling
+    severity: P3
+    effort: S
+    title: "Workspace pack warns on cross-community coupling"
+    outcome: "multi-repo pack emits a warning when ≥N edges cross community boundaries unexpectedly"
+    threshold: "threshold configurable; default fires on the 3-repo fixture workspace"
+    negative_case: "single-repo pack does not emit this warning"
+    verify:
+      cmd: "scripts/smoke-v3.sh check cross-community-coupling"
+      expected_stdout_contains: "PASS cross-community-coupling"
+
+  - id: handover-wiki
+    severity: P3
+    effort: L
+    title: "Handover mode can emit a wiki-style summary"
+    outcome: "`context-router pack --mode handover --wiki` writes a markdown wiki of the top N subsystems"
+    threshold: "generated wiki has ≥3 sections, each with a file-list + one-paragraph summary"
+    negative_case: "--wiki flag without --mode handover prints a usage error"
+    verify:
+      cmd: "scripts/smoke-v3.sh check handover-wiki"
+      expected_stdout_contains: "PASS handover-wiki"
+
+  # ──────────────────── Competitive parity (added 2026-04-17) ────────────────────
+
+  - id: mcp-pack-streams-large
+    severity: P2
+    effort: L
+    title: "Large MCP packs stream with notifications/progress + chunked items"
+    outcome: "`get_context_pack` calls with payloads >2k tokens emit notifications/progress and stream item chunks rather than delivering the pack as one JSON blob"
+    threshold: "MCP client receives ≥2 progress notifications before final response for a >2k-token pack"
+    negative_case: "small packs (<500 tokens) deliver in one response — no spurious progress notifications"
+    verify:
+      cmd: "scripts/smoke-v3.sh check mcp-pack-streams-large"
+      expected_stdout_contains: "PASS mcp-pack-streams-large"
+
+  - id: semantic-default-with-progress
+    severity: P2
+    effort: S
+    title: "Semantic ranking is discoverable across modes (not just implement)"
+    outcome: "`--with-semantic` takes effect in every pack mode; model download shows a single rich progress bar on first run only"
+    threshold: "diff between `pack --with-semantic` and `pack` in handover mode is non-empty (different ranking)"
+    negative_case: "cache-hit path (model already downloaded) shows NO progress bar (no noise on warm runs)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check semantic-default-with-progress"
+      expected_stdout_contains: "PASS semantic-default-with-progress"

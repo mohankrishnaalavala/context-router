@@ -9,6 +9,129 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.0.0] — 2026-04-18
+
+v3.0.0 — CRG-parity, cache persistence, MCP streaming, handover wiki, and
+correct graph edges. 25 PRs merged across five phases (scaffolding + four
+implementation phases), gated by the new ship-check quality system.
+
+Every feature in this release has a matching entry in
+[`docs/release/v3-outcomes.yaml`](docs/release/v3-outcomes.yaml) with a
+specific command that proves it works. `scripts/smoke-v3.sh` runs them all.
+
+### Added
+
+- **Phase 1 — first impressions**
+  - `context-router --version` prints the installed semver (#38).
+  - Pack CLI table dedupes rows by `(title, path_or_ref)` and shows
+    "(N duplicate(s) hidden)" (#39).
+  - Java/C# interfaces, records, and enums now emit correct `kind`
+    values (#40).
+  - CI runs on push to `develop`, not just `main` (#36).
+- **Phase 2 — speed & discoverability**
+  - `--with-semantic` applies in every pack mode (review / debug /
+    implement / handover / minimal). The phase-1 stderr warning was
+    superseded (#42, #46).
+  - Pack cache persists across CLI invocations via a new SQLite L2 tier
+    (migration 0012); repeat calls are ≥2× faster (#43).
+  - Contracts-consumer boost applies to single-repo packs, not just
+    multi-repo workspaces (#44).
+  - New `context-router embed` subcommand (migration 0013) pre-computes
+    symbol embeddings into a persistent table so `pack --with-semantic`
+    is a cosine lookup instead of an on-the-fly compute (#45).
+- **Phase 3 — CRG-parity intelligence**
+  - New `context-router graph call-chain --symbol-id N` + MCP
+    `get_call_chain` tool expose symbol-level call chains (#47).
+  - Analyzers emit `extends`, `implements`, and `tested_by` edges for
+    Java, C#, Python, and TypeScript (#48). YAML remains edge-free.
+  - New `pack --mode minimal` + MCP `get_minimal_context(task)` tool
+    return ≤5 items under a tight token budget with a
+    `next_tool_suggestion` hint (#49).
+  - Java, C#, and TypeScript enums emit `kind='enum'` (#50).
+  - New `context-router audit --untested-hotspots` command ranks
+    high-inbound-degree symbols with zero `TESTED_BY` edges (#51).
+  - Hub and bridge node metrics available as opt-in ranking boost via
+    `capabilities.hub_boost` config flag (#52).
+  - `pack --mode review` adds a per-item `risk` label
+    (none / low / medium / high) based on git diff + file size (#53).
+- **Phase 4 — advanced features & MCP polish**
+  - Large MCP packs (>2k tokens) emit ≥2 `notifications/progress`
+    before the final response (#54).
+  - Debug mode annotates items with a `flow` label (entry → leaf along
+    `calls` edges) when the graph supports it (#55).
+  - Benchmark harness emits 95% confidence intervals for every metric;
+    new `benchmark run --runs N` flag, default 10 (#56).
+  - MCP `tools/call` content blocks include `mimeType`; `initialize`
+    response's `serverInfo.version` reads from `importlib.metadata` (#57).
+  - New `pack --mode handover --wiki` generates a markdown wiki of the
+    top subsystems (#59).
+  - Workspace orchestrator warns on cross-community edge coupling above
+    `capabilities.coupling_warn_threshold` (#58, default 50).
+
+### Changed
+
+- `--with-semantic` no longer silently no-ops outside implement mode
+  (phase-1 warning replaced by full-mode support in phase 2).
+- Pack dedup lives in `Orchestrator.build_pack` so MCP, `explain last-pack`,
+  and `pack --json` all return the same deduped pack the CLI table shows
+  (#41). `ContextPack` gains a `duplicates_hidden: int` field.
+- `ContextItem` model gains `flow: str | None` (#55) and
+  `risk: Literal["none", "low", "medium", "high"]` (#53) fields.
+- `ContextPack.mode` literal gains `"minimal"` (#49).
+
+### Fixed
+
+- C# analyzer mis-extracted method names (return-type leaks like `Task`,
+  `StringContent`, `HttpClient`) as `kind='method'` symbols. Now uses
+  `child_by_field_name("name")` and emits only from `method_declaration`
+  nodes (#60).
+- `extends` / `implements` / `tested_by` edges were anchoring on
+  constructor rows that shared the class name. Writer now prefers
+  `kind IN ('class', 'record', 'interface', 'enum')` when resolving the
+  source symbol (#60).
+
+### New dependencies
+
+- Optional `semantic` extra on `context-router-cli` pulls
+  `sentence-transformers` for the embedding cache.
+
+### New configuration keys
+
+- `capabilities.hub_boost` (bool, default false) — opt-in hub/bridge boost.
+- `capabilities.contracts_boost` (bool, default true) — single-repo
+  contracts-consumer boost.
+- `capabilities.coupling_warn_threshold` (int, default 50) — workspace
+  cross-community coupling warning threshold.
+
+### New migrations
+
+- `0012_pack_cache.sql` — persistent L2 pack cache (`pack_cache` table).
+- `0013_embeddings.sql` — persistent symbol embeddings (`embeddings` table).
+
+### Ship-check quality gate (scaffolding landed 2026-04-17)
+
+- New `docs/release/` — DoD template, 24-outcome registry, plain-English
+  outcomes doc, phased roadmap.
+- New `scripts/smoke-v3.sh` — executable registry-driven gate; report
+  artifacts land in gitignored `internal_docs/ship-check/reports/`.
+- New `.claude/skills/ship-check/SKILL.md` + `/ship-check` slash command
+  — mandatory for every feature per the `CLAUDE.md` "Feature quality
+  gate" section.
+- Silent-failure rule: any flag / mode / tool that has no effect in a
+  context MUST emit a stderr warning naming the reason.
+- Per-phase re-reviews (prompts 1-7 playbook) run at each phase
+  completion; reports archived to
+  `internal_docs/ship-check/per-phase-reviews/`.
+
+### Known follow-ups (tracked for v3.1)
+
+- Tighten `hub-bridge-ranking-signals` smoke query — current query's
+  top-5 is BM25-dominated on spring-petclinic so the +0.10 boost cannot
+  flip positions. Unit tests prove the feature works.
+- MCP `get_minimal_context` tool published to the MCP directory registry.
+
+---
+
 ## [2.0.0] — 2026-04-16
 
 Phase P3 — enhancement ideas. Six P3 items shipped across four independent

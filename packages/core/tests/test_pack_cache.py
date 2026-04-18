@@ -111,25 +111,55 @@ class TestPackCache:
         orch.invalidate_cache()
         assert len(orch._pack_cache) == 0
 
-    def test_repo_id_changes_with_db_mtime(self, tmp_path: Path) -> None:
+    def test_repo_id_changes_when_symbols_change(self, tmp_path: Path) -> None:
         from core.orchestrator import Orchestrator
+        from storage_sqlite.database import Database
 
         orch = Orchestrator(project_root=tmp_path)
         (tmp_path / ".context-router").mkdir()
-        db = tmp_path / ".context-router" / "context-router.db"
-        db.write_bytes(b"v1")
+        db_path = tmp_path / ".context-router" / "context-router.db"
+        with Database(db_path) as db:
+            _ = db.connection  # initialize schema
 
         id1 = orch._compute_repo_id()
 
-        # Simulate a re-index by changing the DB mtime.
-        import os
-        import time
+        # Simulate a re-index by inserting into symbols.
+        import sqlite3
 
-        time.sleep(0.01)
-        os.utime(db, None)
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "INSERT INTO symbols(repo, file_path, name, kind) "
+                "VALUES(?, ?, ?, ?)",
+                ("default", "src/a.py", "a", "function"),
+            )
+            conn.commit()
         id2 = orch._compute_repo_id()
 
-        assert id1 != id2, "repo_id should change when the DB is rewritten"
+        assert id1 != id2, "repo_id should change when symbols table grows"
+
+    def test_repo_id_stable_across_pack_cache_writes(
+        self, tmp_path: Path
+    ) -> None:
+        """Writing to pack_cache must NOT rotate repo_id — otherwise the
+        L2 entry we just wrote would be unreachable by the same Orchestrator.
+        """
+        from core.orchestrator import Orchestrator
+        from storage_sqlite.database import Database
+        from storage_sqlite.repositories import PackCacheRepository
+
+        (tmp_path / ".context-router").mkdir()
+        db_path = tmp_path / ".context-router" / "context-router.db"
+        with Database(db_path) as db:
+            _ = db.connection
+        orch = Orchestrator(project_root=tmp_path)
+
+        id_before = orch._compute_repo_id()
+        with Database(db_path) as db:
+            PackCacheRepository(db.connection).put(
+                "ck", id_before, "{}", now=1.0
+            )
+        id_after = orch._compute_repo_id()
+        assert id_before == id_after
 
     def test_items_hash_stable_for_same_inputs(self, tmp_path: Path) -> None:
         from core.orchestrator import Orchestrator

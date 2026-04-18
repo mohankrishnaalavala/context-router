@@ -616,6 +616,105 @@ class SymbolRepository:
             result.setdefault(cid, []).append(row["id"])
         return result
 
+    def get_untested_hotspots(
+        self,
+        repo: str,
+        top_pct: float = 0.10,
+        limit_cap: int = 50,
+    ) -> list[tuple[SymbolRef, int]]:
+        """Return high-inbound-degree symbols that have zero ``tested_by`` edges.
+
+        Identifies the top ``top_pct`` of symbols (by inbound ``calls`` /
+        ``imports`` edges — a cheap hub-score proxy) that are not the
+        target of any ``tested_by`` edge.  This mirrors
+        code-review-graph's ``get_knowledge_gaps`` tool and is the data
+        source for the ``audit --untested-hotspots`` CLI subcommand.
+
+        The effective ``LIMIT`` is ``min(round(total_hot * top_pct), limit_cap)``.
+        If ``top_pct`` resolves to zero rows the cap is still honoured as
+        a minimum of 1 so a single-file repo with one hot symbol is not
+        filtered out.
+
+        Args:
+            repo: Logical repository name.
+            top_pct: Fraction of hot symbols to include (default 0.10).
+            limit_cap: Absolute upper bound on returned rows (default 50).
+
+        Returns:
+            List of ``(SymbolRef, inbound_degree)`` tuples, ordered by
+            inbound degree descending.  Empty list when the repo has no
+            qualifying symbols.
+        """
+        # Count distinct hot symbols so we can turn top_pct into a LIMIT.
+        total_row = self._conn.execute(
+            """
+            SELECT COUNT(DISTINCT to_symbol_id) AS n
+            FROM edges
+            WHERE repo = ? AND edge_type IN ('calls', 'imports')
+            """,
+            (repo,),
+        ).fetchone()
+        total_hot = int(total_row["n"] or 0)
+        if total_hot == 0:
+            return []
+
+        # round() + max(1, ...) ensures a single-hot-symbol repo still
+        # surfaces its one row, which matches the registered smoke
+        # expectation that this repo produces at least one result.
+        effective_limit = max(1, min(round(total_hot * top_pct), limit_cap))
+
+        rows = self._conn.execute(
+            """
+            WITH hot AS (
+                SELECT to_symbol_id AS sid, COUNT(*) AS inbound
+                FROM edges
+                WHERE repo = ? AND edge_type IN ('calls', 'imports')
+                GROUP BY to_symbol_id
+            ),
+            tested AS (
+                -- ``tested_by`` edges point SUT (from) → test fn (to).
+                -- The *SUT* is what has coverage, so we exclude
+                -- ``from_symbol_id`` from the hotspot list.  See
+                -- language-python/language-java/language-typescript for
+                -- the producer side of the edge.
+                SELECT DISTINCT from_symbol_id AS sid
+                FROM edges
+                WHERE repo = ? AND edge_type = 'tested_by'
+            )
+            SELECT s.id       AS id,
+                   s.name     AS name,
+                   s.kind     AS kind,
+                   s.file_path AS file_path,
+                   s.language AS language,
+                   s.line_start AS line_start,
+                   s.line_end AS line_end,
+                   h.inbound  AS inbound
+            FROM symbols s
+            JOIN hot h ON h.sid = s.id
+            WHERE s.repo = ?
+              AND s.id NOT IN (SELECT sid FROM tested)
+            ORDER BY h.inbound DESC, s.name ASC
+            LIMIT ?
+            """,
+            (repo, repo, repo, effective_limit),
+        ).fetchall()
+
+        return [
+            (
+                SymbolRef(
+                    id=r["id"],
+                    name=r["name"],
+                    kind=r["kind"],
+                    file=Path(r["file_path"]),
+                    language=r["language"] or "",
+                    line_start=r["line_start"] or 0,
+                    line_end=r["line_end"] or 0,
+                ),
+                int(r["inbound"]),
+            )
+            for r in rows
+        ]
+
 
 class EdgeRepository:
     """Typed access to the edges table."""
@@ -871,6 +970,27 @@ class EdgeRepository:
         """Return the total number of edges for a repository."""
         row = self._conn.execute(
             "SELECT COUNT(*) FROM edges WHERE repo = ?", (repo,)
+        ).fetchone()
+        return row[0]
+
+    def count_by_type(self, repo: str, edge_type: str) -> int:
+        """Return the number of edges of a given type for a repository.
+
+        Used by ``audit --untested-hotspots`` to detect the pre-v3 legacy
+        case where zero ``tested_by`` edges are indexed — in that case the
+        CLI surfaces a stderr warning rather than emitting an empty list
+        (per the CLAUDE.md silent-failure rule).
+
+        Args:
+            repo: Logical repository name.
+            edge_type: Edge type string (e.g. ``tested_by``, ``calls``).
+
+        Returns:
+            Integer row count.
+        """
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM edges WHERE repo = ? AND edge_type = ?",
+            (repo, edge_type),
         ).fetchone()
         return row[0]
 
@@ -1242,3 +1362,256 @@ class ContractRepository:
             (repo,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+class PackCacheRepository:
+    """Typed access to the ``pack_cache`` table (migration 0012).
+
+    Persistent L2 cache for ranked :class:`ContextPack` results. Survives
+    CLI process exits so that the second ``context-router pack`` call with
+    the same inputs skips candidate building and ranking. TTL is enforced
+    on read (default 300s, matching the in-process L1 ``TTLCache``).
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection.
+
+        Args:
+            conn: An open sqlite3.Connection (caller owns lifetime).
+        """
+        self._conn = conn
+
+    def get(
+        self,
+        cache_key: str,
+        repo_id: str,
+        ttl_seconds: float,
+        *,
+        now: float | None = None,
+    ) -> str | None:
+        """Return the cached pack JSON for (cache_key, repo_id) or None.
+
+        Args:
+            cache_key: Stable Python-computed hash of build_pack inputs.
+            repo_id: sha1(db_mtime || repo_name) — changes on re-index.
+            ttl_seconds: Entries older than this are treated as misses.
+            now: Optional unix-epoch override (for tests). Defaults to
+                ``time.time()``.
+
+        Returns:
+            The serialized pack JSON string, or ``None`` on cache miss /
+            expiry. Expired rows are not deleted eagerly; invalidate() or
+            the next insert's ``ON CONFLICT`` clause will reclaim them.
+        """
+        import time
+
+        current = time.time() if now is None else now
+        row = self._conn.execute(
+            """
+            SELECT pack_json, inserted_at
+            FROM pack_cache
+            WHERE cache_key = ? AND repo_id = ?
+            """,
+            (cache_key, repo_id),
+        ).fetchone()
+        if row is None:
+            return None
+        if (current - float(row["inserted_at"])) > ttl_seconds:
+            return None
+        return str(row["pack_json"])
+
+    def put(
+        self,
+        cache_key: str,
+        repo_id: str,
+        pack_json: str,
+        *,
+        now: float | None = None,
+    ) -> None:
+        """Insert-or-replace a cache entry for (cache_key, repo_id).
+
+        Args:
+            cache_key: Stable hash of build_pack inputs.
+            repo_id: sha1(db_mtime || repo_name).
+            pack_json: ``ContextPack.model_dump_json()`` output.
+            now: Optional unix-epoch override (for tests). Defaults to
+                ``time.time()``.
+        """
+        import time
+
+        inserted_at = time.time() if now is None else now
+        self._conn.execute(
+            """
+            INSERT INTO pack_cache (cache_key, repo_id, pack_json, inserted_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(cache_key, repo_id) DO UPDATE SET
+                pack_json   = excluded.pack_json,
+                inserted_at = excluded.inserted_at
+            """,
+            (cache_key, repo_id, pack_json, inserted_at),
+        )
+        self._conn.commit()
+
+    def invalidate_repo(self, repo_id: str) -> int:
+        """Delete every entry for *repo_id*. Returns row count deleted."""
+        cur = self._conn.execute(
+            "DELETE FROM pack_cache WHERE repo_id = ?",
+            (repo_id,),
+        )
+        self._conn.commit()
+        return cur.rowcount or 0
+
+    def invalidate_all(self) -> int:
+        """Delete every entry. Returns row count deleted."""
+        cur = self._conn.execute("DELETE FROM pack_cache")
+        self._conn.commit()
+        return cur.rowcount or 0
+
+
+class EmbeddingRepository:
+    """Typed access to the ``embeddings`` table (migration 0013).
+
+    Persistent vector store for symbol embeddings — populated by
+    ``context-router embed`` and read by the ranker's semantic-boost
+    path so a ``pack --with-semantic`` call avoids re-encoding every
+    candidate. Vectors are stored as packed float32 BLOBs (the
+    ``np.array(...).astype(np.float32).tobytes()`` round trip),
+    which is ~4× cheaper than JSON for 384-dim MiniLM vectors.
+
+    All vectors must be the same length per ``(repo, model)`` pair;
+    callers are responsible for matching the model name across writes
+    and reads. The repo enforces nothing beyond table-level constraints.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open database connection.
+
+        Args:
+            conn: An open sqlite3.Connection (caller owns lifetime).
+        """
+        self._conn = conn
+
+    def upsert_batch(
+        self,
+        repo: str,
+        model: str,
+        rows: list[tuple[int, bytes]],
+        *,
+        now: float | None = None,
+    ) -> int:
+        """Insert-or-replace embeddings for many symbols in one transaction.
+
+        Args:
+            repo: Logical repository name (matches ``symbols.repo``).
+            model: Model identifier (e.g. ``"all-MiniLM-L6-v2"``).
+            rows: Iterable of ``(symbol_id, vector_bytes)`` tuples. Each
+                ``vector_bytes`` value must be a packed float32 array
+                (use ``np.asarray(v, dtype=np.float32).tobytes()``).
+            now: Optional unix-epoch override (defaults to ``time.time()``).
+
+        Returns:
+            Number of rows accepted (equal to ``len(rows)``).
+        """
+        import time
+
+        built_at = time.time() if now is None else now
+        params = [
+            (repo, sid, model, vec, built_at)
+            for sid, vec in rows
+        ]
+        self._conn.executemany(
+            """
+            INSERT INTO embeddings (repo, symbol_id, model, vector, built_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo, symbol_id, model) DO UPDATE SET
+                vector   = excluded.vector,
+                built_at = excluded.built_at
+            """,
+            params,
+        )
+        self._conn.commit()
+        return len(params)
+
+    def get_vector(
+        self, repo: str, symbol_id: int, model: str
+    ) -> bytes | None:
+        """Return the stored vector blob for a single symbol or None."""
+        row = self._conn.execute(
+            """
+            SELECT vector FROM embeddings
+            WHERE repo = ? AND symbol_id = ? AND model = ?
+            """,
+            (repo, symbol_id, model),
+        ).fetchone()
+        if row is None:
+            return None
+        return bytes(row["vector"])
+
+    def bulk_get_vectors(
+        self, repo: str, symbol_ids: list[int], model: str
+    ) -> dict[int, bytes]:
+        """Return a {symbol_id: vector_bytes} mapping for the given ids.
+
+        Symbols without a stored vector are simply absent from the result.
+        Empty input returns an empty dict (no SQL is executed).
+
+        Args:
+            repo: Logical repository name.
+            symbol_ids: Symbol ids to look up.
+            model: Model identifier — only rows matching this model name
+                are returned.
+        """
+        if not symbol_ids:
+            return {}
+        # Chunk to keep the parameter list under SQLite's default 999 limit.
+        # We use 500 to leave headroom for the two leading params.
+        chunk = 500
+        result: dict[int, bytes] = {}
+        for start in range(0, len(symbol_ids), chunk):
+            ids = symbol_ids[start : start + chunk]
+            placeholders = ",".join("?" * len(ids))
+            rows = self._conn.execute(
+                f"""
+                SELECT symbol_id, vector FROM embeddings
+                WHERE repo = ? AND model = ?
+                  AND symbol_id IN ({placeholders})
+                """,
+                (repo, model, *ids),
+            ).fetchall()
+            for r in rows:
+                result[int(r["symbol_id"])] = bytes(r["vector"])
+        return result
+
+    def delete_all_for_repo(self, repo: str, model: str | None = None) -> int:
+        """Delete every embedding row for *repo*. Returns row count deleted.
+
+        Args:
+            repo: Logical repository name.
+            model: If provided, only delete rows for this model name.
+                Otherwise wipe every model for the repo.
+        """
+        if model is None:
+            cur = self._conn.execute(
+                "DELETE FROM embeddings WHERE repo = ?",
+                (repo,),
+            )
+        else:
+            cur = self._conn.execute(
+                "DELETE FROM embeddings WHERE repo = ? AND model = ?",
+                (repo, model),
+            )
+        self._conn.commit()
+        return cur.rowcount or 0
+
+    def count(self, repo: str, model: str | None = None) -> int:
+        """Return the number of stored embeddings for *repo* (and optionally model)."""
+        if model is None:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM embeddings WHERE repo = ?", (repo,)
+            ).fetchone()
+        else:
+            row = self._conn.execute(
+                "SELECT COUNT(*) FROM embeddings WHERE repo = ? AND model = ?",
+                (repo, model),
+            ).fetchone()
+        return int(row[0]) if row else 0

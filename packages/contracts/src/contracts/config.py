@@ -25,6 +25,23 @@ class CapabilitiesConfig(BaseModel):
     # P3-2: opt-in semantic ranking (sentence-transformers). The CLI's
     # ``--with-semantic`` flag takes precedence over this config value.
     embeddings_enabled: bool = False
+    # Phase-2: contracts-consumer boost in single-repo packs. Items
+    # whose source file references an OpenAPI endpoint declared in the
+    # same repo get +0.10 confidence (clamped at 0.95). On by default;
+    # set to false to disable (e.g. for ranking A/B comparisons).
+    contracts_boost: bool = True
+    # Phase-3 (outcome ``hub-bridge-ranking-signals``): opt-in boost
+    # that lifts items whose underlying symbol is a structural hub
+    # (high inbound degree) or a bridge between communities. Default
+    # False — enable explicitly to A/B test the signal before rolling
+    # it out widely. Capped at +0.10 so BM25 + semantic remain primary.
+    hub_boost: bool = False
+    # Phase-4 (outcome ``cross-community-coupling``): threshold for the
+    # multi-repo workspace pack to emit a stderr warning about edges
+    # that cross community boundaries. Only evaluated in workspace
+    # (multi-repo) mode. Default 50 — tune upward for large codebases
+    # or downward to exercise the warning on smaller fixtures.
+    coupling_warn_threshold: int = 50
 
 
 class ContextRouterConfig(BaseModel):

@@ -217,3 +217,9 @@ docs/REVIEW.md
 
 # Real-world benchmark validation reports (local only)
 docs/benchmarks/
+
+# Ship-check generated artifacts (local only — never tracked)
+# The policy/templates live in docs/release/ and .claude/skills/ship-check/.
+# Outputs (run reports, per-phase re-reviews, smoke diffs) go here:
+internal_docs/ship-check/
+internal_docs/*
