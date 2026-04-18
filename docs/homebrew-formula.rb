@@ -19,7 +19,7 @@ class ContextRouter < Formula
   url "https://files.pythonhosted.org/packages/b7/70/1de65ebfce8e5dfb3cbdcef579383987479021b4c9ffc128c7526ce31aad/context_router_cli-0.3.0-py3-none-any.whl"
   sha256 "9d74803aa229b5c41b6111e5c661381925bb79ce10c57ad75716c2ef0a6b5122"
   license "MIT"
-  version "0.3.0"
+  version "3.0.0"
 
   depends_on "python@3.12"
 
