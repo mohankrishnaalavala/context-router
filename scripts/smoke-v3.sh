@@ -513,7 +513,26 @@ _check_handover-wiki() {
 }
 
 _check_mcp-pack-streams-large() {
-  echo "FAIL mcp-pack-streams-large: check handler not implemented yet"
+  # Phase 4 outcome: get_context_pack over stdio emits >=2 notifications/progress
+  # frames before the final tools/call response for a large pack.
+  # Uses this repo as the fixture since it is guaranteed present and indexable;
+  # the harness lowers CONTEXT_ROUTER_MCP_STREAM_MIN_TOKENS so we exercise the
+  # streaming path regardless of how many tokens the ranker actually emits.
+  uv run context-router index --project-root "${REPO_ROOT}" >/dev/null 2>&1 || {
+    echo "FAIL mcp-pack-streams-large: index step failed"
+    return 1
+  }
+  local result
+  result="$(uv run python scripts/mcp_progress_count.py "${REPO_ROOT}" 2>&1)" || {
+    echo "FAIL mcp-pack-streams-large: harness returned non-zero"
+    echo "${result}" | head -5
+    return 1
+  }
+  if [[ "${result}" == PASS* ]]; then
+    echo "${result}"
+    return 0
+  fi
+  echo "FAIL mcp-pack-streams-large: ${result}"
   return 1
 }
 
