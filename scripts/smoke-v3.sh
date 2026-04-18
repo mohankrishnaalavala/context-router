@@ -250,6 +250,131 @@ PY
   fi
 }
 
+_check_contracts-boost-tighter-match() {
+  # v3.1 P1: contracts boost must match the *exact* endpoint path, not any
+  # quoted URL that happens to start with ``/api/``.  The fixture seeds a
+  # spec with POST /api/orders and two consumer files:
+  #
+  #   * orders_client.py  -> fetch('/api/orders')     (should be boosted)
+  #   * other_client.py   -> fetch('/api/unrelated')  (must NOT be boosted)
+  #
+  # With the tighter matcher, the orders file ranks higher than the other
+  # file after the boost.  The negative case locks down that the boost is
+  # not sprayed onto every POST consumer.
+  local script tmp
+  tmp="$(mktemp -d -t cr-contracts-tighter.XXXXXX)" || return 1
+  script="$(mktemp -t cr_contracts_tighter.XXXXXX.py)" || return 1
+  # shellcheck disable=SC2064
+  trap "rm -f '${script}'; rm -rf '${tmp}'" RETURN
+
+  cat >"${script}" <<'PY'
+import sys, json, yaml
+from pathlib import Path
+
+root = Path(sys.argv[1])
+(root / ".context-router").mkdir(parents=True, exist_ok=True)
+(root / "src").mkdir(exist_ok=True)
+
+# File A: consumes POST /api/orders — should be boosted.
+(root / "src" / "orders_client.py").write_text(
+    "import requests\n\n"
+    "def create_order(payload):\n"
+    "    return requests.post('/api/orders', json=payload).json()\n"
+)
+# File B: consumes POST /api/unrelated — must NOT get the boost.
+(root / "src" / "other_client.py").write_text(
+    "import requests\n\n"
+    "def send_other(payload):\n"
+    "    return requests.post('/api/unrelated', json=payload).json()\n"
+)
+(root / "openapi.yaml").write_text(yaml.safe_dump({
+    "openapi": "3.0.0",
+    "info": {"title": "Orders API", "version": "1.0.0"},
+    "paths": {"/api/orders": {"post": {"operationId": "createOrder",
+        "responses": {"200": {"description": "ok"}}}}},
+}))
+
+from contracts.interfaces import Symbol
+from storage_sqlite.database import Database
+from storage_sqlite.repositories import SymbolRepository, ContractRepository
+
+db_path = root / ".context-router" / "context-router.db"
+with Database(db_path) as db:
+    SymbolRepository(db.connection).add_bulk(
+        [
+            Symbol(
+                name="create_order", kind="function",
+                file=root / "src" / "orders_client.py",
+                line_start=4, line_end=5, language="python",
+                signature="def create_order(payload):", docstring="",
+            ),
+            Symbol(
+                name="send_other", kind="function",
+                file=root / "src" / "other_client.py",
+                line_start=4, line_end=5, language="python",
+                signature="def send_other(payload):", docstring="",
+            ),
+        ],
+        "default",
+    )
+    ContractRepository(db.connection).upsert_api_endpoint(
+        "default", "POST", "/api/orders",
+    )
+
+from core.orchestrator import Orchestrator
+pack = Orchestrator(project_root=root).build_pack("implement", "create order")
+top5 = [i.path_or_ref for i in pack.selected_items[:5]]
+
+orders_path = str(root / "src" / "orders_client.py")
+other_path = str(root / "src" / "other_client.py")
+
+print("TOP5", json.dumps(top5))
+
+def rank(path: str) -> int:
+    try:
+        return top5.index(path)
+    except ValueError:
+        return 10_000
+
+orders_rank = rank(orders_path)
+other_rank = rank(other_path)
+
+# Outcome: orders file appears in top-5 AND it ranks higher than the
+# unrelated file.  Negative case: the unrelated consumer must not also
+# be boosted — we assert strict rank ordering.
+if orders_rank >= 5:
+    print("FAIL: orders_client.py not in top-5")
+    sys.exit(1)
+if orders_rank >= other_rank:
+    print(
+        f"FAIL: orders_client.py rank {orders_rank} not above "
+        f"other_client.py rank {other_rank}"
+    )
+    sys.exit(1)
+
+# Direct sanity check on the matcher itself — catches future regressions
+# where the regex widens again.
+from contracts_extractor import file_references_endpoint
+orders_src = (root / "src" / "orders_client.py").read_text()
+other_src = (root / "src" / "other_client.py").read_text()
+if not file_references_endpoint(orders_src, "/api/orders"):
+    print("FAIL: matcher missed the /api/orders consumer")
+    sys.exit(1)
+if file_references_endpoint(other_src, "/api/orders"):
+    print("FAIL: matcher over-matched /api/unrelated as /api/orders")
+    sys.exit(1)
+sys.exit(0)
+PY
+
+  if uv run python "${script}" "${tmp}" 2>&1; then
+    echo "PASS contracts-boost-tighter-match (orders consumer ranks above unrelated POST consumer)"
+    return 0
+  else
+    echo "FAIL contracts-boost-tighter-match: unrelated POST consumer was not excluded"
+    return 1
+  fi
+}
+
 _check_call-chain-symbols-mcp() {
   # Use this repo as the fixture — it is always present and has a known
   # call chain.  We only need an indexed DB to read a method/function id
