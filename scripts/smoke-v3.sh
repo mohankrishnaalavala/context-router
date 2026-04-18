@@ -435,6 +435,96 @@ _check_mcp-pack-streams-large() {
   return 1
 }
 
+_check_review-mode-risk-score() {
+  # Phase 3 Wave 2 outcome: review-mode packs carry a per-item `risk` label.
+  # We run against a tmp git repo seeded with a changed file so the diff is
+  # guaranteed non-empty regardless of the caller's working tree. Fixture
+  # size is set > 2000 lines so at least one item is forced into `risk=high`
+  # via the size proxy, guaranteeing risk-label variation.
+  local tmp; tmp="$(mktemp -d -t cr-risk-score.XXXXXX)" || return 1
+  local script; script="$(mktemp -t cr_risk_score.XXXXXX.py)" || return 1
+  # shellcheck disable=SC2064
+  trap "rm -f '${script}'; rm -rf '${tmp}'" RETURN
+
+  cat >"${script}" <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+(root / ".context-router").mkdir(parents=True, exist_ok=True)
+(root / "src").mkdir(exist_ok=True)
+
+# 2500-line file → risk=high via size proxy.
+big = "\n".join(f"# line {i}" for i in range(2500)) + "\n"
+(root / "src" / "big.py").write_text(big)
+(root / "src" / "small.py").write_text("def f():\n    return 1\n")
+
+from contracts.interfaces import Symbol
+from storage_sqlite.database import Database
+from storage_sqlite.repositories import SymbolRepository
+
+with Database(root / ".context-router" / "context-router.db") as db:
+    SymbolRepository(db.connection).add_bulk(
+        [
+            Symbol(
+                name="big_fn",
+                kind="function",
+                file=Path("src/big.py"),
+                line_start=1,
+                line_end=5,
+                language="python",
+                signature="def big_fn() -> None:",
+                docstring="Seed symbol for big.py.",
+            ),
+            Symbol(
+                name="small_fn",
+                kind="function",
+                file=Path("src/small.py"),
+                line_start=1,
+                line_end=2,
+                language="python",
+                signature="def small_fn() -> int:",
+                docstring="Seed symbol for small.py.",
+            ),
+        ],
+        "default",
+    )
+PY
+
+  uv run python "${script}" "${tmp}" >/dev/null 2>&1 \
+    || { echo "FAIL review-mode-risk-score: fixture setup failed"; return 1; }
+
+  # Initialize git + make an initial commit, then modify big.py so the diff
+  # against HEAD~1 is non-empty. The orchestrator's _get_changed_files()
+  # calls `git diff --name-status HEAD~1`, so we need at least 2 commits.
+  (
+    cd "${tmp}" || exit 1
+    git init -q
+    git config user.email "smoke@context-router.local"
+    git config user.name "smoke"
+    git add -A
+    git commit -q -m "seed"
+    # Second commit: touch the big file so HEAD~1 diff surfaces it.
+    printf "# added\n" >>src/big.py
+    git add src/big.py
+    git commit -q -m "touch big"
+  ) || { echo "FAIL review-mode-risk-score: git fixture setup failed"; return 1; }
+
+  local out unique
+  out="$(uv run context-router pack --mode review --query 'risk audit' --project-root "${tmp}" --json 2>/dev/null)"
+  if [[ -z "${out}" ]]; then
+    echo "FAIL review-mode-risk-score: pack --json produced no output"
+    return 1
+  fi
+  unique="$(echo "${out}" | python3 -c "import json,sys; items=json.load(sys.stdin).get('items',[]); risks=set(i.get('risk','none') for i in items); print(','.join(sorted(risks)))")"
+  if [[ "${unique}" == *","* ]]; then
+    echo "PASS review-mode-risk-score (risks=${unique})"
+  else
+    echo "FAIL review-mode-risk-score (all items share single risk=${unique}; expect variation when diff exists)"
+    return 1
+  fi
+}
+
 _check_semantic-default-with-progress() {
   local fixture="${PROJECT_CONTEXT_ROOT}/bulletproof-react"
   [[ -d "${fixture}" ]] || { echo "FAIL semantic-default-with-progress: fixture missing at ${fixture}"; return 1; }

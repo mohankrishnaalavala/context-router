@@ -37,6 +37,10 @@ class ContextItem(BaseModel):
     est_tokens: int = 0
     freshness: datetime = Field(default_factory=_utcnow)
     tags: list[str] = Field(default_factory=list)
+    # Phase 3 Wave 2: per-item risk label for review-mode packs.
+    # Populated by the orchestrator's review branch from git-diff membership +
+    # file-size/complexity proxies. For non-review modes this stays "none".
+    risk: Literal["none", "low", "medium", "high"] = "none"
 
     def to_compact_line(self) -> str:
         """Return a compact single-item representation (no JSON metadata overhead)."""

@@ -293,13 +293,30 @@ def _print_pack(pack: object) -> None:  # type: ignore[type-arg]
         typer.echo(f"Query: {pack.query}")
     typer.echo("")
 
-    col_widths = (40, 16, 10, 8)
-    header = (
-        f"{'Title':<{col_widths[0]}}  "
-        f"{'Source':<{col_widths[1]}}  "
-        f"{'Confidence':>{col_widths[2]}}  "
-        f"{'Tokens':>{col_widths[3]}}"
+    # Phase 3 Wave 2: show a Risk column only for review-mode packs that
+    # actually have at least one non-"none" risk label — otherwise the
+    # column would just be a wall of "none" and waste horizontal space.
+    show_risk = (pack.mode == "review") and any(
+        getattr(i, "risk", "none") != "none" for i in pack.selected_items
     )
+
+    if show_risk:
+        col_widths = (40, 16, 10, 6, 8)
+        header = (
+            f"{'Title':<{col_widths[0]}}  "
+            f"{'Source':<{col_widths[1]}}  "
+            f"{'Confidence':>{col_widths[2]}}  "
+            f"{'Risk':<{col_widths[3]}}  "
+            f"{'Tokens':>{col_widths[4]}}"
+        )
+    else:
+        col_widths = (40, 16, 10, 8)
+        header = (
+            f"{'Title':<{col_widths[0]}}  "
+            f"{'Source':<{col_widths[1]}}  "
+            f"{'Confidence':>{col_widths[2]}}  "
+            f"{'Tokens':>{col_widths[3]}}"
+        )
     typer.echo(header)
     typer.echo("-" * (sum(col_widths) + 6))
 
@@ -312,12 +329,21 @@ def _print_pack(pack: object) -> None:  # type: ignore[type-arg]
             continue
         seen.add(key)
         title = item.title[: col_widths[0] - 1] if len(item.title) >= col_widths[0] else item.title
-        typer.echo(
-            f"{title:<{col_widths[0]}}  "
-            f"{item.source_type:<{col_widths[1]}}  "
-            f"{item.confidence:>{col_widths[2]}.2f}  "
-            f"{item.est_tokens:>{col_widths[3]},}"
-        )
+        if show_risk:
+            typer.echo(
+                f"{title:<{col_widths[0]}}  "
+                f"{item.source_type:<{col_widths[1]}}  "
+                f"{item.confidence:>{col_widths[2]}.2f}  "
+                f"{getattr(item, 'risk', 'none'):<{col_widths[3]}}  "
+                f"{item.est_tokens:>{col_widths[4]},}"
+            )
+        else:
+            typer.echo(
+                f"{title:<{col_widths[0]}}  "
+                f"{item.source_type:<{col_widths[1]}}  "
+                f"{item.confidence:>{col_widths[2]}.2f}  "
+                f"{item.est_tokens:>{col_widths[3]},}"
+            )
 
     # Prefer the authoritative count from the orchestrator (v3 phase-1
     # follow-up) so MCP + CLI + --json all agree on the same total. The
