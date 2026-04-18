@@ -319,18 +319,36 @@ _check_hub-bridge-ranking-signals() {
   uv run context-router index --project-root "${fixture}" >/dev/null 2>&1 \
     || { echo "FAIL hub-bridge-ranking-signals: index step failed"; return 1; }
 
+  # Pack-cache invalidation: ``CAPABILITIES_HUB_BOOST`` is read inside
+  # the ranker but is NOT part of the orchestrator's pack cache key
+  # (``(repo_id, mode, query_hash, budget, use_embeddings, items_hash)``).
+  # That means a stale L2 entry from a previous run — including this
+  # handler's own OFF run — would be returned unchanged for the ON run,
+  # masking the boost entirely. We wipe the L2 ``pack_cache`` via sqlite
+  # between the two invocations so each ``uv run context-router pack``
+  # subprocess (which brings a fresh L1) hits the full pipeline.
+  local db_path="${fixture}/.context-router/context-router.db"
+  _hbs_purge_pack_cache() {
+    [[ -f "${db_path}" ]] && sqlite3 "${db_path}" "DELETE FROM pack_cache;" 2>/dev/null
+    return 0
+  }
+
   # Extract the top-5 ordered list of (title, path) pairs from the JSON
   # pack. Using both keys avoids false positives when two symbols share
-  # a path or a title but not both.
+  # a path or a title but not both. ``ContextPack.selected_items`` is the
+  # authoritative list; the ``items`` alias is kept for backward compat
+  # but may be dropped, so we read from ``selected_items``.
   local extractor
   extractor="import json,sys
-items = json.load(sys.stdin).get('items', [])
+items = json.load(sys.stdin).get('selected_items', [])
 print('|'.join(f\"{i.get('title','')}::{i.get('path_or_ref','')}\" for i in items[:5]))"
 
   local off_out on_out
+  _hbs_purge_pack_cache
   off_out="$(CAPABILITIES_HUB_BOOST=0 uv run context-router pack --mode implement \
                --query 'add pagination' --project-root "${fixture}" --json 2>/dev/null \
              | python3 -c "${extractor}")"
+  _hbs_purge_pack_cache
   on_out="$(CAPABILITIES_HUB_BOOST=1 uv run context-router pack --mode implement \
               --query 'add pagination' --project-root "${fixture}" --json 2>/dev/null \
             | python3 -c "${extractor}")"
