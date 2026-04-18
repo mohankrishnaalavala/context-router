@@ -4,6 +4,22 @@ Real-world measurements, updated per release. Numbers tagged by release.
 
 ---
 
+## v3.1 — keyword-baseline honesty fix
+
+v3.1 ships the fix for the v3.0.0 `vs_keyword` clamp described under
+"Honesty caveat" in the historical v3.0.0 notes (now removed from that
+section because the bug is fixed). The Markdown baseline-comparison
+table and the new per-task `vs_keyword` JSON field are now signed —
+negative values surface honestly where the keyword baseline pack is
+tighter than the router pack. Registry outcome:
+[`benchmark-keyword-baseline-honest`](docs/release/v3-outcomes.yaml).
+
+The per-task fields `vs_keyword`, `vs_naive`, `keyword_baseline_tokens`,
+and `naive_baseline_tokens` now appear on every `TaskMetrics` entry in
+the JSON report for programmatic consumers.
+
+---
+
 ## v3.0.0 — 2026-04-18
 
 Token budget: 8,000 (default). Runs: 10 per task. Latency measured warm (after L2 cache fill). `--runs 10` produces non-null 95% CIs on every metric.
@@ -34,10 +50,6 @@ Methodology: `uv run context-router benchmark run --project-root <repo> --task-s
 | spring-petclinic | 81 ms | 22 ms | **3.7×** |
 
 End-to-end CLI wall time (including uv/typer/rich startup ~0.55 s) is dampened by startup, which is why the public number is "35–49 % faster" rather than "10× faster."
-
-### Honesty caveat — keyword baseline column
-
-The `--keyword` baseline report on v3.0.0 clamps the computed "vs Router" column to ≥ 0 %, which hides cases where the keyword baseline pack is actually *smaller* than the router pack. This affects the `vs_keyword` column in per-task output, **not** the `reduction_pct` column (which compares to the naive "all-files" baseline and is accurate). The clamp is fixed in **v3.1** (`reporters.py:103`); this table will be refreshed with corrected keyword deltas at that release.
 
 ### Graph-edge accuracy (v3.0.0)
 

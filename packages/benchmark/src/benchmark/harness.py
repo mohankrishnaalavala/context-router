@@ -11,6 +11,7 @@ import time
 import uuid
 from pathlib import Path
 
+from benchmark.baselines import keyword_tokens, naive_tokens
 from benchmark.models import (
     MIN_CI95_SAMPLES,
     BenchmarkReport,
@@ -18,6 +19,7 @@ from benchmark.models import (
     TaskMetrics,
     ci95,
 )
+from benchmark.reporters import _vs_keyword, _vs_naive
 from benchmark.task_suite import TASK_SUITE
 
 
@@ -65,6 +67,24 @@ class BenchmarkRunner:
 
     def __init__(self, project_root: Path) -> None:
         self._root = project_root
+        # Cached naive-baseline token count — computed once per suite since
+        # it doesn't depend on the task query. Populated lazily by
+        # :meth:`_naive_tokens_cached` so tests that use a non-existent
+        # project root don't pay the DB-open cost.
+        self._naive_tokens_cache: int | None = None
+
+    def _naive_tokens_cached(self) -> int:
+        """Return the naive baseline token count, computing it once.
+
+        The naive baseline sums estimated tokens across every indexed
+        symbol — it is invariant across tasks within a suite run, so we
+        compute it lazily on first use and cache the result. Returns 0
+        when the DB is unavailable (mirrors
+        :func:`benchmark.baselines.naive_tokens` behaviour).
+        """
+        if self._naive_tokens_cache is None:
+            self._naive_tokens_cache = naive_tokens(self._root)
+        return self._naive_tokens_cache
 
     def run_suite(
         self,
@@ -288,6 +308,18 @@ class BenchmarkRunner:
                 )
                 rank_quality = round(high_conf / len(pack.selected_items), 3)
 
+            # ── baseline deltas (signed — honest negatives) ────────────────
+            # These power the v3.1 outcome ``benchmark-keyword-baseline-honest``
+            # which prohibits clamping vs_keyword to ≥ 0. When the keyword
+            # baseline is tighter than the router pack, ``vs_keyword`` is
+            # negative and that regression is surfaced to the user.
+            kw_baseline_tok = 0
+            try:
+                kw_baseline_tok = keyword_tokens(self._root, task.query)
+            except Exception:  # noqa: BLE001 — baseline errors must not fail a run
+                kw_baseline_tok = 0
+            nv_baseline_tok = self._naive_tokens_cached()
+
             return TaskMetrics(
                 task_id=task.id,
                 mode=task.mode,
@@ -302,6 +334,10 @@ class BenchmarkRunner:
                 random_hit_rate=random_hit_rate,
                 rank_quality=rank_quality,
                 cold_latency_ms=cold_latency,
+                vs_keyword=_vs_keyword(pack.total_est_tokens, kw_baseline_tok),
+                vs_naive=_vs_naive(pack.total_est_tokens, nv_baseline_tok),
+                keyword_baseline_tokens=kw_baseline_tok,
+                naive_baseline_tokens=nv_baseline_tok,
             )
         except Exception as exc:
             latency_ms = (time.perf_counter() - t0) * 1000

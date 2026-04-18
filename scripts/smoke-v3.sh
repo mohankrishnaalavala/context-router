@@ -51,6 +51,23 @@ _check_pack-dedup-at-orchestrator() {
   fi
 }
 
+_check_benchmark-keyword-baseline-honest() {
+  # P0 honesty check: `benchmark run --json --runs 10` must produce at
+  # least one task whose `vs_keyword` field is negative on this repo.
+  # A value of 0 where the keyword baseline is tighter than the router
+  # pack indicates the old clamp is still active — release blocker.
+  local out
+  out="$(uv run context-router benchmark run --json --runs 10 --project-root . 2>/dev/null)"
+  local neg_count
+  neg_count="$(echo "${out}" | python3 -c "import json,sys; d=json.load(sys.stdin); tasks=d.get('tasks',[]); negs=[t for t in tasks if t.get('vs_keyword',0) < 0]; print(len(negs))")"
+  if [[ "${neg_count}" -ge 1 ]]; then
+    echo "PASS benchmark-keyword-baseline-honest (${neg_count} tasks with negative vs_keyword)"
+  else
+    echo "FAIL benchmark-keyword-baseline-honest (no negative vs_keyword values — clamp may still be active)"
+    return 1
+  fi
+}
+
 _check_pack-cache-persists-cli() {
   # Two identical pack runs in separate Python processes; assert that the
   # second invocation's pack-pipeline wall time is strictly less than half

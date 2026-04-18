@@ -76,6 +76,17 @@ outcomes:
       cmd: "uv run context-router index --project-root ${eshop} && sqlite3 ${eshop}/.context-router/db.sqlite \"SELECT count(*) FROM symbols WHERE kind='interface'\""
       expected_stdout_contains: "1"
 
+  - id: benchmark-keyword-baseline-honest
+    severity: P0
+    effort: S
+    title: "Benchmark keyword-baseline vs_keyword column shows honest negatives"
+    outcome: "`benchmark run --json --runs 10` never clamps vs_keyword to 0; when keyword baseline pack is smaller than router, the field is negative"
+    threshold: "on this repo, at least one task has vs_keyword < 0 in --runs 10 output"
+    negative_case: "on fixtures where router is strictly tighter than keyword, vs_keyword is positive across all tasks (regression guard)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check benchmark-keyword-baseline-honest"
+      expected_stdout_contains: "PASS benchmark-keyword-baseline-honest"
+
   # ──────────────────── P1 — hotfix candidates rolled into v3 ────────────────────
 
   - id: pack-cache-persists-cli
