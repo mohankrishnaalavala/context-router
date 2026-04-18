@@ -364,3 +364,16 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check typescript-inheritance-edges"
       expected_stdout_contains: "PASS typescript-inheritance-edges"
+
+  # ──────────────────── v3.1 Wave 2 (added 2026-04-18) ────────────────────
+
+  - id: flows-n-plus-one
+    severity: P2
+    effort: S
+    title: "Flow BFS memoizes _callees to avoid N+1 round-trips"
+    outcome: "get_affected_flows on a 1000+ symbol repo issues O(N) SQL queries, not O(N^2)"
+    threshold: "query count < 2x visited symbol count on eShopOnWeb"
+    negative_case: "functional correctness unchanged — same flows returned"
+    verify:
+      cmd: "scripts/smoke-v3.sh check flows-n-plus-one"
+      expected_stdout_contains: "PASS flows-n-plus-one"
