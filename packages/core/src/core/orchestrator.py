@@ -28,7 +28,7 @@ from cachetools import TTLCache
 from contracts.config import ContextRouterConfig, load_config
 from contracts.models import ContextItem, ContextPack, RuntimeSignal
 from graph_index.git_diff import GitDiffParser
-from ranking import ContextRanker, estimate_tokens
+from ranking import ContextRanker, dedup_stubs, estimate_tokens
 from storage_sqlite.database import Database
 from storage_sqlite.repositories import (
     ContractRepository,
@@ -864,6 +864,16 @@ class Orchestrator:
             )
             all_ranked = ranker.rank(candidates, query, mode)
             all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
+            # v3.2 outcome ``symbol-stub-dedup`` (P1): collapse identical
+            # symbol stubs within the same file. The ranker already runs
+            # this pass BEFORE its internal budget enforcement (so the
+            # budget fills with distinct content); we repeat it here so
+            # any duplicates introduced by post-rank accumulation paths
+            # (e.g. candidate re-injection by contracts_boost) are also
+            # caught, and so the aggregate dropped count is folded into
+            # ``ContextPack.duplicates_hidden`` below.
+            all_ranked, _stub_dropped = dedup_stubs(all_ranked)
+            _dup_dropped += _stub_dropped
 
             # Phase-2 contracts boost — applied AFTER ranking + dedup so the
             # boost lifts items that already survived budget enforcement,

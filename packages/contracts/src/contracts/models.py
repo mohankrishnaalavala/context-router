@@ -47,6 +47,14 @@ class ContextItem(BaseModel):
     # chain (e.g. "getOwner -> findById"). For non-debug modes and items
     # whose symbol can't be resolved, this stays ``None``.
     flow: str | None = None
+    # v3.2 outcome ``symbol-stub-dedup`` (P1): per-item counter bumped by
+    # :func:`ranking.ranker._dedup_stubs` when N identical-excerpt symbol
+    # stubs in the same file were collapsed into this representative item
+    # (counter = N - 1). Zero when the item is unique. Reviewers see
+    # "(+K similar stubs hidden)" rendered from this field. Distinct from
+    # ``ContextPack.duplicates_hidden``, which aggregates the
+    # (title, path_or_ref) dedup pass at the pack level.
+    duplicates_hidden: int = 0
 
     def to_compact_line(self) -> str:
         """Return a compact single-item representation (no JSON metadata overhead)."""
@@ -72,9 +80,15 @@ class ContextPack(BaseModel):
     # Pagination fields (populated when page_size > 0 is requested)
     has_more: bool = False
     total_items: int = 0  # 0 = pagination not used
-    # v3 phase-1 follow-up: number of duplicate (title, path_or_ref) items
-    # removed in the orchestrator before rendering / serialization. Surfaced
-    # so CLI / MCP consumers can display "(N duplicate(s) hidden)".
+    # v3 phase-1 follow-up: number of duplicate items removed before
+    # rendering / serialization. Aggregates two passes:
+    #   1. orchestrator's (title, path_or_ref) dedup (``_dedup_ranked``)
+    #   2. v3.2 ``symbol-stub-dedup``: near-duplicate symbol stubs with
+    #      identical excerpts collapsed by :func:`ranking.ranker._dedup_stubs`.
+    # Surfaced so CLI / MCP consumers can display "(N duplicate(s) hidden)".
+    # Per-item stub-dedup counts are ALSO carried on each ContextItem's
+    # ``duplicates_hidden`` field so a reviewer can tell which specific
+    # representative item absorbed multiple stubs.
     duplicates_hidden: int = 0
     # Arbitrary mode-specific hints (e.g. next_tool_suggestion for minimal mode).
     metadata: dict[str, Any] = Field(default_factory=dict)
