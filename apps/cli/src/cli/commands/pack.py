@@ -109,6 +109,18 @@ def pack(
             ),
         ),
     ] = "",
+    pre_fix: Annotated[
+        str,
+        typer.Option(
+            "--pre-fix",
+            help=(
+                "Commit SHA. Only meaningful with --mode review. "
+                "Treats the diff of <sha>^..<sha> as the change-set so the "
+                "pack is ranked as if the working tree were at <sha>^. "
+                "Does NOT touch the working tree."
+            ),
+        ),
+    ] = "",
     top_k: Annotated[
         int,
         typer.Option(
@@ -152,6 +164,17 @@ def pack(
         )
         raise typer.Exit(code=2)
 
+    # Silent-failure rule (pre-fix-review-mode): --pre-fix is a review-mode-
+    # only option. Using it with any other mode would silently ignore the
+    # flag and ship the user a working-tree pack — a footgun. Reject loudly.
+    if pre_fix and mode != "review":
+        typer.secho(
+            "error: --pre-fix is only valid with --mode review",
+            err=True,
+            fg="red",
+        )
+        raise typer.Exit(code=2)
+
     # Silent-failure rule: minimal mode requires a non-empty query so the
     # suggested next-tool hint and ranked items are meaningful.
     if mode == "minimal" and not query.strip():
@@ -172,8 +195,10 @@ def pack(
     # When the caller passes `--mode review --query "..."` against a repo
     # with no staged/unstaged diff, warn them on stderr that they likely
     # wanted `--mode debug`. Skipped (with a notice) on non-git trees so
-    # we never silently fail.
-    if mode == "review" and query.strip():
+    # we never silently fail. When --pre-fix is set the user is explicitly
+    # pointing at a commit SHA, so the working-tree cleanliness check is
+    # irrelevant — the diff comes from <sha>^..<sha>.
+    if mode == "review" and query.strip() and not pre_fix:
         _maybe_warn_review_needs_diff(root if root else Path.cwd())
 
     # --wiki short-circuits the pack pipeline: no ranker, no token budget.
@@ -206,9 +231,16 @@ def pack(
             use_embeddings=use_embeddings,
             show_progress=show_progress,
             max_tokens=max_tokens,
+            pre_fix=pre_fix or None,
         )
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1)
+    except ValueError as exc:
+        # Surface orchestrator validation errors (e.g. unknown commit SHA
+        # for --pre-fix) as clean stderr messages with exit 1 — NOT a
+        # traceback per the pre-fix-review-mode negative_case contract.
+        typer.secho(f"error: {exc}", err=True, fg="red")
         raise typer.Exit(code=1)
 
     # Apply --top-k cap post-ranking. When top_k == 0 (unset), the pack is
@@ -389,6 +421,7 @@ def _run_build_pack(
     use_embeddings: bool,
     show_progress: bool,
     max_tokens: int = 0,
+    pre_fix: str | None = None,
 ):
     """Call Orchestrator.build_pack with an optional rich progress bar.
 
@@ -417,6 +450,13 @@ def _run_build_pack(
     # Treat 0/unset as "no override"; otherwise forward caller's cap.
     token_budget_override = max_tokens if max_tokens and max_tokens > 0 else None
 
+    # Only forward pre_fix when the caller actually supplied one — keeps
+    # the existing ``build_pack`` invocation identical for the default
+    # review flow so test mocks without the new kwarg still work.
+    extra_kwargs: dict = {}
+    if pre_fix:
+        extra_kwargs["pre_fix"] = pre_fix
+
     if not needs_progress:
         return orch.build_pack(
             mode,
@@ -427,6 +467,7 @@ def _run_build_pack(
             use_embeddings=use_embeddings,
             progress=False,
             token_budget=token_budget_override,
+            **extra_kwargs,
         )
 
     # First-time semantic run — wrap with rich progress.
@@ -458,6 +499,7 @@ def _run_build_pack(
             progress=True,
             download_progress_cb=_cb,
             token_budget=token_budget_override,
+            **extra_kwargs,
         )
 
 

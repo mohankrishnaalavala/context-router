@@ -204,6 +204,7 @@ def get_context_pack(
     use_embeddings: bool = False,
     top_k: int = 0,
     progress_cb=None,
+    pre_fix: str = "",
 ) -> dict:
     """Generate a ranked context pack.
 
@@ -224,15 +225,27 @@ def get_context_pack(
         progress_cb: Optional ``(stage, progress, total)`` callable invoked at
             build milestones.  Supplied by the MCP dispatcher when the caller
             sends a ``progressToken``; normal CLI callers leave this ``None``.
+        pre_fix: Optional commit SHA. Only meaningful with ``mode="review"``.
+            Treats the diff of ``<sha>^..<sha>`` as the change-set so the
+            pack is ranked as if the working tree were at ``<sha>^``.
+            Returns ``{"error": ...}`` (no traceback) when the SHA is not
+            found or the combination is invalid.
 
     Returns:
         Serialised ContextPack as a dict, or {"text": ...} when format="compact".
     """
+    # Reject pre_fix with a non-review mode loudly — otherwise the flag
+    # would silently no-op, and silent failures are banned (CLAUDE.md).
+    if pre_fix and mode != "review":
+        return {"error": "pre_fix is only valid with mode='review'"}
+
     # Silent-failure rule (mode-mismatch-warning): warn callers who invoke
     # review mode with only a free-text query against a clean tree. We
     # emit an MCP ``notifications/message`` (level=warning) — writing to
     # stdout would corrupt JSON-RPC framing, and silent no-op is banned.
-    if mode == "review" and query.strip():
+    # Skipped when pre_fix is set because the diff source is the commit,
+    # not the working tree — the warning would be misleading noise.
+    if mode == "review" and query.strip() and not pre_fix:
         _maybe_warn_review_needs_diff(project_root)
 
     # Silent-failure rule: negative top_k is a silent no-op under a naive
@@ -247,17 +260,26 @@ def get_context_pack(
         )
         top_k = 0
 
+    # Only forward pre_fix as a kwarg when the caller actually supplied one
+    # — keeps the existing ``build_pack`` call shape identical for the vast
+    # majority of callers (including test mocks that don't accept the new
+    # parameter) and only widens the signature for the review/pre-fix path.
+    build_pack_kwargs: dict = {
+        "page": page,
+        "page_size": page_size,
+        "use_embeddings": use_embeddings,
+        "progress": False,
+        "progress_cb": progress_cb,
+    }
+    if pre_fix:
+        build_pack_kwargs["pre_fix"] = pre_fix
     try:
         # progress=False is critical on MCP stdio transport — stdout is
         # reserved for JSON-RPC frames; any progress output would corrupt it.
         pack = _orchestrator(project_root).build_pack(
             mode,
             query,
-            page=page,
-            page_size=page_size,
-            use_embeddings=use_embeddings,
-            progress=False,
-            progress_cb=progress_cb,
+            **build_pack_kwargs,
         )
         # Apply the caller-facing cap post-ranking. No cap when ``top_k``
         # is 0/unset; when the pool is smaller than the cap, the full pool

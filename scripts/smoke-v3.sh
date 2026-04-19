@@ -1451,6 +1451,84 @@ PY
   fi
 }
 
+_check_pre-fix-review-mode() {
+  # v3.2 P2: `context-router pack --mode review --pre-fix <sha> --project-root .`
+  # ranks a commit's diff AS-IF the working tree were at <sha>^. Threshold
+  # (from the outcome): on fastapi@fa3588c, pre-fix pack puts
+  # `fastapi/security/oauth2.py` in the top-3 items.
+  # Negative case: invalid SHA → clean stderr "not found" + exit 1 (no
+  # traceback).
+  local fixture="${HOME}/Documents/project_context/fastapi"
+  if [[ ! -d "${fixture}" ]]; then
+    echo "PASS pre-fix-review-mode (SKIP - no fastapi fixture at ${fixture})"
+    return 0
+  fi
+  if [[ ! -f "${fixture}/.context-router/context-router.db" ]]; then
+    echo "PASS pre-fix-review-mode (SKIP - ${fixture} is not indexed)"
+    return 0
+  fi
+
+  # Negative-case check FIRST: invalid SHA must exit non-zero with a
+  # clean "not found" message on stderr (no Python traceback).
+  local neg_stderr neg_rc
+  neg_stderr="$(uv run context-router pack --mode review --pre-fix deadbeefdeadbeefdeadbeefdeadbeefdeadbeef \
+                --project-root "${fixture}" 2>&1 >/dev/null)"
+  neg_rc=$?
+  if [[ ${neg_rc} -eq 0 ]]; then
+    echo "FAIL pre-fix-review-mode: invalid SHA should exit non-zero, got rc=0"
+    return 1
+  fi
+  if ! echo "${neg_stderr}" | grep -qi "not found"; then
+    echo "FAIL pre-fix-review-mode: invalid SHA error must contain 'not found'; got: ${neg_stderr}"
+    return 1
+  fi
+  if echo "${neg_stderr}" | grep -qi "Traceback"; then
+    echo "FAIL pre-fix-review-mode: invalid SHA must not print a Python traceback; got: ${neg_stderr}"
+    return 1
+  fi
+
+  # Happy-path check: pre-fix pack on the fastapi fix commit ranks
+  # fastapi/security/oauth2.py in the top 3 items.
+  # NOTE: we pipe pack JSON via a temp file because bash gives the heredoc
+  # (not the `|` pipe) to `python3 -`, so `json.load(sys.stdin)` would read
+  # the heredoc script itself.
+  local pack_json_file
+  pack_json_file="$(mktemp)"
+  if ! uv run context-router pack --mode review \
+         --pre-fix fa3588c38c7473aca7536b12d686102de4b0f407 \
+         --project-root "${fixture}" --json \
+         >"${pack_json_file}" 2>/dev/null; then
+    rm -f "${pack_json_file}"
+    echo "FAIL pre-fix-review-mode: pack --json failed on ${fixture}"
+    return 1
+  fi
+
+  local result
+  result="$(python3 - "${pack_json_file}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as fh:
+    pack = json.load(fh)
+items = pack.get("items") or pack.get("selected_items") or []
+top3 = items[:3]
+target = "fastapi/security/oauth2.py"
+hit = any(target in (i.get("path_or_ref") or "") for i in top3)
+if hit:
+    print(f"PASS oauth2.py present in top-3 (of {len(items)} items)")
+else:
+    paths = [i.get("path_or_ref") for i in top3]
+    print(f"FAIL oauth2.py missing from top-3; saw: {paths}")
+PY
+)"
+  rm -f "${pack_json_file}"
+  if [[ "${result}" == PASS* ]]; then
+    echo "PASS pre-fix-review-mode (${result#PASS })"
+  else
+    echo "FAIL pre-fix-review-mode: ${result#FAIL }"
+  fi
+}
+
 _check_symbol-stub-dedup() {
   # v3.2 P1: multiple pack items with identical excerpt AND the same
   # title prefix (e.g. ``def __init__(``) within a single file must be
