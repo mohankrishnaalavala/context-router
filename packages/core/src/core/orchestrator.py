@@ -332,6 +332,42 @@ def _find_project_root(start: Path) -> Path:
         current = parent
 
 
+# ---------------------------------------------------------------------------
+# Function-level reason construction (v3.2 outcome: function-level-reason)
+# ---------------------------------------------------------------------------
+
+# Verb prefix for each symbol-backed source_type. When a ContextItem is
+# backed by a Symbol (line_start/line_end known), ``_make_item`` composes a
+# reason of the shape ``f"{verb} `{name}` lines {start}-{end}"``. The
+# ranker's ``_annotate`` preserves any non-empty reason set here, so the
+# upgraded string survives downstream boosting.
+_SYMBOL_REASON_VERB: dict[str, str] = {
+    "changed_file": "Modified",
+    "blast_radius": "Depends on or is imported by",
+    "blast_radius_transitive": "Transitively reachable via call chain from",
+    "impacted_test": "Tests code affected by this change in",
+    "config": "Configuration symbol touched by change in",
+    "entrypoint": "Public API entry point",
+    "contract": "Data contract or interface definition",
+    "extension_point": "Plugin or extension point",
+    "file": "Referenced in codebase",
+    "runtime_signal": "Mentioned in runtime error or stack trace",
+    "failing_test": "Test symbol likely related to the failure",
+    "call_chain": "Reachable via function call chain from error site",
+    "past_debug": "Related to a previously debugged failure",
+}
+
+
+def _build_symbol_reason(
+    verb: str,
+    qualified_name: str,
+    line_start: int,
+    line_end: int,
+) -> str:
+    """Return the upgraded function-level reason string."""
+    return f"{verb} `{qualified_name}` lines {line_start}-{line_end}"
+
+
 def _make_item(
     sym_name: str,
     file_path: str,
@@ -340,17 +376,56 @@ def _make_item(
     source_type: str,
     confidence: float,
     repo: str,
+    line_start: int | None = None,
+    line_end: int | None = None,
+    kind: str | None = None,
+    fallback_flag: list[bool] | None = None,
 ) -> ContextItem:
-    """Build a ContextItem from raw symbol fields."""
+    """Build a ContextItem from raw symbol fields.
+
+    When ``line_start``/``line_end`` are valid ints and source_type has a
+    known verb, the ``reason`` field is populated with the upgraded
+    function-level string (e.g. ``"Modified `foo` lines 59-159"``). If
+    line data is missing or invalid, ``reason`` is left empty so the
+    ranker falls back to the category-level string — and, if
+    *fallback_flag* is provided, its first element is set to ``True`` so
+    the caller can emit a single stderr warning per pack build.
+    """
     title = f"{sym_name} ({Path(file_path).name})"
     excerpt = "\n".join(filter(None, [signature, docstring])).strip()
+
+    qualified = sym_name
+    # For methods, prefer a "Class.method" qualified name when the
+    # signature contains the enclosing class (best-effort — Python's
+    # analyzer emits bare names, so we use the signature as a hint).
+    if kind == "method" and signature and "." in signature.split("(")[0]:
+        head = signature.split("(")[0].strip()
+        if head and not head.startswith("def "):
+            qualified = head
+
+    reason = ""
+    verb = _SYMBOL_REASON_VERB.get(source_type)
+    if (
+        verb is not None
+        and isinstance(line_start, int)
+        and isinstance(line_end, int)
+        and line_start > 0
+        and line_end >= line_start
+        and qualified
+    ):
+        reason = _build_symbol_reason(verb, qualified, line_start, line_end)
+    elif verb is not None and fallback_flag is not None and not fallback_flag[0]:
+        # Symbol-backed item but line metadata unusable — flag once so
+        # the orchestrator can emit a single stderr warning per pack.
+        fallback_flag[0] = True
+
     return ContextItem(
         source_type=source_type,
         repo=repo,
         path_or_ref=file_path,
         title=title,
         excerpt=excerpt,
-        reason="",  # will be filled in by ContextRanker.rank()
+        reason=reason,
         confidence=confidence,
         est_tokens=_estimate_item_tokens(title, excerpt),
         tags=[],
@@ -990,6 +1065,10 @@ class Orchestrator:
         adj = feedback_adjustments or {}
         past_files = past_debug_files or set()
         weights = _resolve_weights(mode, config)
+        # v3.2 outcome: function-level-reason — single-element flag consumed
+        # by ``_make_item`` when a symbol-backed item has no usable line
+        # metadata, triggering the once-per-pack stderr warning below.
+        self._symbol_reason_fallback_flag: list[bool] = [False]
 
         if mode == "review":
             items = self._review_candidates(sym_repo, edge_repo, repo_name, weights)
@@ -1025,6 +1104,18 @@ class Orchestrator:
                 else item
                 for item in items
             ]
+
+        # v3.2 function-level-reason: if any symbol-backed item lacked
+        # usable line metadata, warn once so the category-level fallback
+        # is visible rather than a silent degradation (CLAUDE.md rule:
+        # "Silent failure is a bug").
+        if self._symbol_reason_fallback_flag[0]:
+            print(
+                "context-router: function-level reason fell back to "
+                "category string for one or more items — symbol line "
+                "metadata missing or invalid",
+                file=sys.stderr,
+            )
         return items
 
     @staticmethod
@@ -1272,6 +1363,10 @@ class Orchestrator:
                     source_type=source_type,
                     confidence=confidence,
                     repo=repo_name,
+                    line_start=sym.line_start,
+                    line_end=sym.line_end,
+                    kind=sym.kind,
+                    fallback_flag=self._symbol_reason_fallback_flag,
                 )
             )
 
@@ -1649,6 +1744,10 @@ class Orchestrator:
                     source_type=source_type,
                     confidence=confidence,
                     repo=repo_name,
+                    line_start=sym.line_start,
+                    line_end=sym.line_end,
+                    kind=sym.kind,
+                    fallback_flag=self._symbol_reason_fallback_flag,
                 )
             )
 
@@ -1782,6 +1881,10 @@ class Orchestrator:
                     source_type=source_type,
                     confidence=confidence,
                     repo=repo_name,
+                    line_start=sym.line_start,
+                    line_end=sym.line_end,
+                    kind=sym.kind,
+                    fallback_flag=self._symbol_reason_fallback_flag,
                 )
             )
 
@@ -1870,6 +1973,10 @@ class Orchestrator:
                     source_type=source_type,
                     confidence=confidence,
                     repo=repo_name,
+                    line_start=sym.line_start,
+                    line_end=sym.line_end,
+                    kind=sym.kind,
+                    fallback_flag=self._symbol_reason_fallback_flag,
                 )
             )
 
