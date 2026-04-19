@@ -1,0 +1,35 @@
+# Fixture commits from fastapi/fastapi used for the CR vs CRG eval harness.
+# Each task pins a real upstream commit that touches a known set of files.
+#
+# Field notes:
+#   - sha                 : upstream commit to `git checkout` on the fastapi clone.
+#   - ground_truth_files  : repo-relative paths the commit actually modifies. Used
+#                           for precision/recall scoring.
+#   - cr_query            : free-text query passed to `context-router pack`.
+#   - cr_mode             : context-router mode. We use `debug` here (not `review`)
+#                           because v3.2 guidance is that free-text bug queries
+#                           should route through debug mode, not review.
+tasks:
+  - id: task1
+    sha: fa3588c38c7473aca7536b12d686102de4b0f407
+    description: "OAuth2 docstring fix (client_secret typo)"
+    ground_truth_files:
+      - fastapi/security/oauth2.py
+    cr_query: "Fix typo for client_secret in OAuth2 form docstrings"
+    cr_mode: debug
+
+  - id: task2
+    sha: 0227991a01e61bf5cdd93cc00e9e243f52b47a4a
+    description: "spam filter in scripts/people.py"
+    ground_truth_files:
+      - scripts/people.py
+    cr_query: "Add spam filter to people.py"
+    cr_mode: debug
+
+  - id: task3
+    sha: 6cf40df24d1d199fd25d034fc87fcae284fc23a2
+    description: "Form extra parameter list parsing"
+    ground_truth_files:
+      - fastapi/dependencies/utils.py
+    cr_query: "Fix Form parameter list parsing"
+    cr_mode: debug
