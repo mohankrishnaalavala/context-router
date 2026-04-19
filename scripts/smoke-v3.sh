@@ -1323,6 +1323,63 @@ PY
   fi
 }
 
+_check_mode-mismatch-warning() {
+  # v3.2 P1: `pack --mode review --query '<free text>'` against a clean
+  # working tree must print a stderr nudge; same command against a dirty
+  # tree must stay silent. We build a throwaway git repo, init the
+  # context-router DB, and invoke both paths.
+  local tmp
+  tmp="$(mktemp -d -t mode_mismatch_XXXXXX)"
+  trap 'rm -rf "${tmp}"' RETURN
+
+  (
+    cd "${tmp}" || exit 1
+    git init -q
+    git config user.email smoke@example.com
+    git config user.name smoke
+    echo hello > README.md
+    git add README.md
+    git commit -q -m init
+  ) >/dev/null 2>&1 || { echo "FAIL mode-mismatch-warning: could not init temp git repo at ${tmp}"; return 1; }
+
+  uv run context-router init --project-root "${tmp}" >/dev/null 2>&1 \
+    || { echo "FAIL mode-mismatch-warning: context-router init failed"; return 1; }
+
+  local clean_err
+  clean_err="$(uv run context-router pack --mode review --query "foo" --project-root "${tmp}" 2>&1 1>/dev/null)" || true
+  if ! echo "${clean_err}" | grep -qF -- "try --mode debug"; then
+    echo "FAIL mode-mismatch-warning: clean-tree invocation missing 'try --mode debug' nudge"
+    echo "${clean_err}" | sed 's/^/    /'
+    return 1
+  fi
+
+  # Dirty the tree (unstaged change) → must be silent.
+  echo changed >> "${tmp}/README.md"
+  local dirty_err
+  dirty_err="$(uv run context-router pack --mode review --query "foo" --project-root "${tmp}" 2>&1 1>/dev/null)" || true
+  if echo "${dirty_err}" | grep -qF -- "try --mode debug"; then
+    echo "FAIL mode-mismatch-warning: dirty-tree invocation emitted the warning (must be silent)"
+    echo "${dirty_err}" | sed 's/^/    /'
+    return 1
+  fi
+
+  # --mode debug on the same clean state (commit the change first) → no warning.
+  (
+    cd "${tmp}" || exit 1
+    git add README.md
+    git commit -q -m tidy
+  ) >/dev/null 2>&1
+  local debug_err
+  debug_err="$(uv run context-router pack --mode debug --query "foo" --project-root "${tmp}" 2>&1 1>/dev/null)" || true
+  if echo "${debug_err}" | grep -qF -- "try --mode debug"; then
+    echo "FAIL mode-mismatch-warning: debug-mode invocation emitted the review-mode warning"
+    echo "${debug_err}" | sed 's/^/    /'
+    return 1
+  fi
+
+  echo "PASS mode-mismatch-warning (clean-tree warns, dirty-tree silent, debug-mode silent)"
+}
+
 # ──────────────────── registry driver ────────────────────
 
 _yq() {
