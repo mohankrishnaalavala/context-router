@@ -214,6 +214,16 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     ),
                     "default": False,
                 },
+                "top_k": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": (
+                        "Cap selected_items at N after ranking. 0 (default) "
+                        "applies no cap. When the ranked pool is smaller "
+                        "than top_k, the full pool is returned."
+                    ),
+                    "default": 0,
+                },
                 "progressToken": {
                     "type": ["string", "integer"],
                     "description": (
