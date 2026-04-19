@@ -468,6 +468,11 @@ class Orchestrator:
             ttl=self._PACK_CACHE_TTL_SECONDS,
         )
         self._pack_cache_lock = threading.RLock()
+        # v3.2 `pre-fix-review-mode`: when set to a commit SHA string, the
+        # review-mode candidate builder treats the diff of that commit (vs
+        # its parent) as the change-set, instead of the working-tree diff.
+        # Scoped to the current build_pack call via a try/finally.
+        self._pre_fix: str | None = None
 
     # ------------------------------------------------------------------
     # Cache helpers (P3-1)
@@ -644,6 +649,7 @@ class Orchestrator:
         progress_cb: "Callable[[str, int, int], None] | None" = None,
         download_progress_cb: Callable[[str], None] | None = None,
         token_budget: int | None = None,
+        pre_fix: str | None = None,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -681,6 +687,13 @@ class Orchestrator:
                 budget. When ``None`` (default), uses
                 ``config.token_budget``; minimal mode defaults to 800
                 when omitted.
+            pre_fix: Optional commit SHA. When provided with ``mode="review"``,
+                the candidate builder uses the diff of ``<sha>^..<sha>`` as
+                the change-set (same data path as the normal review flow).
+                This lets callers generate a pack ranked as if the working
+                tree were at ``<sha>^`` — CRG-comparable without needing
+                to hand in a pre-computed diff. Ignored for non-review
+                modes (the CLI rejects the combination loudly).
 
         Returns:
             A populated and ranked ContextPack.
@@ -688,8 +701,18 @@ class Orchestrator:
         Raises:
             FileNotFoundError: If the SQLite database does not exist (index has
                 not been run yet).
-            ValueError: If *mode* is not a recognised value.
+            ValueError: If *mode* is not a recognised value, or if
+                ``pre_fix`` is set but not a valid commit SHA in the repo.
         """
+        # Validate pre_fix early (before any expensive work) so the CLI can
+        # surface a clean "commit <sha> not found" error without a traceback.
+        # Only meaningful in review mode; for other modes the caller should
+        # never have gotten here (pack.py rejects the combination).
+        if pre_fix and mode == "review":
+            if not self._validate_commit_sha(pre_fix):
+                raise ValueError(
+                    f"commit {pre_fix} not found in {self._root}"
+                )
         config = load_config(self._root)
         repo_scope = str(self._root.resolve())
         db_path = self._root / ".context-router" / "context-router.db"
@@ -718,11 +741,19 @@ class Orchestrator:
         # so a second `context-router pack` run for the same query skips
         # the full pipeline.
         query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
-        items_hash = self._compute_items_hash(
-            error_file=error_file if error_file is None else str(error_file),
-            page=page,
-            page_size=page_size,
-        )
+        # Build the items-hash kwargs exactly like the pre-v3.2 version by
+        # default so existing tests/consumers hitting the same (mode, query)
+        # still see a cache hit. Only fold pre_fix into the hash when the
+        # caller actually supplied one — then two builds on different SHAs
+        # correctly miss each other's cache.
+        items_hash_kwargs: dict[str, Any] = {
+            "error_file": error_file if error_file is None else str(error_file),
+            "page": page,
+            "page_size": page_size,
+        }
+        if pre_fix:
+            items_hash_kwargs["pre_fix"] = pre_fix
+        items_hash = self._compute_items_hash(**items_hash_kwargs)
         repo_id = self._compute_repo_id()
         cache_key = (
             repo_id,
@@ -752,6 +783,62 @@ class Orchestrator:
                 self._pack_cache[cache_key] = l2_pack
             return l2_pack
 
+        # Scope pre_fix to this build so ``_get_changed_files`` reads the
+        # commit-range diff (``<sha>^..<sha>``) instead of the working-tree
+        # diff. Only meaningful in review mode; the CLI rejects the combo
+        # in other modes. Reset in the finally clause below so a future
+        # re-use of this Orchestrator instance starts with a clean slate.
+        self._pre_fix = pre_fix if (pre_fix and mode == "review") else None
+        try:
+            return self._build_pack_inner(
+                mode=mode,
+                query=query,
+                error_file=error_file,
+                page=page,
+                page_size=page_size,
+                use_embeddings=use_embeddings,
+                progress=progress,
+                progress_cb=progress_cb,
+                download_progress_cb=download_progress_cb,
+                config=config,
+                repo_scope=repo_scope,
+                db_path=db_path,
+                caller_budget=caller_budget,
+                token_budget=token_budget,
+                cache_key=cache_key,
+                cache_key_str=cache_key_str,
+                repo_id=repo_id,
+            )
+        finally:
+            # Always clear so subsequent reuses of this Orchestrator instance
+            # don't silently inherit the SHA-based diff source.
+            self._pre_fix = None
+
+    def _build_pack_inner(
+        self,
+        *,
+        mode: str,
+        query: str,
+        error_file: Path | None,
+        page: int,
+        page_size: int,
+        use_embeddings: bool,
+        progress: bool,
+        progress_cb: "Callable[[str, int, int], None] | None",
+        download_progress_cb: Callable[[str], None] | None,
+        config: ContextRouterConfig,
+        repo_scope: str,
+        db_path: Path,
+        caller_budget: int,
+        token_budget: int | None,
+        cache_key: tuple,
+        cache_key_str: str,
+        repo_id: str,
+    ) -> ContextPack:
+        """Internal body of :meth:`build_pack` — split so the outer wrapper
+        can own the ``self._pre_fix`` lifecycle via try/finally without
+        indenting the whole pipeline by another level.
+        """
         # Model-download progress callback for the CLI's rich spinner
         # (disabled for MCP stdio transport, which has progress=False).
         effective_cb: Callable[[str], None] | None = (
@@ -1391,19 +1478,67 @@ class Orchestrator:
         return items
 
     def _get_changed_files(self) -> set[str]:
-        """Return the set of file paths changed since HEAD~1.
+        """Return the set of file paths changed in the review-mode diff.
 
-        Falls back to an empty set if the git command fails (e.g. on a repo
+        * When :attr:`_pre_fix` is set to a commit SHA, uses
+          ``git diff --name-status <sha>^..<sha>`` so the pack is ranked
+          as-if the working tree were at ``<sha>^``. Never mutates the
+          working tree.
+        * Otherwise (the default), uses the working-tree diff against
+          ``HEAD~1`` — the existing review-mode contract.
+
+        Falls back to an empty set if the git command fails (e.g. a repo
         with only one commit, or when run outside a git repo).
 
         Returns:
             Set of absolute-or-repo-relative path strings.
         """
+        since = self._pre_fix_range() if self._pre_fix else "HEAD~1"
         try:
-            changed = GitDiffParser.from_git(self._root, "HEAD~1")
+            changed = GitDiffParser.from_git(self._root, since)
             return {str(self._root / cf.path) for cf in changed}
         except (RuntimeError, OSError):
             return set()
+
+    def _pre_fix_range(self) -> str:
+        """Return the ``<sha>^..<sha>`` range string for the scoped pre_fix."""
+        # ``pre_fix`` is validated by _validate_commit_sha before we reach
+        # here; we still guard with ``or ""`` so a stale attribute on a
+        # re-used instance cannot synthesise an ``^..`` gibberish string.
+        sha = (self._pre_fix or "").strip()
+        return f"{sha}^..{sha}"
+
+    def _validate_commit_sha(self, sha: str) -> bool:
+        """Return True iff *sha* (and its parent ``sha^``) exist in the repo.
+
+        Uses ``git cat-file -e <rev>^{commit}`` for a cheap existence check
+        that does not touch the working tree. Both the SHA and its parent
+        must resolve — our diff command is ``<sha>^..<sha>``, so a root
+        commit with no parent should be rejected loudly rather than
+        falling through to an empty diff.
+        """
+        import subprocess
+
+        stripped = (sha or "").strip()
+        if not stripped:
+            return False
+        # Disallow whitespace — shlex would let weird refs through; the
+        # feature contract says "a single commit SHA".
+        if any(c.isspace() for c in stripped):
+            return False
+        for rev in (f"{stripped}^{{commit}}", f"{stripped}^^{{commit}}"):
+            try:
+                result = subprocess.run(
+                    ["git", "cat-file", "-e", rev],
+                    cwd=str(self._root),
+                    capture_output=True,
+                    check=False,
+                )
+            except (FileNotFoundError, OSError):
+                return False
+            if result.returncode != 0:
+                return False
+        return True
 
     def _apply_review_risk(self, items: list[ContextItem]) -> list[ContextItem]:
         """Return *items* with per-item ``risk`` populated for review mode.
