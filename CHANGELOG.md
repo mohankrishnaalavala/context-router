@@ -9,6 +9,79 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.1.0] — 2026-04-18
+
+v3.1 — hotfix cycle after the v3.0.0 post-release audit. 8 PRs (#63–#70)
+address the P0/P1/P2 items surfaced by the 7-prompt playbook against the
+three fixture repos.
+
+### Fixed (P0 / P1 / P2)
+
+- **Benchmark keyword-baseline vs_keyword honest** — removed the `max(0, …)`
+  clamp at `packages/benchmark/src/benchmark/reporters.py` that hid cases
+  where the keyword baseline was smaller than the router pack. Negative
+  deltas are now surfaced; `vs_keyword` column uses signed formatting.
+  Added `vs_keyword`, `vs_naive`, `keyword_baseline_tokens`,
+  `naive_baseline_tokens` fields to `TaskMetrics`. (#67, P0)
+- **C# `tested_by` / method-name extraction** already landed in v3.0.0 #60;
+  v3.1 adds regression tests + a dedicated `edge-source-resolution-fix`
+  registry outcome to lock the contract.
+- **TypeScript analyzer now emits `tested_by`** on function-component +
+  JSX-rendered test patterns (bulletproof-react went from 0 → 45
+  `tested_by` edges). New helpers `_TEST_BLOCK_CALLEES`,
+  `_TEST_UTILITY_CALLEES`, `_is_test_block_call`,
+  `_synthesize_test_name`, `_jsx_tag_identifier`. Class-based path
+  unchanged. (#65, P1)
+- **Contracts-boost endpoint matching tightened** — `file_references_endpoint`
+  now requires a literal path match (modulo parameter segments), with
+  HTTP-method-aware preference when the caller hints the method. Stops
+  generic verbs like "create order" rewarding unrelated POST consumers. (#68, P1)
+- **Minimal-mode ranker preserves top implement-mode result** — new
+  `_preserve_top_implement_item` overlay guarantees that for task-verb
+  queries, the top implement pick survives the ≤5-item cap. (#64, P1)
+- **Hub-bridge smoke query fixed** — root-caused as a pack_cache
+  collision (CAPABILITIES_HUB_BOOST was not in the L2 cache key): the
+  handler now purges `pack_cache` between OFF and ON runs and reads
+  `selected_items` (the authoritative field). The smoke now flips 2
+  NamedEntity methods into top-5 deterministically. Product-level
+  cache-key gap noted for v3.2. (#66, P2)
+- **Flows N+1 eliminated** — `_FlowCache` in `packages/graph-index/src/graph_index/flows.py`
+  memoizes `_callees(symbol_id)` per BFS call. 1.73× fewer SQL queries
+  on eShopOnWeb (834 → 481). Functional output bit-identical. (#69, P2)
+- **Hub-bridge reuses Orchestrator sqlite connection** — `ContextRanker`
+  accepts an optional `db_connection` kwarg; Orchestrator threads
+  `Database.connection` into it so hub-bridge boost no longer opens
+  fresh connections (0 ranker-attributed `sqlite3.connect` calls per
+  pack build, down from 2). Standalone ranker fallback path preserved. (#70, P2)
+
+### Changed
+
+- `README.md` Feature Overview: MCP row 16 → 17 tools; add mimeType
+  + progress-frame details to the summary.
+- `BENCHMARK_RESULTS.md`: v3.0.0 section refreshed with measured
+  numbers from the post-release audit (3 fixtures + self); v3.1
+  addendum with the honest vs_keyword deltas.
+- `docs/release/v3-outcomes-plain-english.md`: "What actually
+  happened" section with real measurements.
+
+### New documentation
+
+- `docs/release/v3_1-roadmap.md` — Wave 1 / Wave 2 lane map.
+- `internal_docs/v3_review_findings/prompt-{1..7}-*.md` — per-prompt
+  audit findings (gitignored).
+- `internal_docs/production-readiness-review-v3.md` — aggregated
+  review (gitignored).
+
+### Known v3.2 follow-ups (from this cycle)
+
+- **Cache-key must include `capabilities.hub_boost`** so toggling the
+  config reliably invalidates cached packs. Workaround for v3.1:
+  caller purges `pack_cache` between on/off runs.
+- **Homebrew tap repo** still pinned at `0.3.0`; tap update + sha256
+  regen is external user action.
+
+---
+
 ## [3.0.0] — 2026-04-18
 
 v3.0.0 — CRG-parity, cache persistence, MCP streaming, handover wiki, and
