@@ -1323,6 +1323,77 @@ PY
   fi
 }
 
+_check_function-level-reason() {
+  # v3.2 P0: ContextItems backed by a symbol must carry a reason that
+  # names the symbol and its source line range (example output shape:
+  # "Modified <backtick>foo<backtick> lines 59-159"). Threshold: on the
+  # fastapi fixture, >=80% of items in a review-mode pack have a reason
+  # that contains a backtick-quoted identifier AND a "lines N-M"
+  # substring. Items without a backing symbol (raw file entries) retain
+  # the category reason and are excluded from the 80% denominator.
+  local fixture="${PROJECT_CONTEXT_ROOT}/fastapi"
+  if [[ ! -d "${fixture}" ]]; then
+    echo "SKIP function-level-reason: fixture missing at ${fixture}"
+    return 0
+  fi
+  if [[ ! -f "${fixture}/.context-router/context-router.db" ]]; then
+    echo "SKIP function-level-reason: ${fixture} is not indexed (run 'context-router index --project-root ${fixture}')"
+    return 0
+  fi
+  local pack_json
+  pack_json="$(uv run context-router pack --mode review --query 'OAuth2 form' --project-root "${fixture}" --json 2>/dev/null)" || {
+    echo "FAIL function-level-reason: pack --json failed on ${fixture}"
+    return 1
+  }
+  local result
+  result="$(echo "${pack_json}" | python3 - <<'PY'
+import json
+import re
+import sys
+
+SHAPE = re.compile(r"\x60[^\x60]+\x60 lines \d+-\d+")
+# source_types we know are backed by a Symbol (see _SYMBOL_REASON_VERB
+# in packages/core/src/core/orchestrator.py). Non-symbol types (memory,
+# decision, blast_radius_transitive, call_chain) are raw-file entries
+# and are excluded from the symbol-backed denominator per the outcome
+# negative_case.
+SYMBOL_TYPES = {
+    "changed_file",
+    "blast_radius",
+    "impacted_test",
+    "config",
+    "entrypoint",
+    "contract",
+    "extension_point",
+    "file",
+    "runtime_signal",
+    "failing_test",
+    "past_debug",
+}
+
+pack = json.load(sys.stdin)
+items = pack.get("items") or pack.get("selected_items") or []
+symbol_items = [i for i in items if i.get("source_type") in SYMBOL_TYPES]
+total = len(symbol_items)
+if total == 0:
+    print("FAIL 0 symbol-backed items in pack")
+    sys.exit(0)
+matched = sum(1 for i in symbol_items if SHAPE.search(i.get("reason", "")))
+pct = 100.0 * matched / total
+if pct >= 80.0:
+    print(f"PASS {matched}/{total} ({pct:.1f}%) symbol-backed items have function-level reason")
+else:
+    print(f"FAIL {matched}/{total} ({pct:.1f}%) symbol-backed items have function-level reason; need >=80%")
+PY
+)"
+  if [[ "${result}" == PASS* ]]; then
+    echo "PASS function-level-reason (${result#PASS })"
+  else
+    echo "FAIL function-level-reason: ${result#FAIL }"
+    return 1
+  fi
+}
+
 # ──────────────────── registry driver ────────────────────
 
 _yq() {
