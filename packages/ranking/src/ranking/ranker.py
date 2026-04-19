@@ -855,7 +855,16 @@ class ContextRanker:
             pass
 
     def _annotate(self, item: ContextItem) -> ContextItem:
-        """Return a copy of *item* with the reason field populated."""
+        """Return a copy of *item* with the reason field populated.
+
+        v3.2 outcome: function-level-reason — the orchestrator may have
+        already set an upgraded reason string (e.g.
+        ``"Modified `foo` lines 12-34"``) when the item is backed by a
+        Symbol with known line data. Preserve that upgraded string; only
+        fill the category fallback when ``reason`` is empty.
+        """
+        if item.reason:
+            return item
         reason = _REASON.get(item.source_type, _DEFAULT_REASON)
         return item.model_copy(update={"reason": reason})
 
