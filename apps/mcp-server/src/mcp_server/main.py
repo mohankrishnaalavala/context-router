@@ -223,6 +223,18 @@ _TOOLS: dict[str, dict[str, Any]] = {
                         "pack exceeds 2,000 tokens."
                     ),
                 },
+                "pre_fix": {
+                    "type": "string",
+                    "description": (
+                        "Commit SHA. Only meaningful with mode='review'. "
+                        "Treats the diff of <sha>^..<sha> as the change-set "
+                        "so the pack is ranked as if the working tree were "
+                        "at <sha>^ — CRG-comparable without needing to hand "
+                        "in a pre-computed diff. Returns an error (no "
+                        "traceback) on unknown SHA or non-review mode."
+                    ),
+                    "default": "",
+                },
             },
         },
         "outputSchema": _PACK_OUTPUT,
