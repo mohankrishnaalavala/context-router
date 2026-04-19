@@ -17,6 +17,91 @@ def _orchestrator(project_root: str = "") -> "Orchestrator":
     return Orchestrator(project_root=root)
 
 
+_REVIEW_DIFFLESS_MSG = (
+    "review mode expects a diff; for query-only input, try --mode debug"
+)
+
+
+def _maybe_warn_review_needs_diff(project_root: str) -> None:
+    """Mirror of the CLI mode-mismatch warning for MCP callers.
+
+    Sends an MCP ``notifications/message`` (level=warning) when
+    ``get_context_pack(mode="review", query="...")`` runs against a clean
+    git tree, and a ``level=info`` skip notice on non-git / git-error
+    trees so the absence of the warning is never silent.
+
+    Writes go through ``main._notify`` so they share the stdout
+    ``_write_lock`` and cannot interleave with JSON-RPC responses.
+    Falls back to stderr if the server module isn't importable (e.g.
+    tools.py is exercised directly by a unit test).
+    """
+    import subprocess
+    import sys
+
+    root = Path(project_root).resolve() if project_root else Path.cwd()
+
+    try:
+        unstaged = subprocess.run(
+            ["git", "diff", "--quiet"],
+            cwd=str(root),
+            capture_output=True,
+            check=False,
+        )
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=str(root),
+            capture_output=True,
+            check=False,
+        )
+    except (FileNotFoundError, OSError) as exc:
+        _emit_mcp_log(
+            "info",
+            f"review-mode diff check skipped ({type(exc).__name__}: {exc})",
+        )
+        return
+
+    if unstaged.returncode >= 2 or staged.returncode >= 2:
+        reason = (unstaged.stderr or staged.stderr or b"").decode(
+            "utf-8", errors="replace"
+        ).strip()
+        _emit_mcp_log(
+            "info",
+            f"review-mode diff check skipped (not a git repo or git error: {reason})",
+        )
+        return
+
+    if unstaged.returncode == 0 and staged.returncode == 0:
+        _emit_mcp_log("warning", _REVIEW_DIFFLESS_MSG)
+        # Also mirror to stderr — keeps non-MCP callers (unit tests,
+        # programmatic invocations) observable without JSON-RPC framing.
+        print(f"warning: {_REVIEW_DIFFLESS_MSG}", file=sys.stderr)
+
+
+def _emit_mcp_log(level: str, text: str) -> None:
+    """Send a ``notifications/message`` frame to the MCP client.
+
+    Falls back to stderr if the server module isn't loaded (unit tests
+    call the tool function directly, outside the stdio transport).
+    """
+    try:
+        from mcp_server.main import _notify  # local import — transport layer
+    except Exception:  # noqa: BLE001 — fallback keeps the warning audible
+        import sys
+        print(f"[mcp-server] {level}: {text}", file=sys.stderr)
+        return
+    try:
+        _notify(
+            "notifications/message",
+            {"level": level, "logger": "context-router", "data": text},
+        )
+    except Exception as exc:  # noqa: BLE001 — never crash the tool response
+        import sys
+        print(
+            f"[mcp-server] notifications/message failed ({exc}); text: {text}",
+            file=sys.stderr,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Index tools
 # ---------------------------------------------------------------------------
@@ -138,6 +223,13 @@ def get_context_pack(
     Returns:
         Serialised ContextPack as a dict, or {"text": ...} when format="compact".
     """
+    # Silent-failure rule (mode-mismatch-warning): warn callers who invoke
+    # review mode with only a free-text query against a clean tree. We
+    # emit an MCP ``notifications/message`` (level=warning) — writing to
+    # stdout would corrupt JSON-RPC framing, and silent no-op is banned.
+    if mode == "review" and query.strip():
+        _maybe_warn_review_needs_diff(project_root)
+
     try:
         # progress=False is critical on MCP stdio transport — stdout is
         # reserved for JSON-RPC frames; any progress output would corrupt it.
