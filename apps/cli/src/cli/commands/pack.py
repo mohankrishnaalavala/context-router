@@ -109,6 +109,13 @@ def pack(
             ),
         ),
     ] = "",
+    top_k: Annotated[
+        int,
+        typer.Option(
+            "--top-k",
+            help="Cap selected_items at N after ranking (0 or unset = no cap).",
+        ),
+    ] = 0,
 ) -> None:
     """Generate a context pack for the given task MODE.
 
@@ -177,6 +184,17 @@ def pack(
         _emit_wiki(root=root, out_path=Path(out) if out else None)
         return
 
+    # Silent-failure rule: a negative --top-k would be a silent no-op
+    # (treated as "no cap"). Warn on stderr and normalise to "no cap" so
+    # the downstream path behaves predictably.
+    if top_k < 0:
+        typer.secho(
+            f"warning: --top-k={top_k} is negative; ignoring (no cap applied).",
+            err=True,
+            fg="yellow",
+        )
+        top_k = 0
+
     try:
         result = _run_build_pack(
             mode=mode,
@@ -192,6 +210,27 @@ def pack(
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1)
+
+    # Apply --top-k cap post-ranking. When top_k == 0 (unset), the pack is
+    # unchanged — v3.1 behaviour preserved. When the pool is smaller than
+    # top_k we return the full pool without warning (documented behaviour).
+    if top_k > 0 and len(result.selected_items) > top_k:
+        result.selected_items = result.selected_items[:top_k]
+        # Refresh the derived token total so downstream renderers and the
+        # JSON payload stay internally consistent with the truncated pool.
+        try:
+            result.total_est_tokens = sum(
+                int(getattr(i, "est_tokens", 0) or 0) for i in result.selected_items
+            )
+        except Exception:  # noqa: BLE001 — totals are cosmetic; never fail the run
+            pass
+        # total_items is a caller-facing count used by pagination helpers;
+        # keep it aligned with the post-cap pool so "Items: N" matches.
+        if hasattr(result, "total_items"):
+            try:
+                result.total_items = len(result.selected_items)
+            except Exception:  # noqa: BLE001
+                pass
 
     # --json flag takes precedence for backwards compatibility
     effective_format = "json" if json_output else format
