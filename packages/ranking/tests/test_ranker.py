@@ -76,7 +76,9 @@ def test_budget_trims_lowest_confidence_items() -> None:
 
 
 def test_zero_budget_returns_all_sorted() -> None:
-    items = [_item(confidence=0.3), _item(confidence=0.9)]
+    # Distinct titles so the v3.2 symbol-stub-dedup pass doesn't merge
+    # these items — the test case is about sort order, not dedup.
+    items = [_item(confidence=0.3, title="low"), _item(confidence=0.9, title="high")]
     result = ContextRanker(token_budget=0).rank(items, "", "review")
     assert len(result) == 2
     assert result[0].confidence == 0.9
@@ -95,7 +97,9 @@ def test_budget_preserves_one_per_source_type() -> None:
 
 
 def test_all_items_fit_within_budget() -> None:
-    items = [_item(est_tokens=10) for _ in range(5)]
+    # Distinct titles so the v3.2 symbol-stub-dedup pass doesn't merge
+    # the items — the test case is about budget enforcement, not dedup.
+    items = [_item(est_tokens=10, title=f"item_{i}") for i in range(5)]
     result = ContextRanker(token_budget=50).rank(items, "", "review")
     assert len(result) == 5
 

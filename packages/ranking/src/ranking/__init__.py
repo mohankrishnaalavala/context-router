@@ -3,6 +3,6 @@
 from __future__ import annotations
 
 from ranking.estimator import estimate_tokens
-from ranking.ranker import ContextRanker
+from ranking.ranker import ContextRanker, dedup_stubs
 
-__all__ = ["ContextRanker", "estimate_tokens"]
+__all__ = ["ContextRanker", "dedup_stubs", "estimate_tokens"]

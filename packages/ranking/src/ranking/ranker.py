@@ -88,6 +88,80 @@ class _BM25Scorer:
         return total
 
 
+def _dedup_stubs(
+    items: list[ContextItem],
+) -> tuple[list[ContextItem], int]:
+    """Collapse near-duplicate symbol stubs within the same file.
+
+    v3.2 outcome ``symbol-stub-dedup`` (P1): indexers emit one ContextItem
+    per Symbol, so a file with many ``__init__`` / ``__enter__`` / tiny
+    helper methods produces many items whose stub excerpts are identical
+    byte-for-byte (e.g. ``def __init__(`` with no body). A reviewer can
+    only read so many "same-shape" stubs before they stop being useful —
+    condense them into one representative item and record the collapsed
+    count.
+
+    Dedup key: all three conditions must hold::
+
+        1. same ``path_or_ref``  (same file)
+        2. same ``title`` prefix (the leading identifier token — e.g.
+           ``__init__`` is the same regardless of ``(self, x)`` suffixes)
+        3. same ``excerpt``      (byte-for-byte)
+
+    The first occurrence (highest-confidence after the caller's sort) is
+    kept as the representative and its existing ``duplicates_hidden``
+    counter is bumped by ``N - 1``. Later duplicates are dropped.
+
+    Negative case: two items with the same ``title`` but DIFFERENT
+    excerpts (e.g. two distinct classes both named ``Config``) are NOT
+    merged — the excerpt equality check guarantees distinct content
+    always survives.
+
+    Args:
+        items: Ranked ContextItems, ordered so the highest-confidence
+            item of each duplicate set appears first. The function does
+            not re-sort.
+
+    Returns:
+        Tuple of ``(deduped_items, hidden_count)`` where ``hidden_count``
+        is the total number of items dropped (i.e. the sum of per-group
+        ``N - 1`` bumps). Callers should add this to
+        ``ContextPack.duplicates_hidden``.
+    """
+    if not items:
+        return [], 0
+
+    # Map dedup_key -> index into `out` of the representative item.
+    first_idx: dict[tuple[str, str, str], int] = {}
+    out: list[ContextItem] = []
+    dropped = 0
+
+    for item in items:
+        title_prefix = item.title.split("(", 1)[0].strip()
+        key = (
+            item.path_or_ref.strip().lstrip("./").lower(),
+            title_prefix,
+            item.excerpt,
+        )
+        idx = first_idx.get(key)
+        if idx is None:
+            first_idx[key] = len(out)
+            out.append(item)
+            continue
+        # Duplicate: bump the representative's duplicates_hidden counter
+        # and drop this item.
+        rep = out[idx]
+        out[idx] = rep.model_copy(
+            update={"duplicates_hidden": getattr(rep, "duplicates_hidden", 0) + 1}
+        )
+        dropped += 1
+    return out, dropped
+
+
+# Public alias for cross-package use (orchestrator, tests).
+dedup_stubs = _dedup_stubs
+
+
 def _embed_model_is_cached(model_name: str = _EMBED_MODEL_NAME) -> bool:
     """Return True if the Hugging Face model directory for *model_name* exists.
 
@@ -352,6 +426,12 @@ class ContextRanker:
         if self._use_embeddings:
             boosted = self._apply_semantic_boost(boosted, query)
         sorted_items = sorted(boosted, key=lambda i: i.confidence, reverse=True)
+
+        # v3.2 outcome ``symbol-stub-dedup`` (P1): collapse identical
+        # symbol stubs within the same file BEFORE budget enforcement so
+        # the budget fills with distinct content. Runs unconditionally —
+        # the helper is a no-op when no near-duplicates exist.
+        sorted_items, _ = _dedup_stubs(sorted_items)
 
         if self._budget <= 0:
             return sorted_items
