@@ -17,6 +17,7 @@ and ranking.  CLI/MCP server must only import from core.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import sys
 import threading
@@ -551,12 +552,35 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _canonical_hub_boost_flag() -> str:
+        """Return the canonical ``"1"``/``"0"`` form of ``CAPABILITIES_HUB_BOOST``.
+
+        The hub-boost flag is a ranker-level capability that materially
+        changes the final ordering of ``selected_items``. It MUST therefore
+        participate in the pack-cache key, otherwise a previously-cached
+        pack built with the flag off would be returned verbatim when the
+        flag is subsequently toggled on (or vice-versa) — the exact bug
+        the ``capabilities-hub-boost-cache-key`` outcome guards against.
+
+        Normalisation mirrors the ranker's own truthy set
+        (``1`` / ``true`` / ``yes`` / ``on``, case-insensitive, whitespace-
+        stripped) so that semantically-equivalent env values resolve to
+        the same key. Every other value — including unset / empty — maps
+        to ``"0"``, matching the ranker's "off by default" resolution.
+        """
+        raw = os.environ.get("CAPABILITIES_HUB_BOOST")
+        if raw is None:
+            return "0"
+        return "1" if raw.strip().lower() in {"1", "true", "yes", "on"} else "0"
+
+    @staticmethod
     def _cache_key_string(
         mode: str,
         query_hash: str,
         token_budget: int,
         use_embeddings: bool,
         items_hash: str,
+        hub_boost_flag: str = "0",
     ) -> str:
         """Fold the cache-key tuple into a stable string for L2 storage.
 
@@ -571,6 +595,7 @@ class Orchestrator:
             str(token_budget),
             "1" if use_embeddings else "0",
             items_hash,
+            hub_boost_flag,
         ):
             h.update(part.encode("utf-8"))
             h.update(b"|")
@@ -755,6 +780,12 @@ class Orchestrator:
             items_hash_kwargs["pre_fix"] = pre_fix
         items_hash = self._compute_items_hash(**items_hash_kwargs)
         repo_id = self._compute_repo_id()
+        # ``CAPABILITIES_HUB_BOOST`` participates in the cache key because
+        # the ranker applies or skips the hub/bridge structural boost
+        # depending on its value — two packs built for the same query
+        # under different flag values are genuinely different packs.
+        # See ``_canonical_hub_boost_flag`` for the normalisation contract.
+        hub_boost_flag = self._canonical_hub_boost_flag()
         cache_key = (
             repo_id,
             mode,
@@ -762,6 +793,7 @@ class Orchestrator:
             caller_budget,
             bool(use_embeddings),
             items_hash,
+            hub_boost_flag,
         )
         with self._pack_cache_lock:
             cached = self._pack_cache.get(cache_key)
@@ -775,6 +807,7 @@ class Orchestrator:
             caller_budget,
             bool(use_embeddings),
             items_hash,
+            hub_boost_flag,
         )
         l2_pack = self._l2_get(cache_key_str, repo_id, db_path)
         if l2_pack is not None:
