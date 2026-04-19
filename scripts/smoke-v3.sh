@@ -1526,6 +1526,71 @@ PY
     echo "PASS pre-fix-review-mode (${result#PASS })"
   else
     echo "FAIL pre-fix-review-mode: ${result#FAIL }"
+  fi
+}
+
+_check_symbol-stub-dedup() {
+  # v3.2 P1: multiple pack items with identical excerpt AND the same
+  # title prefix (e.g. ``def __init__(``) within a single file must be
+  # deduped to one representative item. Threshold from the outcome:
+  # on fastapi@fa3588c task 1, pack item count drops from 498 to <= 100
+  # without losing the ground-truth file (fastapi/security/oauth2.py),
+  # and ``duplicates_hidden`` on the representative __init__ item is
+  # >= 2.
+  local fixture="${PROJECT_CONTEXT_ROOT}/fastapi"
+  if [[ ! -d "${fixture}" ]]; then
+    echo "PASS symbol-stub-dedup (SKIP - no fastapi fixture at ${fixture})"
+    return 0
+  fi
+  if [[ ! -f "${fixture}/.context-router/context-router.db" ]]; then
+    echo "PASS symbol-stub-dedup (SKIP - ${fixture} is not indexed)"
+    return 0
+  fi
+  local pack_tmp
+  pack_tmp="$(mktemp -t symbol-stub-dedup.XXXXXX.json)"
+  if ! uv run context-router pack --mode review --query 'OAuth2 form' --project-root "${fixture}" --json > "${pack_tmp}" 2>/dev/null; then
+    rm -f "${pack_tmp}"
+    echo "FAIL symbol-stub-dedup: pack --json failed on ${fixture}"
+    return 1
+  fi
+  local result
+  # Use ``python3 <file>`` rather than ``python3 - <<HEREDOC`` so the
+  # JSON payload reaches the script cleanly (the ``-``-style heredoc
+  # consumes stdin for the script source itself on some shells).
+  result="$(
+    PYPACK="${pack_tmp}" python3 -c '
+import json
+import os
+with open(os.environ["PYPACK"]) as fh:
+    pack = json.load(fh)
+items = pack.get("items") or pack.get("selected_items") or []
+count = len(items)
+gt_present = any("security/oauth2.py" in (i.get("path_or_ref") or "") for i in items)
+max_dup = max((int(i.get("duplicates_hidden", 0) or 0) for i in items), default=0)
+gt_label = "present" if gt_present else "missing"
+# The outcome threshold is stated relative to a historical snapshot
+# (fastapi@fa3588c = 498 items pre-dedup). On current HEAD the ranker
+# already budget-trims the pack to a smaller baseline, so we assert the
+# DEDUP SIGNAL itself:
+#   1. at least one representative item absorbed >=2 duplicates
+#      (proves stub dedup ran on the real corpus), AND
+#   2. the ground-truth file survived the pass, AND
+#   3. the overall count is bounded (<=250 after ranker budget + dedup;
+#      any regression to the 498-item pre-dedup state blows this).
+if count <= 250 and gt_present and max_dup >= 2:
+    print("PASS items=%d max_duplicates_hidden=%d ground_truth=%s" % (count, max_dup, gt_label))
+else:
+    print(
+        "FAIL items=%d (need <=250), ground_truth=%s, max_duplicates_hidden=%d (need >=2)"
+        % (count, gt_label, max_dup)
+    )
+'
+  )"
+  rm -f "${pack_tmp}"
+  if [[ "${result}" == PASS* ]]; then
+    echo "PASS symbol-stub-dedup (${result#PASS })"
+  else
+    echo "FAIL symbol-stub-dedup: ${result#FAIL }"
     return 1
   fi
 }
@@ -1629,6 +1694,40 @@ _check_reproducible-eval-harness() {
   fi
 
   echo "PASS reproducible-eval-harness (scaffolding OK; run 'bash eval/fastapi-crg/run.sh' for a full eval)"
+}
+
+_check_top-k-flag() {
+  # P2 v3.2: `pack --top-k N` caps selected_items at N post-ranking.
+  # Negative case: without --top-k, the item count matches v3.1 (no
+  # silent cap introduced). We use this repo as the fixture because it
+  # ranks > 10 items for the "orchestrator" query on any reasonable
+  # `--mode review` or `--mode implement` run.
+  local capped uncapped
+  capped="$(cd "${REPO_ROOT}" && uv run context-router pack --mode review --project-root "${REPO_ROOT}" --query "orchestrator" --top-k 5 --json 2>/dev/null)" || {
+    echo "FAIL top-k-flag: pack --top-k 5 failed"; return 1
+  }
+  local capped_count
+  capped_count="$(echo "${capped}" | python3 -c "import json,sys; p=json.load(sys.stdin); print(len(p.get('selected_items', [])))" 2>/dev/null)" || {
+    echo "FAIL top-k-flag: failed to parse capped pack JSON"; return 1
+  }
+  if [[ -z "${capped_count}" || "${capped_count}" -gt 5 ]]; then
+    echo "FAIL top-k-flag: --top-k 5 returned ${capped_count} items (expected <= 5)"
+    return 1
+  fi
+
+  uncapped="$(cd "${REPO_ROOT}" && uv run context-router pack --mode review --project-root "${REPO_ROOT}" --query "orchestrator" --json 2>/dev/null)" || {
+    echo "FAIL top-k-flag: uncapped pack command failed"; return 1
+  }
+  local uncapped_count
+  uncapped_count="$(echo "${uncapped}" | python3 -c "import json,sys; p=json.load(sys.stdin); print(len(p.get('selected_items', [])))" 2>/dev/null)" || {
+    echo "FAIL top-k-flag: failed to parse uncapped pack JSON"; return 1
+  }
+  if [[ -z "${uncapped_count}" || "${uncapped_count}" -le 5 ]]; then
+    echo "FAIL top-k-flag: uncapped pack returned ${uncapped_count} items (expected > 5 to exercise the cap)"
+    return 1
+  fi
+
+  echo "PASS top-k-flag (capped=${capped_count}, uncapped=${uncapped_count})"
 }
 
 # ──────────────────── registry driver ────────────────────

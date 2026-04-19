@@ -202,6 +202,7 @@ def get_context_pack(
     page: int = 0,
     page_size: int = 0,
     use_embeddings: bool = False,
+    top_k: int = 0,
     progress_cb=None,
     pre_fix: str = "",
 ) -> dict:
@@ -217,6 +218,10 @@ def get_context_pack(
         page_size: Items per page. 0 = no pagination (return all ranked items).
         use_embeddings: Opt-in semantic ranking (triggers a one-time ~33 MB
             model download). Defaults to False.
+        top_k: Cap ``selected_items`` at N after ranking. 0 (default) applies
+            no cap; negative values are treated as 0 with a stderr warning.
+            When the ranked pool has fewer than ``top_k`` items, the full
+            pool is returned unchanged (no warning).
         progress_cb: Optional ``(stage, progress, total)`` callable invoked at
             build milestones.  Supplied by the MCP dispatcher when the caller
             sends a ``progressToken``; normal CLI callers leave this ``None``.
@@ -243,6 +248,18 @@ def get_context_pack(
     if mode == "review" and query.strip() and not pre_fix:
         _maybe_warn_review_needs_diff(project_root)
 
+    # Silent-failure rule: negative top_k is a silent no-op under a naive
+    # truncate. Normalise to "no cap" and warn on stderr — stdout is
+    # reserved for JSON-RPC frames on the MCP transport.
+    if top_k is not None and top_k < 0:
+        import sys
+        print(
+            f"warning: top_k={top_k} is negative; ignoring (no cap applied).",
+            file=sys.stderr,
+            flush=True,
+        )
+        top_k = 0
+
     # Only forward pre_fix as a kwarg when the caller actually supplied one
     # — keeps the existing ``build_pack`` call shape identical for the vast
     # majority of callers (including test mocks that don't accept the new
@@ -264,6 +281,22 @@ def get_context_pack(
             query,
             **build_pack_kwargs,
         )
+        # Apply the caller-facing cap post-ranking. No cap when ``top_k``
+        # is 0/unset; when the pool is smaller than the cap, the full pool
+        # is returned unchanged (documented; no warning).
+        if top_k and top_k > 0 and len(pack.selected_items) > top_k:
+            pack.selected_items = pack.selected_items[:top_k]
+            try:
+                pack.total_est_tokens = sum(
+                    int(getattr(i, "est_tokens", 0) or 0) for i in pack.selected_items
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            if hasattr(pack, "total_items"):
+                try:
+                    pack.total_items = len(pack.selected_items)
+                except Exception:  # noqa: BLE001
+                    pass
         if format == "compact":
             return {"text": pack.to_compact_text(), "has_more": pack.has_more, "total_items": pack.total_items}
         return pack.model_dump(mode="json")
