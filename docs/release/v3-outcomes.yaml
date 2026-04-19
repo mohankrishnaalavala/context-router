@@ -388,3 +388,117 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check hub-bridge-sqlite-reuse"
       expected_stdout_contains: "PASS hub-bridge-sqlite-reuse"
+
+  # ──────────────────── v3.2 Wave 1 (added 2026-04-19) ────────────────────
+
+  - id: function-level-reason
+    severity: P0
+    effort: M
+    title: "Pack items surface symbol name + line range in `reason` (not generic category labels)"
+    outcome: "For any ContextItem backed by a symbol, `reason` includes the symbol's name and source line range (e.g. 'Modified `OAuth2PasswordRequestForm.__init__` lines 59-159')"
+    threshold: "on fastapi@fa3588c, ≥80% of items with a non-null symbol_id have a `reason` containing both a symbol identifier and a `lines N-M` substring"
+    negative_case: "items without a backing symbol (raw file entries) retain the current category-level reason; no regression on existing reason categories"
+    verify:
+      cmd: "scripts/smoke-v3.sh check function-level-reason"
+      expected_stdout_contains: "PASS function-level-reason"
+
+  - id: mode-mismatch-warning
+    severity: P1
+    effort: XS
+    title: "Review mode warns when invoked diff-less with a free-text query"
+    outcome: "`pack --mode review --query '<free text>'` with no staged/unstaged diff prints a stderr warning: 'review mode expects a diff; for query-only input, try --mode debug'"
+    threshold: "stderr of the test invocation contains the substring 'try --mode debug'"
+    negative_case: "`pack --mode review` against a repo with an actual diff prints NO warning (silent when correctly used)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check mode-mismatch-warning"
+      expected_stdout_contains: "PASS mode-mismatch-warning"
+
+  - id: top-k-flag
+    severity: P2
+    effort: S
+    title: "`--top-k N` caps selected_items after ranking"
+    outcome: "`pack --top-k 10 --mode review --project-root .` returns exactly 10 items (or fewer if the ranked pool is smaller); MCP `get_context_pack` inputSchema includes `top_k` integer"
+    threshold: "JSON `selected_items` length == 10 on a repo that ranks >10 items"
+    negative_case: "without `--top-k`, item count unchanged from v3.1 (no silent cap introduced)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check top-k-flag"
+      expected_stdout_contains: "PASS top-k-flag"
+
+  - id: reproducible-eval-harness
+    severity: P1
+    effort: M
+    title: "eval/fastapi-crg/ harness reproduces CR vs CRG scoring on 3 fastapi commits"
+    outcome: "`bash eval/fastapi-crg/run.sh` against a local fastapi checkout produces per-task CR + CRG JSON outputs and a scoring summary identical in shape to .eval_results/judge_summary.md"
+    threshold: "exit 0; generated files: cr_task{1,2,3}.json, crg_task{1,2,3}.json, summary.md present in the output dir"
+    negative_case: "missing fastapi checkout prints a clear error telling the user where to clone, not a traceback"
+    verify:
+      cmd: "scripts/smoke-v3.sh check reproducible-eval-harness"
+      expected_stdout_contains: "PASS reproducible-eval-harness"
+
+  # ──────────────────── v3.2 Wave 2 (added 2026-04-19) ────────────────────
+
+  - id: review-tail-cutoff
+    severity: P1
+    effort: S
+    title: "Review-mode pack drops low-confidence `source_type=file` tail when higher tiers fill the budget"
+    outcome: "When higher-tier items (changed_file, blast_radius) already reach `token_budget`, trailing `source_type=file` items with confidence < 0.3 are excluded from `selected_items`"
+    threshold: "on fastapi@fa3588c, `pack --mode review` returns ≤50 items (down from 498 on v3.1) without losing the ground-truth file"
+    negative_case: "`pack --keep-low-signal` preserves the full tail (escape hatch for debugging)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check review-tail-cutoff"
+      expected_stdout_contains: "PASS review-tail-cutoff"
+
+  - id: capabilities-hub-boost-cache-key
+    severity: P1
+    effort: XS
+    title: "pack_cache key includes capabilities.hub_boost so toggling doesn't hit stale cache"
+    outcome: "With an identical query, `CAPABILITIES_HUB_BOOST=1 pack ...` and `CAPABILITIES_HUB_BOOST=0 pack ...` produce cache MISSes on the first call of each variant (not a stale hit)"
+    threshold: "pack_cache hit-count telemetry shows 2 misses + 2 hits across a 4-call sequence alternating the flag"
+    negative_case: "identical flag value on successive calls still hits the cache (no regression)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check capabilities-hub-boost-cache-key"
+      expected_stdout_contains: "PASS capabilities-hub-boost-cache-key"
+
+  - id: homebrew-tap-automation
+    severity: P0
+    effort: S
+    title: "Homebrew tap is bumped automatically on every tag push (no manual step)"
+    outcome: "Pushing a `v<version>` tag triggers a `homebrew-publish` job in release.yml that opens the tap repo, rewrites Formula/context-router.rb with the new version + sha256, and pushes; no human action between tag push and `brew upgrade context-router` working"
+    threshold: "after a dry-run tag push on a test version, the tap repo shows a new commit bumping the formula within 10 minutes; the rendered formula has `version` and `sha256` fields filled (no template placeholders)"
+    negative_case: "missing `HOMEBREW_TAP_TOKEN` secret produces a clear setup-instruction error in the job log, not a silent skip"
+    verify:
+      cmd: "scripts/smoke-v3.sh check homebrew-tap-automation"
+      expected_stdout_contains: "PASS homebrew-tap-automation"
+
+  - id: symbol-stub-dedup
+    severity: P1
+    effort: S
+    title: "Near-duplicate symbol entries (__init__ stubs, getters, setters) are collapsed into one representative item"
+    outcome: "Multiple pack items with identical `excerpt` and the same `title` pattern (e.g. `def __init__(`) within a single file are deduped to one item with `duplicates_hidden` counter incremented"
+    threshold: "on fastapi@fa3588c task 1, pack item count drops from 498 to ≤ 100 without losing the ground-truth file; `duplicates_hidden` on the representative __init__ item is ≥ 2"
+    negative_case: "items with different excerpts but the same title (e.g. two distinct classes both named Config) are NOT merged"
+    verify:
+      cmd: "scripts/smoke-v3.sh check symbol-stub-dedup"
+      expected_stdout_contains: "PASS symbol-stub-dedup"
+
+  - id: pre-fix-review-mode
+    severity: P2
+    effort: M
+    title: "`pack --mode review --pre-fix <SHA>` computes a diff-less pre-commit pack for CRG-comparable workflow"
+    outcome: "`context-router pack --mode review --pre-fix <sha> --project-root .` returns a pack ranked as if the working tree were at `<sha>^` (parent) — no diff required, so the same eval input that CRG takes (a single commit SHA) is usable on CR"
+    threshold: "on fastapi@fa3588c, pre-fix pack includes `fastapi/security/oauth2.py` in the top-3 items without being handed the fix diff"
+    negative_case: "invalid SHA → clear error, not a traceback; missing `--pre-fix` value still runs standard review mode"
+    verify:
+      cmd: "scripts/smoke-v3.sh check pre-fix-review-mode"
+      expected_stdout_contains: "PASS pre-fix-review-mode"
+
+  - id: diff-aware-ranking-boost
+    severity: P2
+    effort: M
+    title: "Items whose symbol lies on the blame trail of changed lines get a structural boost"
+    outcome: "When a diff is present, ranker adds a `+0.15` boost to any item whose symbol's source lines overlap the changed-line set of any changed file; telemetry exposes which items received the boost"
+    threshold: "on fastapi@fa3588c with its diff applied, all 4 items under `OAuth2PasswordRequest*` rank in the top 5 (up from mixed position in v3.1)"
+    negative_case: "diff-less invocation (no staged/unstaged changes) does NOT apply the boost (no-op)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check diff-aware-ranking-boost"
+      expected_stdout_contains: "PASS diff-aware-ranking-boost"
