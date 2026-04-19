@@ -1,0 +1,2 @@
+# Eval artifacts are local; they depend on user's fastapi checkout state.
+output/

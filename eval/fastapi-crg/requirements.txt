@@ -1,0 +1,5 @@
+# Python deps for eval/fastapi-crg/score.py.
+# run.sh uses the system pipx-installed context-router / code-review-graph;
+# these are just the deps score.py needs.
+PyYAML>=6.0
+tiktoken>=0.7.0
