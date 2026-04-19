@@ -160,6 +160,15 @@ def pack(
     root = Path(project_root) if project_root else None
     err_path = Path(error_file) if error_file else None
 
+    # Silent-failure rule (mode-mismatch-warning): review mode is designed
+    # to summarise a PR diff, not to find code from a free-text description.
+    # When the caller passes `--mode review --query "..."` against a repo
+    # with no staged/unstaged diff, warn them on stderr that they likely
+    # wanted `--mode debug`. Skipped (with a notice) on non-git trees so
+    # we never silently fail.
+    if mode == "review" and query.strip():
+        _maybe_warn_review_needs_diff(root if root else Path.cwd())
+
     # --wiki short-circuits the pack pipeline: no ranker, no token budget.
     # It needs a concrete project_root so the wiki generator can find
     # .context-router/context-router.db — mirror the orchestrator's
@@ -204,6 +213,68 @@ def pack(
         return
 
     _print_pack(result)
+
+
+def _maybe_warn_review_needs_diff(project_root) -> None:  # type: ignore[no-untyped-def]
+    """Warn on stderr when ``--mode review --query ...`` runs diff-less.
+
+    Review mode is built around summarising a diff (staged + unstaged work
+    tree changes). If the caller supplies a free-text query against a
+    clean working tree, they almost certainly meant ``--mode debug``. We
+    emit a one-line stderr nudge — silent no-op would be a footgun per
+    the project quality gate.
+
+    * Clean git tree  → warn with the canonical ``try --mode debug`` text.
+    * Dirty git tree  → silent (the happy path).
+    * Non-git tree / git failure → emit a skip notice on stderr so the
+      absence of the main warning is never silent.
+    """
+    import subprocess
+    from pathlib import Path as _Path
+
+    root_path = _Path(project_root)
+    try:
+        unstaged = subprocess.run(
+            ["git", "diff", "--quiet"],
+            cwd=str(root_path),
+            capture_output=True,
+            check=False,
+        )
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=str(root_path),
+            capture_output=True,
+            check=False,
+        )
+    except (FileNotFoundError, OSError) as exc:
+        typer.secho(
+            f"notice: review-mode diff check skipped ({type(exc).__name__}: {exc})",
+            err=True,
+            fg="yellow",
+        )
+        return
+
+    # Git returns non-zero rc for "not a repo" (usually 128) — we cannot
+    # distinguish "clean tree" from "no repo" by rc 0 alone, so treat any
+    # rc >= 2 as a git-level failure and surface it.
+    if unstaged.returncode >= 2 or staged.returncode >= 2:
+        reason = (unstaged.stderr or staged.stderr or b"").decode(
+            "utf-8", errors="replace"
+        ).strip()
+        typer.secho(
+            f"notice: review-mode diff check skipped (not a git repo or git error: {reason})",
+            err=True,
+            fg="yellow",
+        )
+        return
+
+    # rc 0 on both = clean tree, rc 1 on either = diff present (happy path).
+    if unstaged.returncode == 0 and staged.returncode == 0:
+        typer.secho(
+            "warning: review mode expects a diff; for query-only input, try --mode debug",
+            err=True,
+            fg="yellow",
+        )
 
 
 def _emit_wiki(*, root, out_path) -> None:  # type: ignore[no-untyped-def]
