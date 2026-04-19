@@ -1,25 +1,27 @@
-# context-router Homebrew Formula
+# context-router Homebrew Formula — TEMPLATE
 #
-# This file is the source of truth for the formula.
-# The live formula lives in the tap repo:
+# This file is the source of truth for the formula. It is a TEMPLATE: the
+# version/sha256 tokens (double-brace style, see url/sha256/version below)
+# are substituted at release time by scripts/render_homebrew_formula.py
+# (invoked from the `homebrew-publish` job in .github/workflows/release.yml).
+#
+# The live, rendered formula is committed to the tap repo:
 #   https://github.com/mohankrishnaalavala/homebrew-context-router
 #
-# To publish:
-#   1. Create github.com/mohankrishnaalavala/homebrew-context-router
-#   2. Copy this file to Formula/context-router.rb in that repo
-#   3. Users install with:
-#        brew tap mohankrishnaalavala/context-router
-#        brew install context-router
+# DO NOT `brew install` this file directly — the placeholders will fail to
+# parse. Users install the rendered formula via the tap:
+#   brew tap mohankrishnaalavala/context-router
+#   brew install context-router
 
 class ContextRouter < Formula
   include Language::Python::Virtualenv
 
   desc "Minimum-context selector for AI coding agents — MCP server + CLI"
   homepage "https://github.com/mohankrishnaalavala/context-router"
-  url "https://files.pythonhosted.org/packages/b7/70/1de65ebfce8e5dfb3cbdcef579383987479021b4c9ffc128c7526ce31aad/context_router_cli-0.3.0-py3-none-any.whl"
-  sha256 "9d74803aa229b5c41b6111e5c661381925bb79ce10c57ad75716c2ef0a6b5122"
+  url "https://github.com/mohankrishnaalavala/context-router/archive/refs/tags/v{{VERSION}}.tar.gz"
+  sha256 "{{SHA256}}"
   license "MIT"
-  version "3.0.0"
+  version "{{VERSION}}"
 
   depends_on "python@3.12"
 
