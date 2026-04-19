@@ -1552,6 +1552,40 @@ _check_reproducible-eval-harness() {
   echo "PASS reproducible-eval-harness (scaffolding OK; run 'bash eval/fastapi-crg/run.sh' for a full eval)"
 }
 
+_check_top-k-flag() {
+  # P2 v3.2: `pack --top-k N` caps selected_items at N post-ranking.
+  # Negative case: without --top-k, the item count matches v3.1 (no
+  # silent cap introduced). We use this repo as the fixture because it
+  # ranks > 10 items for the "orchestrator" query on any reasonable
+  # `--mode review` or `--mode implement` run.
+  local capped uncapped
+  capped="$(cd "${REPO_ROOT}" && uv run context-router pack --mode review --project-root "${REPO_ROOT}" --query "orchestrator" --top-k 5 --json 2>/dev/null)" || {
+    echo "FAIL top-k-flag: pack --top-k 5 failed"; return 1
+  }
+  local capped_count
+  capped_count="$(echo "${capped}" | python3 -c "import json,sys; p=json.load(sys.stdin); print(len(p.get('selected_items', [])))" 2>/dev/null)" || {
+    echo "FAIL top-k-flag: failed to parse capped pack JSON"; return 1
+  }
+  if [[ -z "${capped_count}" || "${capped_count}" -gt 5 ]]; then
+    echo "FAIL top-k-flag: --top-k 5 returned ${capped_count} items (expected <= 5)"
+    return 1
+  fi
+
+  uncapped="$(cd "${REPO_ROOT}" && uv run context-router pack --mode review --project-root "${REPO_ROOT}" --query "orchestrator" --json 2>/dev/null)" || {
+    echo "FAIL top-k-flag: uncapped pack command failed"; return 1
+  }
+  local uncapped_count
+  uncapped_count="$(echo "${uncapped}" | python3 -c "import json,sys; p=json.load(sys.stdin); print(len(p.get('selected_items', [])))" 2>/dev/null)" || {
+    echo "FAIL top-k-flag: failed to parse uncapped pack JSON"; return 1
+  }
+  if [[ -z "${uncapped_count}" || "${uncapped_count}" -le 5 ]]; then
+    echo "FAIL top-k-flag: uncapped pack returned ${uncapped_count} items (expected > 5 to exercise the cap)"
+    return 1
+  fi
+
+  echo "PASS top-k-flag (capped=${capped_count}, uncapped=${uncapped_count})"
+}
+
 # ──────────────────── registry driver ────────────────────
 
 _yq() {
