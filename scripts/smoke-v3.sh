@@ -1323,6 +1323,55 @@ PY
   fi
 }
 
+_check_homebrew-tap-automation() {
+  # Three assertions:
+  #   1. release.yml has a homebrew-publish job (grep the job key).
+  #   2. scripts/render_homebrew_formula.py exists and is executable.
+  #   3. The renderer fully substitutes {{VERSION}} / {{SHA256}} against the
+  #      real template — no placeholders in output, and the version/sha256
+  #      lines carry the values we passed.
+  local workflow="${REPO_ROOT}/.github/workflows/release.yml"
+  local renderer="${REPO_ROOT}/scripts/render_homebrew_formula.py"
+  local template="${REPO_ROOT}/docs/homebrew-formula.rb"
+
+  if ! grep -q '^  homebrew-publish:' "${workflow}"; then
+    echo "FAIL homebrew-tap-automation: .github/workflows/release.yml missing 'homebrew-publish:' job"
+    return 1
+  fi
+
+  if [[ ! -x "${renderer}" ]]; then
+    echo "FAIL homebrew-tap-automation: ${renderer} missing or not executable"
+    return 1
+  fi
+
+  if [[ ! -f "${template}" ]]; then
+    echo "FAIL homebrew-tap-automation: template ${template} missing"
+    return 1
+  fi
+
+  local out
+  out="$(python3 "${renderer}" --template "${template}" --version 9.9.9 \
+           --sha256 deadbeef0000000000000000000000000000000000000000000000000000cafe 2>/dev/null)" \
+    || { echo "FAIL homebrew-tap-automation: renderer exited non-zero"; return 1; }
+
+  if printf '%s' "${out}" | grep -q '{{'; then
+    echo "FAIL homebrew-tap-automation: rendered output still contains {{...}} placeholders"
+    return 1
+  fi
+
+  if ! printf '%s' "${out}" | grep -q 'version "9.9.9"'; then
+    echo "FAIL homebrew-tap-automation: rendered output missing 'version \"9.9.9\"' line"
+    return 1
+  fi
+
+  if ! printf '%s' "${out}" | grep -q 'sha256 "deadbeef0000000000000000000000000000000000000000000000000000cafe"'; then
+    echo "FAIL homebrew-tap-automation: rendered output missing expected sha256 line"
+    return 1
+  fi
+
+  echo "PASS homebrew-tap-automation (workflow job present, renderer substitutes cleanly)"
+}
+
 _check_reproducible-eval-harness() {
   # P1 outcome: `bash eval/fastapi-crg/run.sh` must produce per-task CR + CRG
   # JSON outputs and a scoring summary identical in shape to the original
@@ -1460,6 +1509,19 @@ _run_one() {
       echo "FAIL ${id}: no handler function ${fn} in smoke-v3.sh"
       return 1
     fi
+  fi
+  # If the registry has no entry for this id BUT a handler is defined, call
+  # the handler directly. This lets a feature branch run its own smoke check
+  # before the registry PR that adds the outcome entry has merged. Without
+  # this fallback, `check <new-id>` would silently fall through to the
+  # empty-cmd branch below — an anti-pattern the quality gate disallows.
+  if [[ -z "${cmd}" && -z "${expect}" ]]; then
+    local fn="_check_${id}"
+    if declare -f "${fn}" >/dev/null 2>&1; then
+      "${fn}"; return $?
+    fi
+    echo "FAIL ${id}: not in registry and no handler function ${fn} defined"
+    return 1
   fi
   # Otherwise run the cmd in a subshell and grep output for expectation.
   local out
