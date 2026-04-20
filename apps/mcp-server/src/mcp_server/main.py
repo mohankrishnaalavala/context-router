@@ -28,24 +28,30 @@ from mcp_server import tools
 _write_lock: Any = threading.RLock()
 
 
-# Phase-4 mcp-serverinfo-version: the MCP ``initialize`` response's
-# ``serverInfo.version`` MUST reflect the actually installed package so
-# clients can reason about capabilities.  We resolve the version once
-# at import time from installed package metadata.  If the package is
-# not installed (e.g. the server was launched from a source tree that
-# was never ``pip install``ed), we raise a clear ImportError on import
-# rather than silently shipping a bogus ``"0.0.0"`` — silent fallback
-# would let stale/unknown versions ride into production MCP handshakes.
+# Resolve serverInfo.version from installed package metadata. Two
+# distributions can own the bundled source: `context-router-mcp-server`
+# when the server is installed from a source checkout via `pip install -e
+# apps/mcp-server`, and `context-router-cli` when the published wheel
+# ships the module via hatch force-include (the production path —
+# everyone installing from PyPI/pipx/Homebrew lands here). The release
+# process bumps both distributions in lockstep, so either's version is a
+# truthful stand-in. Only raise if neither is installed, which means the
+# module is being imported from an environment where context-router has
+# never been pip-installed at all.
 _MCP_SERVER_DIST = "context-router-mcp-server"
+_CLI_BUNDLE_DIST = "context-router-cli"
 try:
     _SERVER_VERSION: str = _pkg_version(_MCP_SERVER_DIST)
-except PackageNotFoundError as exc:  # pragma: no cover — import-time guard
-    raise ImportError(
-        f"context-router MCP server package {_MCP_SERVER_DIST!r} is not "
-        "installed; cannot determine serverInfo.version. Install the "
-        "package (e.g. `uv sync` or `pip install -e apps/mcp-server`) "
-        "and retry."
-    ) from exc
+except PackageNotFoundError:
+    try:
+        _SERVER_VERSION = _pkg_version(_CLI_BUNDLE_DIST)
+    except PackageNotFoundError as exc:  # pragma: no cover — import-time guard
+        raise ImportError(
+            f"Neither {_MCP_SERVER_DIST!r} nor {_CLI_BUNDLE_DIST!r} is "
+            "installed; cannot determine MCP serverInfo.version. Install "
+            "`context-router-cli` (pip/pipx/brew) or `pip install -e "
+            "apps/mcp-server` from a source checkout."
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
