@@ -469,6 +469,12 @@ class Orchestrator:
             ttl=self._PACK_CACHE_TTL_SECONDS,
         )
         self._pack_cache_lock = threading.RLock()
+        # v3.3.0 β5 — track the last observed ``repo_id`` so a live
+        # Orchestrator instance (as used by the long-lived MCP server)
+        # can detect an out-of-process reindex and surface a one-line
+        # stderr advisory when the TTLCache's effective key rotated.
+        # ``None`` on the first build; updated after each lookup.
+        self._last_repo_id: str | None = None
         # v3.2 `pre-fix-review-mode`: when set to a commit SHA string, the
         # review-mode candidate builder treats the diff of that commit (vs
         # its parent) as the change-set, instead of the working-tree diff.
@@ -522,7 +528,7 @@ class Orchestrator:
             h.update(b"|")
         return h.hexdigest()
 
-    def invalidate_cache(self) -> None:
+    def invalidate_cache(self, *, reason: str = "manual") -> None:
         """Drop all cached packs (L1 in-process + L2 SQLite).
 
         Call after ``build_index``/``update_index``. The L2 ``pack_cache``
@@ -530,9 +536,29 @@ class Orchestrator:
         invalidated for all future repo_ids by the mtime-derived key
         rotation). If the SQLite layer is unavailable we emit a stderr
         warning — per CLAUDE.md, silent failure is a bug.
+
+        Args:
+            reason: Human-readable cause that is folded into the stderr
+                advisory the operator sees. The v3.3.0 β5 contract
+                requires ``"repo reindexed"`` when the invalidation is
+                triggered by an index bump; anything else (e.g. test
+                cleanup) uses the default ``"manual"`` and is still
+                surfaced so the operator is never surprised.
         """
+        had_entries = False
         with self._pack_cache_lock:
+            had_entries = len(self._pack_cache) > 0
             self._pack_cache.clear()
+        # v3.3.0 β5 — always surface a one-line stderr note when the L1
+        # cache actually had entries to drop. Silent invalidation (the
+        # old behaviour) is a footgun: users notice the slow second run
+        # but never see why. Skipped on an empty cache so warm-start
+        # tests don't get spammed.
+        if had_entries:
+            print(
+                f"note: ranking cache invalidated ({reason})",
+                file=sys.stderr,
+            )
         db_path = self._root / ".context-router" / "context-router.db"
         if not db_path.exists():
             return
@@ -806,6 +832,21 @@ class Orchestrator:
             items_hash_kwargs["keep_low_signal"] = True
         items_hash = self._compute_items_hash(**items_hash_kwargs)
         repo_id = self._compute_repo_id()
+        # v3.3.0 β5 — detect reindex-driven cache rotation. ``repo_id`` is
+        # derived from the symbols table shape, so a ``build_index`` /
+        # ``update_index`` run shifts it. Any long-lived Orchestrator
+        # (notably the MCP server) holds onto L1 entries keyed by the
+        # prior id; surface a one-line stderr note when we see the shift
+        # so the operator knows the next call is a cold build, not a
+        # spurious slowdown. The cache entries themselves are left alone
+        # — they expire naturally via the TTL — because the new key
+        # bypasses them anyway.
+        if self._last_repo_id is not None and self._last_repo_id != repo_id:
+            print(
+                "note: ranking cache invalidated (repo reindexed)",
+                file=sys.stderr,
+            )
+        self._last_repo_id = repo_id
         # ``CAPABILITIES_HUB_BOOST`` participates in the cache key because
         # the ranker applies or skips the hub/bridge structural boost
         # depending on its value — two packs built for the same query
@@ -965,6 +1006,18 @@ class Orchestrator:
                 runtime_signals=runtime_signals,
                 past_debug_files=past_debug_files,
                 feedback_adjustments=feedback_adjustments,
+            )
+
+            # v3.3.0 β3 — resolve or drop ``<external>`` placeholder items.
+            # The graph writer materialises symbol stubs with
+            # ``file=Path("<external>")`` for inheritance targets whose
+            # source is outside the indexed repo. These bleed into review
+            # packs as rank-2 items with no file path, eating tokens and
+            # precision. Policy: try to resolve to a real path via import
+            # adjacency; drop the item otherwise. Per-pack drop count is
+            # surfaced on ``pack.metadata.external_dropped``.
+            candidates, _external_dropped = self._resolve_external_items(
+                candidates, edge_repo, repo_name="default",
             )
 
             if progress_cb is not None:
@@ -1144,6 +1197,12 @@ class Orchestrator:
         # communicates "boost pathway ran".
         if mode == "review":
             pack_metadata["boosted_items"] = list(boosted_items_ids)
+
+        # v3.3.0 β3 — surface the number of ``<external>`` placeholder
+        # items we dropped (or resolved) this build. Zero is still
+        # reported so agents / eval harnesses can tell the difference
+        # between "no externals seen" and "pipeline skipped".
+        pack_metadata["external_dropped"] = int(_external_dropped)
 
         total = sum(i.est_tokens for i in page_items)
         reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
@@ -1987,6 +2046,136 @@ class Orchestrator:
             )
             return annotated, note
         return annotated, None
+
+    # ------------------------------------------------------------------
+    # v3.3.0 β3 — external reference resolution / filtering
+    # ------------------------------------------------------------------
+
+    # Marker path the graph writer uses for external symbol stubs. Any
+    # item whose ``path_or_ref`` equals this sentinel represents a symbol
+    # whose source lives outside the indexed repo (e.g. a framework base
+    # class referenced by an ``extends``/``implements`` edge). Review
+    # packs used to surface these as opaque rank-2 entries with no file
+    # path — eating tokens and poisoning precision — so v3.3.0 resolves
+    # or drops them before the ranker ever sees them.
+    _EXTERNAL_PATH_MARKER: str = "<external>"
+
+    def _resolve_external_items(
+        self,
+        items: list[ContextItem],
+        edge_repo: EdgeRepository,
+        repo_name: str = "default",
+    ) -> tuple[list[ContextItem], int]:
+        """Resolve or drop items whose ``path_or_ref`` is ``<external>``.
+
+        Two-step resolution:
+
+        1. Try to map the external stub back to a **real** in-repo file by
+           walking inbound edges: if exactly one in-repo file references
+           the external symbol, rewrite the item to point at that file
+           (the referring file is the one the reviewer actually needs to
+           open). When multiple files reference it, the "real" owner is
+           ambiguous and we fall through to step 2.
+        2. Drop the item from the candidate pool — we never emit an opaque
+           ``<external>`` placeholder because the ranker can't give the
+           user a file to open.
+
+        Returns the filtered item list and the number of items that were
+        dropped (NOT rewritten) so callers can surface the count on
+        ``pack.metadata.external_dropped``.
+
+        Both CLI ``pack --json`` and MCP ``get_context_pack`` share this
+        path — they both call :meth:`build_pack` which invokes this
+        helper once per pack build.
+        """
+        if not items:
+            return items, 0
+
+        kept: list[ContextItem] = []
+        dropped = 0
+        # Cheap inbound-file lookup: caller supplies an EdgeRepository so
+        # we can do a single SQL-query per external symbol name instead
+        # of loading the whole edge graph. Cache within this build to
+        # avoid re-querying the same name across repeat items.
+        resolution_cache: dict[str, str | None] = {}
+        for item in items:
+            if item.path_or_ref != self._EXTERNAL_PATH_MARKER:
+                kept.append(item)
+                continue
+
+            # Try to resolve. The symbol's name is embedded in the title
+            # in the ``"name (<external>)"`` form produced by _make_item.
+            # If that shape ever changes the regex falls back to dropping.
+            sym_name = item.title.split(" (")[0].strip() if item.title else ""
+            resolved: str | None
+            if sym_name and sym_name in resolution_cache:
+                resolved = resolution_cache[sym_name]
+            else:
+                resolved = (
+                    self._lookup_external_referrer(edge_repo, repo_name, sym_name)
+                    if sym_name
+                    else None
+                )
+                resolution_cache[sym_name] = resolved
+
+            if resolved:
+                # Rewrite in-place (``model_copy`` keeps the rest of the
+                # item intact, including confidence and est_tokens). The
+                # title's parenthetical is updated so reviewers see a real
+                # file name instead of ``<external>``.
+                basename = Path(resolved).name
+                new_title = f"{sym_name} ({basename})" if sym_name else item.title
+                kept.append(
+                    item.model_copy(
+                        update={
+                            "path_or_ref": resolved,
+                            "title": new_title,
+                        }
+                    )
+                )
+            else:
+                dropped += 1
+
+        # Silent-failure rule: ``<external>`` items used to leak through
+        # to review packs and hurt precision. The drop counter is already
+        # surfaced on ``pack.metadata.external_dropped``, but emit a
+        # stderr note the first time we drop one so the filter is never
+        # invisible to the operator.
+        if dropped > 0:
+            print(
+                f"note: dropped {dropped} opaque <external> placeholder "
+                "item(s) from pack (no resolvable file path)",
+                file=sys.stderr,
+            )
+        return kept, dropped
+
+    @staticmethod
+    def _lookup_external_referrer(
+        edge_repo: EdgeRepository,
+        repo_name: str,
+        sym_name: str,
+    ) -> str | None:
+        """Return the single in-repo file that references *sym_name*, or None.
+
+        Implementation: run :meth:`EdgeRepository.get_adjacent_files`
+        keyed on the external-stub file marker. If exactly one distinct
+        non-``<external>`` file path comes back we can confidently
+        attribute the reference to that file; two or more ⇒ ambiguous
+        (caller drops the item). Any DB failure returns None.
+        """
+        try:
+            candidates = edge_repo.get_adjacent_files(
+                repo_name, Orchestrator._EXTERNAL_PATH_MARKER
+            )
+        except Exception:  # noqa: BLE001 — DB errors should never block pack build
+            return None
+        real_files = {
+            p for p in candidates
+            if p and p != Orchestrator._EXTERNAL_PATH_MARKER
+        }
+        if len(real_files) == 1:
+            return next(iter(real_files))
+        return None
 
     @staticmethod
     def _is_test_file(file_path: str) -> bool:
