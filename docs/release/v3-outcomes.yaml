@@ -505,6 +505,8 @@ outcomes:
 
   # ──────────────────── v3.3.0 — first-run works, MCP streams ────────────────────
 
+  # Lane α — packaging
+
   - id: packaging-fresh-install
     severity: P0
     effort: M
@@ -516,7 +518,7 @@ outcomes:
       cmd: "scripts/smoke-v3.sh check packaging-fresh-install"
       expected_stdout_contains: "PASS packaging-fresh-install"
 
-  # ──────────────────── v3.3.0 lane γ (MCP streaming + resources) ────────────────────
+  # Lane γ — MCP streaming + resources
 
   - id: mcp-progress-notifications
     severity: P1
