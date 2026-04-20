@@ -1,6 +1,6 @@
 [project]
 name = "context-router-runtime"
-version = "3.1.0"
+version = "3.2.0"
 requires-python = ">=3.12"
 description = "Stack trace, test failure, and log parsers for context-router (Phase 3)"
 dependencies = ["context-router-contracts"]

@@ -1,0 +1,14 @@
+# context-router project configuration
+# See docs/architecture.md for all options.
+
+token_budget: 8000
+
+capabilities:
+  llm_summarization: false
+
+ignore_patterns:
+  - ".git"
+  - "__pycache__"
+  - "*.pyc"
+  - "*.egg-info"
+  - ".venv"
