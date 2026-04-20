@@ -237,6 +237,8 @@ context-router pack --mode MODE [--query TEXT] [--project-root PATH] [--json]
 | `handover` | recent changes → memory observations → decisions → blast radius | Onboarding, sprint docs |
 | `minimal` | implement-mode ranking, hard-capped to the top 5 items | Cheap triage; pairs with a `metadata.next_tool_suggestion` hint for the next call |
 
+Not sure which mode to pick? See the full **[mode decision guide](docs/guides/modes.md)** — one paragraph per mode plus an "I am trying to… → mode" table.
+
 **Token budget** (default: 8 000 tokens) is read from `.context-router/config.yaml`. Items are dropped lowest-confidence first, but at least one item per source category is always preserved. `--max-tokens N` overrides the budget for a single call (minimal mode defaults to 800 when the flag is omitted).
 
 The pack is saved to `.context-router/last-pack.json` for later inspection.

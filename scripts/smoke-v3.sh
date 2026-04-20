@@ -2013,6 +2013,60 @@ _check_top-k-flag() {
   echo "PASS top-k-flag (capped=${capped_count}, uncapped=${uncapped_count})"
 }
 
+_check_mcp-progress-notifications() {
+  # v3.3.0 γ1: verify initialize caps advertise `progress: true` AND
+  # tools/call get_context_pack with progressToken emits ≥ 1 progress frame
+  # for a pack over the 2000-token threshold.  The probe leaves the env
+  # threshold at its default so we actually exercise the production gate.
+  # Fixture is this repo — large enough to exceed 2000 tokens on typical
+  # queries; if the ranker ever shrinks below that, the probe fails loudly
+  # rather than silently passing on an overridden threshold.
+  uv run context-router index --project-root "${REPO_ROOT}" >/dev/null 2>&1 || {
+    echo "FAIL mcp-progress-notifications: index step failed"
+    return 1
+  }
+  local result
+  result="$(uv run python scripts/mcp_progress_notifications_probe.py "${REPO_ROOT}" 2>&1)" || {
+    echo "FAIL mcp-progress-notifications: harness returned non-zero"
+    echo "${result}" | head -5
+    return 1
+  }
+  if [[ "${result}" == PASS* ]]; then
+    echo "${result}"
+    return 0
+  fi
+  echo "FAIL mcp-progress-notifications: ${result}"
+  return 1
+}
+
+_check_mcp-resources() {
+  # v3.3.0 γ2: PackStore.save persists a pack; MCP resources/list and
+  # resources/read roundtrip the stored URI and JSON; resources/read on a
+  # malformed URI returns JSON-RPC code=-32602.  The probe uses its own
+  # temp project_root so repeat runs are isolated.
+  local result
+  result="$(uv run python scripts/mcp_resources_probe.py "${REPO_ROOT}" 2>&1)" || {
+    echo "FAIL mcp-resources: harness returned non-zero"
+    echo "${result}" | head -5
+    return 1
+  }
+  if [[ "${result}" == PASS* ]]; then
+    echo "${result}"
+    return 0
+  fi
+  echo "FAIL mcp-resources: ${result}"
+  return 1
+}
+
+_check_packaging-fresh-install() {
+  # v3.3.0 α1: a freshly-built CLI wheel installed into a clean venv must
+  # expose all language-analyzer entry points AND produce a non-empty
+  # symbols table when asked to index a tiny fixture. Implementation lives
+  # in scripts/smoke-packaging.sh so the behavior is also runnable by hand
+  # and from CI workflows outside of smoke-v3.sh.
+  bash "${REPO_ROOT}/scripts/smoke-packaging.sh"
+}
+
 # ──────────────────── registry driver ────────────────────
 
 _yq() {
