@@ -982,7 +982,26 @@ class Orchestrator:
                 # open a fresh sqlite3.Connection per pack build.
                 db_connection=db.connection,
             )
-            all_ranked = ranker.rank(candidates, query, mode)
+            # v3.2 outcome ``diff-aware-ranking-boost`` (P2): when review
+            # mode has a diff to reason about — either the working-tree
+            # diff (``HEAD``) or a ``--pre-fix`` commit — thread the spec
+            # through so the ranker can lift items whose symbol lines
+            # overlap the changed-line set. In non-review modes, pass
+            # ``None`` so the boost is a strict no-op (DoD negative case).
+            diff_spec_for_rank: str | None = None
+            if mode == "review":
+                diff_spec_for_rank = (
+                    self._pre_fix if self._pre_fix else "HEAD"
+                )
+            boosted_items_ids: list[str] = []
+            all_ranked = ranker.rank(
+                candidates,
+                query,
+                mode,
+                diff_spec=diff_spec_for_rank,
+                project_root=self._root,
+                boosted_items_sink=boosted_items_ids,
+            )
             all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
             # v3.2 outcome ``symbol-stub-dedup`` (P1): collapse identical
             # symbol stubs within the same file. The ranker already runs
@@ -1077,6 +1096,14 @@ class Orchestrator:
         # when the threshold (>=3 annotated top-5 items) is met.
         if mode == "debug" and debug_flow_note:
             pack_metadata["note"] = debug_flow_note
+
+        # v3.2 outcome ``diff-aware-ranking-boost`` (P2): surface the set
+        # of item IDs that received the +0.15 structural bump. Always
+        # present on review-mode packs (empty list when no overlaps hit);
+        # omitted for non-review modes so the key's presence cleanly
+        # communicates "boost pathway ran".
+        if mode == "review":
+            pack_metadata["boosted_items"] = list(boosted_items_ids)
 
         total = sum(i.est_tokens for i in page_items)
         reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
