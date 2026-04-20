@@ -1,7 +1,21 @@
-"""context-router pack command — generates a ranked context pack."""
+"""context-router pack command — generates a ranked context pack.
+
+Token-budget precedence (v3.3.0 outcome ``token-budget-honored``)::
+
+    --max-tokens N       # explicit CLI flag (highest priority)
+        > CONTEXT_ROUTER_TOKEN_BUDGET env var
+        > .context-router/config.yaml  (``token_budget:``)
+        > hard default (8000)
+
+When the CLI flag overrides a *lower* config value a one-line stderr
+advisory is printed so the user is never surprised by a silent cap swap.
+Silent no-ops are a bug per the project quality gate.
+"""
 
 from __future__ import annotations
 
+import os
+import sys
 from typing import Annotated
 
 import typer
@@ -11,7 +25,24 @@ pack_app = typer.Typer(help="Generate a ranked context pack for a task.")
 _VALID_MODES = ("review", "debug", "implement", "handover", "minimal")
 
 
-_VALID_FORMATS = ("json", "compact", "table")
+_VALID_FORMATS = ("json", "compact", "table", "agent")
+
+# v3.3.0 β2 — review-mode sane defaults. Applied when the caller does
+# NOT explicitly pass ``--top-k`` / ``--max-tokens``. Sentinel value
+# ``-1`` on the corresponding typer options lets us detect "not passed"
+# reliably (``0`` is an already-meaningful "no cap" value).
+_REVIEW_DEFAULT_TOP_K = 5
+_REVIEW_DEFAULT_MAX_TOKENS = 4000
+
+# Sentinel value for "flag not supplied". Typer treats any explicit int
+# (including 0) as user-provided, so we use -1 to distinguish the "flag
+# omitted entirely" case from a real zero override.
+_FLAG_UNSET = -1
+
+# v3.3.0 β1 — env var surface for token_budget. Takes precedence over
+# config.yaml but NOT over an explicit ``--max-tokens``. Parsed strictly:
+# any non-int value triggers a stderr warning (silent no-op is a bug).
+_TOKEN_BUDGET_ENV = "CONTEXT_ROUTER_TOKEN_BUDGET"
 
 
 @pack_app.callback(invoke_without_command=True)
@@ -85,10 +116,12 @@ def pack(
             "--max-tokens",
             help=(
                 "Override the ranker's token budget for this call. "
+                "Precedence: flag > CONTEXT_ROUTER_TOKEN_BUDGET env > "
+                "config.yaml token_budget > 8000 default. "
                 "Minimal mode defaults to 800 when this flag is omitted."
             ),
         ),
-    ] = 0,
+    ] = _FLAG_UNSET,
     wiki: Annotated[
         bool,
         typer.Option(
@@ -125,9 +158,12 @@ def pack(
         int,
         typer.Option(
             "--top-k",
-            help="Cap selected_items at N after ranking (0 or unset = no cap).",
+            help=(
+                "Cap selected_items at N after ranking (0 = no cap). "
+                "Review mode defaults to 5 when this flag is omitted."
+            ),
         ),
-    ] = 0,
+    ] = _FLAG_UNSET,
     keep_low_signal: Annotated[
         bool,
         typer.Option(
@@ -177,6 +213,61 @@ def pack(
         )
         raise typer.Exit(code=2)
 
+    # Validate --format early. ``--json`` legacy flag still wins for
+    # backwards compatibility but an invalid --format is a usage error.
+    if format not in _VALID_FORMATS:
+        typer.echo(
+            f"Error: invalid --format '{format}'. Must be one of: {', '.join(_VALID_FORMATS)}",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
+    # v3.3.0 β4 — agent format is optimized for action-oriented modes
+    # (implement/review/debug). In handover mode it still works but the
+    # pack is prose-oriented so we warn on stderr (silent no-op is a bug).
+    # The --json alias is unaffected.
+    if format == "agent" and mode == "handover" and not json_output:
+        typer.secho(
+            "note: agent format is optimized for implement/review/debug; "
+            "handover mode may produce low-signal output",
+            err=True,
+            fg="yellow",
+        )
+
+    # Flag-not-passed detection (β2) — Typer gives us _FLAG_UNSET when the
+    # flag is omitted, real integers otherwise. Normalise before the rest
+    # of the pipeline touches either value.
+    top_k_user_passed = top_k != _FLAG_UNSET
+    max_tokens_user_passed = max_tokens != _FLAG_UNSET
+    if not top_k_user_passed:
+        top_k = 0
+    if not max_tokens_user_passed:
+        max_tokens = 0
+
+    # v3.3.0 β2 — review-mode sane defaults: shrink the pack to 5 items
+    # and 4000 tokens when the user didn't override either flag. Emit one
+    # stderr advisory so users know why the pack is small (silent no-op
+    # would be a footgun).
+    if mode == "review":
+        review_defaults_applied = False
+        if not top_k_user_passed:
+            top_k = _REVIEW_DEFAULT_TOP_K
+            review_defaults_applied = True
+        if not max_tokens_user_passed:
+            max_tokens = _REVIEW_DEFAULT_MAX_TOKENS
+            review_defaults_applied = True
+        if review_defaults_applied:
+            typer.secho(
+                (
+                    f"note: review-mode defaults applied "
+                    f"(--top-k {_REVIEW_DEFAULT_TOP_K} "
+                    f"--max-tokens {_REVIEW_DEFAULT_MAX_TOKENS}); "
+                    "override with explicit flags"
+                ),
+                err=True,
+                fg="yellow",
+            )
+
     # Silent-failure rule (pre-fix-review-mode): --pre-fix is a review-mode-
     # only option. Using it with any other mode would silently ignore the
     # flag and ship the user a working-tree pack — a footgun. Reject loudly.
@@ -202,6 +293,20 @@ def pack(
 
     root = Path(project_root) if project_root else None
     err_path = Path(error_file) if error_file else None
+
+    # v3.3.0 β1 — token-budget precedence resolution. We resolve the
+    # effective budget *here* in the CLI (rather than letting the
+    # orchestrator silently use config.token_budget) so we can emit the
+    # override advisory. Precedence: CLI flag > env var > config > default.
+    effective_max_tokens, override_note = _resolve_token_budget(
+        cli_max_tokens=max_tokens if max_tokens_user_passed else None,
+        root=root,
+    )
+    if override_note:
+        typer.secho(override_note, err=True, fg="yellow")
+    # Hand the resolved value back to downstream code. 0 means
+    # "use orchestrator default" (minimal=800, everything else=config).
+    max_tokens = effective_max_tokens or 0
 
     # Silent-failure rule (mode-mismatch-warning): review mode is designed
     # to summarise a PR diff, not to find code from a free-text description.
@@ -310,7 +415,109 @@ def pack(
         typer.echo(result.to_compact_text())
         return
 
+    if effective_format == "agent":
+        # v3.3.0 β4 — agent-friendly [{path, lines, reason}] JSON array.
+        # ContextPack.to_agent_format() is the canonical serializer; see
+        # packages/contracts/src/contracts/models.py for its tests.
+        import json as _json
+
+        typer.echo(_json.dumps(result.to_agent_format(), indent=2))
+        return
+
     _print_pack(result)
+
+
+def _resolve_token_budget(
+    *,
+    cli_max_tokens: int | None,
+    root,  # Path | None
+) -> tuple[int, str | None]:
+    """Resolve the effective token budget honoring the v3.3.0 precedence.
+
+    Precedence (highest to lowest):
+
+        1. ``--max-tokens N``                         (CLI flag)
+        2. ``CONTEXT_ROUTER_TOKEN_BUDGET=N``           (env var)
+        3. ``.context-router/config.yaml`` token_budget (config file)
+        4. orchestrator default (8000 non-minimal, 800 minimal)
+
+    Returns a tuple of ``(effective_budget, override_note)``. The override
+    note is populated *only* when the CLI flag strictly overrode a lower
+    config value — never on env or default resolution paths, per the
+    ``token-budget-honored`` outcome spec.
+
+    A value of ``0`` means "no CLI override; let the orchestrator pick
+    the default for this mode" (preserves the minimal-mode 800 contract).
+    """
+    # 1. CLI flag wins. Also emit the override note if config had a LOWER
+    # value (the negative_case contract in v3-outcomes.yaml). Note: we
+    # compare against the *config-file* value specifically, because the
+    # spec asks us to tell the user their config.yaml number was overridden.
+    if cli_max_tokens is not None and cli_max_tokens > 0:
+        config_value = _load_config_token_budget(root)
+        note: str | None = None
+        if config_value is not None and config_value < cli_max_tokens:
+            note = (
+                f"note: config token_budget ({config_value}) overridden by "
+                f"--max-tokens ({cli_max_tokens})"
+            )
+        return cli_max_tokens, note
+
+    # 2. Env var. Parse strictly — a malformed value is a user error
+    # worth surfacing (silent-no-op rule).
+    env_raw = os.environ.get(_TOKEN_BUDGET_ENV)
+    if env_raw is not None and env_raw.strip():
+        try:
+            env_value = int(env_raw.strip())
+        except ValueError:
+            print(
+                f"warning: ignoring {_TOKEN_BUDGET_ENV}={env_raw!r} "
+                "(not a valid integer)",
+                file=sys.stderr,
+            )
+        else:
+            if env_value > 0:
+                return env_value, None
+            else:
+                print(
+                    f"warning: ignoring {_TOKEN_BUDGET_ENV}={env_value} "
+                    "(must be > 0)",
+                    file=sys.stderr,
+                )
+
+    # 3/4. Config file and hard default are both handled inside the
+    # orchestrator; return 0 to mean "use the orchestrator default".
+    return 0, None
+
+
+def _load_config_token_budget(root) -> int | None:  # type: ignore[no-untyped-def]
+    """Read the project's ``config.yaml`` token_budget, if present.
+
+    Returns ``None`` when the file is absent, unreadable, or has no
+    ``token_budget`` key — callers treat that as "no config override".
+    Never raises; a corrupt config is silently ignored (the orchestrator
+    is the single source of truth for config parsing).
+    """
+    from pathlib import Path as _Path
+
+    project_root = _Path(root) if root else _Path.cwd()
+    # Walk upward from the project root to find .context-router/ — mirrors
+    # the orchestrator's auto-detection so the two agree on the same config.
+    cur = project_root.resolve()
+    for candidate in (cur, *cur.parents):
+        cfg_path = candidate / ".context-router" / "config.yaml"
+        if cfg_path.exists():
+            try:
+                import yaml  # type: ignore[import-untyped]
+
+                raw = yaml.safe_load(cfg_path.read_text(encoding="utf-8")) or {}
+                value = raw.get("token_budget")
+                if isinstance(value, int) and value > 0:
+                    return value
+            except Exception:  # noqa: BLE001 — malformed config falls through
+                return None
+            return None
+    return None
 
 
 def _maybe_warn_review_needs_diff(project_root) -> None:  # type: ignore[no-untyped-def]

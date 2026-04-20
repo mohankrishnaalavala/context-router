@@ -2207,6 +2207,242 @@ _write_report() {
   echo "Report written to ${out}"
 }
 
+# ──────────────────── v3.3.0 lane β check handlers ────────────────────
+
+_check_token-budget-honored() {
+  local tmp; tmp="$(mktemp -d -t cr-token-budget.XXXXXX)" || return 1
+  # shellcheck disable=SC2064
+  trap "rm -rf '${tmp}'" RETURN
+
+  uv run context-router init --project-root "${tmp}" >/dev/null 2>&1 \
+    || { echo "FAIL token-budget-honored: init failed"; return 1; }
+
+  cat >"${tmp}/.context-router/config.yaml" <<'YAML'
+token_budget: 3000
+capabilities:
+  llm_summarization: false
+YAML
+
+  local stderr_out
+  stderr_out="$(uv run context-router pack --mode implement \
+      --query 'add pagination' --project-root "${tmp}" \
+      --max-tokens 6000 --json 2>&1 >/dev/null)" || true
+  if ! echo "${stderr_out}" | grep -qF "config token_budget"; then
+    echo "FAIL token-budget-honored: override advisory missing"
+    echo "${stderr_out}" | sed 's/^/    /'
+    return 1
+  fi
+  if ! echo "${stderr_out}" | grep -qE "3000|6000"; then
+    echo "FAIL token-budget-honored: advisory missing numeric values"
+    return 1
+  fi
+
+  local env_stderr
+  env_stderr="$(CONTEXT_ROUTER_TOKEN_BUDGET=not-an-int uv run context-router pack \
+      --mode implement --query 'add pagination' --project-root "${tmp}" \
+      --json 2>&1 >/dev/null)" || true
+  if ! echo "${env_stderr}" | grep -qF "CONTEXT_ROUTER_TOKEN_BUDGET"; then
+    echo "FAIL token-budget-honored: malformed env var not surfaced"
+    return 1
+  fi
+
+  echo "PASS token-budget-honored (config honored; override advisory fires; env var warns)"
+}
+
+_check_review-mode-defaults() {
+  local tmp; tmp="$(mktemp -d -t cr-review-defaults.XXXXXX)" || return 1
+  # shellcheck disable=SC2064
+  trap "rm -rf '${tmp}'" RETURN
+
+  uv run context-router init --project-root "${tmp}" >/dev/null 2>&1 \
+    || { echo "FAIL review-mode-defaults: init failed"; return 1; }
+
+  local default_stderr default_json
+  default_stderr="$(uv run context-router pack --mode review \
+      --project-root "${tmp}" --json 2>&1 >/dev/null)" || true
+  default_json="$(uv run context-router pack --mode review \
+      --project-root "${tmp}" --json 2>/dev/null)" || true
+
+  if ! echo "${default_stderr}" | grep -qF "review-mode defaults applied"; then
+    echo "FAIL review-mode-defaults: advisory not printed"
+    return 1
+  fi
+
+  local n_items
+  n_items="$(echo "${default_json}" | python3 -c \
+    "import json,sys; print(len(json.load(sys.stdin).get('selected_items', [])))")"
+  if [[ "${n_items}" -gt 5 ]]; then
+    echo "FAIL review-mode-defaults: got ${n_items} items, expected ≤ 5"
+    return 1
+  fi
+
+  local override_stderr
+  override_stderr="$(uv run context-router pack --mode review \
+      --project-root "${tmp}" --top-k 50 --max-tokens 10000 \
+      --json 2>&1 >/dev/null)" || true
+  if echo "${override_stderr}" | grep -qF "review-mode defaults applied"; then
+    echo "FAIL review-mode-defaults: advisory fired despite explicit flags"
+    return 1
+  fi
+
+  echo "PASS review-mode-defaults (≤5 items by default; advisory fires; explicit flags suppress)"
+}
+
+_check_no-external-placeholders() {
+  local script; script="$(mktemp -t cr_no_external.XXXXXX.py)" || return 1
+  # shellcheck disable=SC2064
+  trap "rm -f '${script}'" RETURN
+
+  cat >"${script}" <<'PY'
+import sys, tempfile
+from pathlib import Path
+from contracts.models import ContextItem
+from core.orchestrator import Orchestrator
+
+
+class _FakeEdgeRepo:
+    def get_adjacent_files(self, repo, file_path):  # noqa: ARG002
+        return []
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        orch = Orchestrator(project_root=Path(tmp))
+        ext = ContextItem(
+            source_type="blast_radius", repo="default",
+            path_or_ref="<external>",
+            title="Serializable (<external>)",
+            excerpt="", reason="", confidence=0.5, est_tokens=40,
+        )
+        real = ContextItem(
+            source_type="changed_file", repo="default",
+            path_or_ref="src/real.py", title="realfn (real.py)",
+            excerpt="", reason="", confidence=0.7, est_tokens=60,
+        )
+        kept, dropped = orch._resolve_external_items([real, ext], _FakeEdgeRepo())
+        assert dropped == 1, f"expected 1 drop, got {dropped}"
+        for item in kept:
+            assert item.path_or_ref != "<external>", (
+                f"opaque <external> path leaked: {item}"
+            )
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+PY
+
+  if uv run python "${script}"; then
+    echo "PASS no-external-placeholders (unresolvable <external> items dropped; no opaque path leaked)"
+  else
+    echo "FAIL no-external-placeholders"
+    return 1
+  fi
+}
+
+_check_agent-output-format() {
+  local tmp; tmp="$(mktemp -d -t cr-agent-fmt.XXXXXX)" || return 1
+  # shellcheck disable=SC2064
+  trap "rm -rf '${tmp}'" RETURN
+
+  uv run context-router init --project-root "${tmp}" >/dev/null 2>&1 \
+    || { echo "FAIL agent-output-format: init failed"; return 1; }
+
+  local agent_json
+  agent_json="$(uv run context-router pack --mode implement \
+      --query 'add pagination' --project-root "${tmp}" \
+      --format agent 2>/dev/null)" || true
+  if ! echo "${agent_json}" | python3 -c \
+      "import json,sys; d=json.load(sys.stdin); assert isinstance(d, list); [ (_ for _ in ()).throw(SystemExit(1)) for e in d if set(e.keys()) != {'path','lines','reason'} ]"; then
+    echo "FAIL agent-output-format: bad shape"
+    echo "${agent_json}" | head -c 400 | sed 's/^/    /'
+    return 1
+  fi
+
+  local handover_stderr handover_stdout
+  handover_stderr="$(uv run context-router pack --mode handover \
+      --project-root "${tmp}" --format agent 2>&1 >/dev/null)" || true
+  handover_stdout="$(uv run context-router pack --mode handover \
+      --project-root "${tmp}" --format agent 2>/dev/null)" || true
+  if ! echo "${handover_stderr}" | grep -qF "agent format is optimized"; then
+    echo "FAIL agent-output-format: handover advisory not printed"
+    return 1
+  fi
+  if ! echo "${handover_stdout}" | python3 -c \
+      "import json,sys; json.load(sys.stdin)" >/dev/null 2>&1; then
+    echo "FAIL agent-output-format: handover output not valid JSON"
+    return 1
+  fi
+
+  echo "PASS agent-output-format (shape correct; handover advisory fires)"
+}
+
+_check_ranking-cache-hit() {
+  local script; script="$(mktemp -t cr_cache_hit.XXXXXX.py)" || return 1
+  # shellcheck disable=SC2064
+  trap "rm -f '${script}'" RETURN
+
+  cat >"${script}" <<'PY'
+import sys, tempfile
+from pathlib import Path
+from contracts.interfaces import Symbol
+from storage_sqlite.database import Database
+from storage_sqlite.repositories import SymbolRepository
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / ".context-router").mkdir()
+        with Database(root / ".context-router" / "context-router.db") as db:
+            SymbolRepository(db.connection).add_bulk(
+                [
+                    Symbol(
+                        name=f"fn_{i}", kind="function",
+                        file=root / "src" / f"mod_{i}.py",
+                        line_start=1, line_end=3, language="python",
+                        signature=f"def fn_{i}():", docstring="",
+                    )
+                    for i in range(60)
+                ],
+                "default",
+            )
+
+        import ranking.ranker as _ranker
+        construct = {"n": 0}
+        real_init = _ranker._BM25Scorer.__init__
+
+        def _counting_init(self, docs, *a, **kw):
+            construct["n"] += 1
+            real_init(self, docs, *a, **kw)
+
+        _ranker._BM25Scorer.__init__ = _counting_init
+
+        from core.orchestrator import Orchestrator
+        orch = Orchestrator(project_root=root)
+        orch.build_pack("implement", "find fn_1")
+        first = construct["n"]
+        assert first >= 1
+        orch.build_pack("implement", "find fn_1")
+        if construct["n"] != first:
+            print(f"FAIL delta={construct['n'] - first}")
+            return 1
+        print(f"OK first_bm25={first} delta=0")
+        return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+PY
+
+  if uv run python "${script}"; then
+    echo "PASS ranking-cache-hit"
+  else
+    echo "FAIL ranking-cache-hit"
+    return 1
+  fi
+}
+
 # ──────────────────── CLI ────────────────────
 
 cmd="${1:-all}"
