@@ -2013,6 +2013,15 @@ _check_top-k-flag() {
   echo "PASS top-k-flag (capped=${capped_count}, uncapped=${uncapped_count})"
 }
 
+_check_packaging-fresh-install() {
+  # v3.3.0 α1: a freshly-built CLI wheel installed into a clean venv must
+  # expose all language-analyzer entry points AND produce a non-empty
+  # symbols table when asked to index a tiny fixture. Implementation lives
+  # in scripts/smoke-packaging.sh so the behavior is also runnable by hand
+  # and from CI workflows outside of smoke-v3.sh.
+  bash "${REPO_ROOT}/scripts/smoke-packaging.sh"
+}
+
 # ──────────────────── registry driver ────────────────────
 
 _yq() {
