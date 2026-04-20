@@ -507,6 +507,8 @@ outcomes:
 
   # Lane α — packaging
 
+  # Lane α — packaging
+
   - id: packaging-fresh-install
     severity: P0
     effort: M
@@ -574,6 +576,7 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check ranking-cache-hit"
       expected_stdout_contains: "PASS ranking-cache-hit"
+
 
   # Lane γ — MCP streaming + resources
 

@@ -13,6 +13,7 @@ import typer
 from cli.commands.audit import audit_app
 from cli.commands.benchmark import benchmark_app
 from cli.commands.decisions import decisions_app
+from cli.commands.doctor import doctor_app
 from cli.commands.embed import embed_app
 from cli.commands.explain import explain_app
 from cli.commands.feedback import feedback_app
@@ -95,6 +96,7 @@ app.add_typer(setup_app, name="setup")
 app.add_typer(mcp_app, name="mcp")
 app.add_typer(graph_app, name="graph")
 app.add_typer(audit_app, name="audit")
+app.add_typer(doctor_app, name="doctor")
 
 if __name__ == "__main__":
     app()
