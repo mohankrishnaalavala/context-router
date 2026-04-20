@@ -502,3 +502,60 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check diff-aware-ranking-boost"
       expected_stdout_contains: "PASS diff-aware-ranking-boost"
+
+  # ──────────────────── v3.3.0 — lane β (core/CLI ergonomics) ────────────────────
+
+  - id: token-budget-honored
+    severity: P1
+    effort: S
+    title: "`pack --max-tokens` takes precedence over config.yaml; config.yaml is honored by default"
+    outcome: "Setting `token_budget: 3000` in `.context-router/config.yaml` caps pack output at ≤3000 tokens when `--max-tokens` is omitted; passing `--max-tokens N` with `N > config` prints a one-line stderr override advisory"
+    threshold: "pack JSON `total_est_tokens` ≤ `config.token_budget` when CLI flag is omitted; stderr contains the string `config token_budget (X) overridden by --max-tokens (N)` when CLI flag is strictly larger than the config value"
+    negative_case: "`CONTEXT_ROUTER_TOKEN_BUDGET=not-an-int` prints a stderr warning and falls through to the config/default rather than silently ignoring the malformed value"
+    verify:
+      cmd: "scripts/smoke-v3.sh check token-budget-honored"
+      expected_stdout_contains: "PASS token-budget-honored"
+
+  - id: review-mode-defaults
+    severity: P1
+    effort: S
+    title: "`pack --mode review` defaults to --top-k 5 --max-tokens 4000 when both flags are omitted"
+    outcome: "A bare `context-router pack --mode review` emits ≤ 5 items and ≤ 4000 tokens plus one stderr note `review-mode defaults applied (--top-k 5 --max-tokens 4000)`"
+    threshold: "pack JSON `selected_items` length ≤ 5 AND `total_est_tokens` ≤ 4000 on the repo-itself fixture"
+    negative_case: "explicit `--top-k 50 --max-tokens 10000` overrides suppress the defaults AND the advisory (silent no-op is a bug)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check review-mode-defaults"
+      expected_stdout_contains: "PASS review-mode-defaults"
+
+  - id: no-external-placeholders
+    severity: P1
+    effort: S
+    title: "`<external>` placeholder items are resolved or dropped before ranking"
+    outcome: "No pack item has `path_or_ref == \"<external>\"` in default output from either `pack --json` or MCP `get_context_pack`; dropped count is surfaced on `pack.metadata.external_dropped`"
+    threshold: "`pack --json` returns zero items with `path_or_ref` equal to `<external>`; `metadata.external_dropped` key is present and an integer"
+    negative_case: "if an external ref cannot be resolved to an in-repo file, it is dropped (never emitted opaque); stderr emits `dropped N opaque <external> placeholder item(s)` when N > 0"
+    verify:
+      cmd: "scripts/smoke-v3.sh check no-external-placeholders"
+      expected_stdout_contains: "PASS no-external-placeholders"
+
+  - id: agent-output-format
+    severity: P2
+    effort: S
+    title: "`pack --format agent` writes a JSON array of {path, lines, reason}"
+    outcome: "`context-router pack --format agent ...` writes a JSON array where every element has EXACTLY the three keys `path`, `lines`, and `reason`"
+    threshold: "jq type is `array`; every element has exactly the three required keys and no extras"
+    negative_case: "`--format agent --mode handover` still emits valid JSON but also prints `agent format is optimized for implement/review/debug` to stderr (silent no-op banned)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check agent-output-format"
+      expected_stdout_contains: "PASS agent-output-format"
+
+  - id: ranking-cache-hit
+    severity: P2
+    effort: S
+    title: "Second identical `build_pack` call is a TTLCache hit (bypasses BM25 construction)"
+    outcome: "A second call to `Orchestrator.build_pack` with identical arguments bypasses the ranker pipeline entirely"
+    threshold: "across two calls with identical args, the spied `_BM25Scorer.__init__` counter increments on the first call and stays frozen on the second"
+    negative_case: "an `update_index` / `build_index` run rotates the repo_id, so the next call rebuilds and stderr emits `ranking cache invalidated (repo reindexed)`"
+    verify:
+      cmd: "scripts/smoke-v3.sh check ranking-cache-hit"
+      expected_stdout_contains: "PASS ranking-cache-hit"
