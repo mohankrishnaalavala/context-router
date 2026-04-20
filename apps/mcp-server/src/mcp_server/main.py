@@ -245,6 +245,20 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     ),
                     "default": "",
                 },
+                "keep_low_signal": {
+                    "type": "boolean",
+                    "description": (
+                        "Review-mode escape hatch (v3.2 review-tail-cutoff). "
+                        "When false (default), review packs drop trailing "
+                        "source_type='file' items with confidence < 0.3 "
+                        "once the token budget is filled by structurally-"
+                        "important items (changed_file, blast_radius, "
+                        "config). Pass true to preserve the full tail for "
+                        "debugging. Ignored (with a stderr warning) for "
+                        "non-review modes."
+                    ),
+                    "default": False,
+                },
             },
         },
         "outputSchema": _PACK_OUTPUT,

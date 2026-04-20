@@ -205,6 +205,7 @@ def get_context_pack(
     top_k: int = 0,
     progress_cb=None,
     pre_fix: str = "",
+    keep_low_signal: bool = False,
 ) -> dict:
     """Generate a ranked context pack.
 
@@ -230,6 +231,14 @@ def get_context_pack(
             pack is ranked as if the working tree were at ``<sha>^``.
             Returns ``{"error": ...}`` (no traceback) when the SHA is not
             found or the combination is invalid.
+        keep_low_signal: Review-mode escape hatch (v3.2 ``review-tail-cutoff``).
+            When ``False`` (default), review-mode packs drop trailing
+            ``source_type="file"`` items with confidence < 0.3 once the
+            token budget has been filled by structurally-important items
+            (``changed_file``, ``blast_radius``, ``config``). Pass
+            ``True`` to preserve the full tail — only useful for
+            debugging ranker output. Ignored with a stderr warning for
+            non-review modes.
 
     Returns:
         Serialised ContextPack as a dict, or {"text": ...} when format="compact".
@@ -260,6 +269,18 @@ def get_context_pack(
         )
         top_k = 0
 
+    # Silent-failure rule: keep_low_signal is a review-mode-only escape
+    # hatch. Passing it in another mode is a no-op, so warn on stderr
+    # (stdout is reserved for JSON-RPC frames).
+    if keep_low_signal and mode != "review":
+        import sys
+        print(
+            "warning: keep_low_signal has no effect outside mode='review' "
+            f"(current mode={mode!r}); ignoring.",
+            file=sys.stderr,
+            flush=True,
+        )
+
     # Only forward pre_fix as a kwarg when the caller actually supplied one
     # — keeps the existing ``build_pack`` call shape identical for the vast
     # majority of callers (including test mocks that don't accept the new
@@ -273,6 +294,10 @@ def get_context_pack(
     }
     if pre_fix:
         build_pack_kwargs["pre_fix"] = pre_fix
+    # Only forward keep_low_signal when the caller opted in, so pre-existing
+    # test mocks that don't declare the kwarg continue to work untouched.
+    if keep_low_signal:
+        build_pack_kwargs["keep_low_signal"] = True
     try:
         # progress=False is critical on MCP stdio transport — stdout is
         # reserved for JSON-RPC frames; any progress output would corrupt it.

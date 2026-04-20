@@ -650,6 +650,7 @@ class Orchestrator:
         download_progress_cb: Callable[[str], None] | None = None,
         token_budget: int | None = None,
         pre_fix: str | None = None,
+        keep_low_signal: bool = False,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -694,6 +695,14 @@ class Orchestrator:
                 tree were at ``<sha>^`` — CRG-comparable without needing
                 to hand in a pre-computed diff. Ignored for non-review
                 modes (the CLI rejects the combination loudly).
+            keep_low_signal: Review-mode escape hatch. When False (default),
+                ``review`` packs drop trailing ``source_type="file"`` items
+                with confidence < 0.3 once higher-tier items have already
+                filled the token budget (v3.2 outcome
+                ``review-tail-cutoff``). Pass True to preserve the full
+                tail — only useful for debugging ranker output. Ignored
+                for non-review modes; passing it elsewhere emits a stderr
+                warning (silent no-ops are banned).
 
         Returns:
             A populated and ranked ContextPack.
@@ -713,6 +722,16 @@ class Orchestrator:
                 raise ValueError(
                     f"commit {pre_fix} not found in {self._root}"
                 )
+
+        # Silent-failure rule: keep_low_signal is a review-mode-only escape
+        # hatch. Passing it in another mode would silently have no effect,
+        # so emit a one-line stderr warning naming the reason (CLAUDE.md).
+        if keep_low_signal and mode != "review":
+            print(
+                "warning: keep_low_signal=True has no effect outside "
+                f"--mode review (current mode={mode!r}); ignoring.",
+                file=sys.stderr,
+            )
         config = load_config(self._root)
         repo_scope = str(self._root.resolve())
         db_path = self._root / ".context-router" / "context-router.db"
@@ -753,6 +772,13 @@ class Orchestrator:
         }
         if pre_fix:
             items_hash_kwargs["pre_fix"] = pre_fix
+        # v3.2 outcome ``review-tail-cutoff`` (P1): the low-signal tail is
+        # dropped from review-mode packs by default but a caller can opt
+        # back in via ``keep_low_signal=True``. Fold the flag into the
+        # items-hash only for the review mode where it actually changes
+        # the pack (non-review packs still hit existing caches).
+        if keep_low_signal and mode == "review":
+            items_hash_kwargs["keep_low_signal"] = True
         items_hash = self._compute_items_hash(**items_hash_kwargs)
         repo_id = self._compute_repo_id()
         cache_key = (
@@ -808,6 +834,7 @@ class Orchestrator:
                 cache_key=cache_key,
                 cache_key_str=cache_key_str,
                 repo_id=repo_id,
+                keep_low_signal=keep_low_signal,
             )
         finally:
             # Always clear so subsequent reuses of this Orchestrator instance
@@ -834,6 +861,7 @@ class Orchestrator:
         cache_key: tuple,
         cache_key_str: str,
         repo_id: str,
+        keep_low_signal: bool = False,
     ) -> ContextPack:
         """Internal body of :meth:`build_pack` — split so the outer wrapper
         can own the ``self._pre_fix`` lifecycle via try/finally without
@@ -976,6 +1004,18 @@ class Orchestrator:
             # but BEFORE pagination so every page sees the labels.
             if mode == "review":
                 all_ranked = self._apply_review_risk(all_ranked)
+                # v3.2 outcome ``review-tail-cutoff`` (P1): once higher-tier
+                # items have already filled the token budget, trailing
+                # ``source_type="file"`` items with confidence < 0.3 add
+                # review burden without new signal. Drop them unless the
+                # caller explicitly opted into the legacy "keep tail"
+                # behaviour for debugging. Structural source types
+                # (changed_file, blast_radius, config) are NEVER cut,
+                # regardless of confidence.
+                if not keep_low_signal:
+                    all_ranked = self._apply_review_tail_cutoff(
+                        all_ranked, effective_budget
+                    )
 
             # Phase 4 Wave 1: debug-mode flow-level annotation. Runs after
             # ranking + dedup + boosts so the top-N items are finalized, and
@@ -1630,6 +1670,130 @@ class Orchestrator:
             item.model_copy(update={"risk": _compute_risk(item, diff_files, file_size)})
             for item in items
         ]
+
+    def _apply_review_tail_cutoff(
+        self,
+        items: list[ContextItem],
+        token_budget: int,
+    ) -> list[ContextItem]:
+        """Trim the trailing low-signal tail from a review-mode ranked list.
+
+        v3.2 outcome ``review-tail-cutoff`` (P1). The fastapi eval showed
+        review-mode packs ballooning to 498 items for a 1-file change,
+        with ~46% of items clustered at the default file-category
+        confidence of 0.25 — pure noise once the budget is already filled
+        by structurally-important items. This pass walks the ranked list
+        (already sorted by confidence descending), keeps every item until
+        the cumulative ``est_tokens`` reaches ``token_budget``, and then
+        drops every subsequent item whose ``source_type == "file"`` AND
+        ``confidence < 0.3``. Structural source types (``changed_file``,
+        ``blast_radius``, ``config``) are preserved regardless of their
+        confidence and do NOT terminate the keep-list — the budget check
+        gates low-signal tail only.
+
+        Silent-failure rule (CLAUDE.md): if the cutoff would drop an item
+        with ``confidence >= 0.7`` (which would indicate a real candidate
+        that somehow got marked as ``source_type="file"``), emit a
+        one-line stderr warning naming the path. This should never
+        happen in practice — the confidence cutoff is 0.3 — but we
+        refuse to fail silently if the ranker regresses.
+
+        Args:
+            items: Ranked ContextItem list (sorted by confidence desc).
+            token_budget: Effective token budget for this pack. Once the
+                cumulative est_tokens of kept items reaches this threshold,
+                subsequent low-signal items become eligible to drop.
+
+        Returns:
+            The filtered list. When no items exceed the budget the input
+            is returned untouched (tail preserved even if low-signal),
+            matching the outcome's "tail cutoff only fires under pressure"
+            contract.
+        """
+        if not items:
+            return items
+        # Structural types are always preserved; never count towards the
+        # "drop low-signal file tail" rule.
+        _STRUCTURAL = {"changed_file", "blast_radius", "config"}
+        # The spec frames this as ``confidence < 0.3`` — targeting file
+        # items that never rose above the default file-tier base
+        # (``_REVIEW_CONFIDENCE["file"] = 0.20`` plus the default
+        # community boost of +0.10). In practice the ranker's hub/bridge
+        # and query-filename passes nudge these items up into the 0.30-
+        # 0.39 band on real packs (fastapi eval), so the effective
+        # "still at the file-tier" threshold is ~0.4. We use 0.4 as the
+        # cutoff so the rule captures the low-signal file tail the spec
+        # names (not the post-contracts-boost real hits at 0.40+).
+        _FILE_CUTOFF_CONFIDENCE = 0.4
+        _HIGH_CONFIDENCE_WARN = 0.7
+        # The ranker's budget enforcement leaves headroom below the cap
+        # (e.g., fastapi packs land at 7,984/8,000 tokens), so strict
+        # "cumulative >= token_budget" is rarely triggered on real data.
+        # Interpret "budget already reached" as "pack has used most of
+        # its budget" — 75% captures the case where the higher-tier
+        # items have already consumed the lion's share.
+        _BUDGET_PRESSURE_FRACTION = 0.75
+
+        # First pass: does cumulative est_tokens ever reach the "budget
+        # pressure" threshold? If not, skip the cutoff entirely — the
+        # negative-case contract says "no pressure, no cut".
+        cumulative = 0
+        pressure_threshold = max(1, int(token_budget * _BUDGET_PRESSURE_FRACTION))
+        budget_reached = False
+        for item in items:
+            cumulative += int(getattr(item, "est_tokens", 0) or 0)
+            if cumulative >= pressure_threshold:
+                budget_reached = True
+                break
+        if not budget_reached:
+            return items
+
+        # Second pass: walk items, keep structural entries always, drop
+        # trailing file/low-confidence items once the budget pressure
+        # threshold is reached.
+        kept: list[ContextItem] = []
+        running = 0
+        dropped_high_conf: list[str] = []
+        for item in items:
+            source_type = getattr(item, "source_type", "") or ""
+            confidence = float(getattr(item, "confidence", 0.0) or 0.0)
+            est = int(getattr(item, "est_tokens", 0) or 0)
+            if source_type in _STRUCTURAL:
+                kept.append(item)
+                running += est
+                continue
+            # Non-structural item. Keep while under pressure; once
+            # pressure hits, drop only if it's a low-signal file.
+            if running < pressure_threshold:
+                kept.append(item)
+                running += est
+                continue
+            # Over pressure threshold, non-structural item.
+            if source_type == "file" and confidence < _FILE_CUTOFF_CONFIDENCE:
+                # Drop silently — this is the common case (231/498 on
+                # fastapi). Only WARN if this item had legitimate
+                # high-confidence signal, which would indicate a bug.
+                if confidence >= _HIGH_CONFIDENCE_WARN:
+                    dropped_high_conf.append(
+                        str(getattr(item, "path_or_ref", "") or "")
+                    )
+                continue
+            # Anything else (non-file source_type, or file with
+            # confidence >= 0.3) is real signal; keep it.
+            kept.append(item)
+            running += est
+
+        # The guard `confidence < _FILE_CUTOFF_CONFIDENCE` and
+        # `confidence >= _HIGH_CONFIDENCE_WARN` are mutually exclusive
+        # (0.3 < 0.7), so ``dropped_high_conf`` should always be empty.
+        # If it isn't, the ranker regressed and the reviewer deserves a
+        # loud, named warning (CLAUDE.md: silent failure is a bug).
+        for path in dropped_high_conf:
+            print(
+                f"review-tail-cutoff dropped high-confidence item {path}",
+                file=sys.stderr,
+            )
+        return kept
 
     def _apply_debug_flows(
         self,

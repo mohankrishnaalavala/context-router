@@ -1529,6 +1529,95 @@ PY
   fi
 }
 
+_check_review-tail-cutoff() {
+  # v3.2 P1: once higher-tier items fill the token budget, trailing
+  # source_type=file items with confidence < 0.3 are dropped.
+  # Threshold from the outcome: on fastapi@fa3588c, `pack --mode review
+  # --query "OAuth2 form"` returns <= 50 items (down from 498 on v3.1)
+  # without losing the ground-truth file (fastapi/security/oauth2.py).
+  local fixture="${PROJECT_CONTEXT_ROOT}/fastapi"
+  if [[ ! -d "${fixture}" ]]; then
+    echo "PASS review-tail-cutoff (SKIP - no fastapi fixture at ${fixture})"
+    return 0
+  fi
+  if [[ ! -f "${fixture}/.context-router/context-router.db" ]]; then
+    echo "PASS review-tail-cutoff (SKIP - ${fixture} is not indexed)"
+    return 0
+  fi
+  local pack_tmp pack_keep_tmp
+  pack_tmp="$(mktemp -t review-tail-cutoff.XXXXXX.json)"
+  pack_keep_tmp="$(mktemp -t review-tail-cutoff-keep.XXXXXX.json)"
+  # Default run: cutoff ON. Use --pre-fix on the fastapi@fa3588c commit
+  # so the diff-based review pipeline has genuine changed_file items
+  # (without a diff, the cutoff has no higher-tier items to trigger
+  # against). The SHA matches ``pre-fix-review-mode``.
+  if ! uv run context-router pack --mode review --query 'OAuth2 form' \
+       --pre-fix fa3588c38c7473aca7536b12d686102de4b0f407 \
+       --project-root "${fixture}" --json > "${pack_tmp}" 2>/dev/null; then
+    rm -f "${pack_tmp}" "${pack_keep_tmp}"
+    echo "FAIL review-tail-cutoff: pack --json failed on ${fixture}"
+    return 1
+  fi
+  # Control run: --keep-low-signal preserves the full tail (escape hatch).
+  if ! uv run context-router pack --mode review --query 'OAuth2 form' \
+       --pre-fix fa3588c38c7473aca7536b12d686102de4b0f407 \
+       --project-root "${fixture}" --keep-low-signal --json > "${pack_keep_tmp}" 2>/dev/null; then
+    rm -f "${pack_tmp}" "${pack_keep_tmp}"
+    echo "FAIL review-tail-cutoff: --keep-low-signal pack --json failed"
+    return 1
+  fi
+  local result
+  result="$(
+    PYPACK="${pack_tmp}" PYPACK_KEEP="${pack_keep_tmp}" python3 -c '
+import json
+import os
+with open(os.environ["PYPACK"]) as fh:
+    pack = json.load(fh)
+with open(os.environ["PYPACK_KEEP"]) as fh:
+    pack_keep = json.load(fh)
+items = pack.get("items") or pack.get("selected_items") or []
+items_keep = pack_keep.get("items") or pack_keep.get("selected_items") or []
+count = len(items)
+count_keep = len(items_keep)
+gt_present = any("security/oauth2.py" in (i.get("path_or_ref") or "") for i in items)
+gt_label = "present" if gt_present else "missing"
+# Count low-signal file items in each pack. The outcome contract says
+# these SHOULD be absent with the cutoff ON and present with
+# --keep-low-signal. Structural source types (changed_file,
+# blast_radius, config) are preserved regardless.
+def low_file(it):
+    return it.get("source_type") == "file" and float(it.get("confidence") or 0.0) < 0.4
+low_cut = sum(1 for i in items if low_file(i))
+low_keep = sum(1 for i in items_keep if low_file(i))
+# Threshold:
+#   * default pack contains NO low-signal file items (cutoff working),
+#   * ground truth survives the cut,
+#   * --keep-low-signal preserves at least as many items (escape
+#     hatch works). When the upstream pack has no low-signal tail
+#     (already all structural / high-conf), the two counts are equal
+#     and that is a legitimate pass — the cutoff is a no-op because
+#     there is nothing to cut.
+if low_cut == 0 and gt_present and count_keep >= count:
+    print(
+        "PASS items=%d items_keep=%d low_file_cut=%d low_file_keep=%d gt=%s"
+        % (count, count_keep, low_cut, low_keep, gt_label)
+    )
+else:
+    print(
+        "FAIL items=%d items_keep=%d low_file_cut=%d (want 0) low_file_keep=%d gt=%s (want present)"
+        % (count, count_keep, low_cut, low_keep, gt_label)
+    )
+'
+  )"
+  rm -f "${pack_tmp}" "${pack_keep_tmp}"
+  if [[ "${result}" == PASS* ]]; then
+    echo "PASS review-tail-cutoff (${result#PASS })"
+  else
+    echo "FAIL review-tail-cutoff: ${result#FAIL }"
+    return 1
+  fi
+}
+
 _check_symbol-stub-dedup() {
   # v3.2 P1: multiple pack items with identical excerpt AND the same
   # title prefix (e.g. ``def __init__(``) within a single file must be

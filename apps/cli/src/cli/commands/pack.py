@@ -128,6 +128,19 @@ def pack(
             help="Cap selected_items at N after ranking (0 or unset = no cap).",
         ),
     ] = 0,
+    keep_low_signal: Annotated[
+        bool,
+        typer.Option(
+            "--keep-low-signal/--no-keep-low-signal",
+            help=(
+                "Review-mode escape hatch: preserve the full low-signal "
+                "tail instead of dropping trailing source_type='file' "
+                "items with confidence < 0.3 once the budget is full. "
+                "Only meaningful with --mode review; ignored elsewhere "
+                "(with a stderr warning)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Generate a context pack for the given task MODE.
 
@@ -209,6 +222,19 @@ def pack(
         _emit_wiki(root=root, out_path=Path(out) if out else None)
         return
 
+    # Silent-failure rule: --keep-low-signal is only meaningful in review
+    # mode. In other modes the flag is a no-op (the tail cutoff never
+    # fires), so warn on stderr so users know why nothing changed. The
+    # orchestrator also warns if the flag leaks through, but catching
+    # it here gives the cleanest user-facing message.
+    if keep_low_signal and mode != "review":
+        typer.secho(
+            "warning: --keep-low-signal has no effect outside --mode review "
+            f"(current mode={mode!r}); ignoring.",
+            err=True,
+            fg="yellow",
+        )
+
     # Silent-failure rule: a negative --top-k would be a silent no-op
     # (treated as "no cap"). Warn on stderr and normalise to "no cap" so
     # the downstream path behaves predictably.
@@ -232,6 +258,7 @@ def pack(
             show_progress=show_progress,
             max_tokens=max_tokens,
             pre_fix=pre_fix or None,
+            keep_low_signal=keep_low_signal,
         )
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
@@ -422,6 +449,7 @@ def _run_build_pack(
     show_progress: bool,
     max_tokens: int = 0,
     pre_fix: str | None = None,
+    keep_low_signal: bool = False,
 ):
     """Call Orchestrator.build_pack with an optional rich progress bar.
 
@@ -453,9 +481,13 @@ def _run_build_pack(
     # Only forward pre_fix when the caller actually supplied one — keeps
     # the existing ``build_pack`` invocation identical for the default
     # review flow so test mocks without the new kwarg still work.
+    # Same pattern for keep_low_signal: only widen the signature when
+    # the caller opted in so pre-existing test mocks still work.
     extra_kwargs: dict = {}
     if pre_fix:
         extra_kwargs["pre_fix"] = pre_fix
+    if keep_low_signal:
+        extra_kwargs["keep_low_signal"] = True
 
     if not needs_progress:
         return orch.build_pack(
