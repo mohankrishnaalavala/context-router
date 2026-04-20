@@ -503,7 +503,9 @@ outcomes:
       cmd: "scripts/smoke-v3.sh check diff-aware-ranking-boost"
       expected_stdout_contains: "PASS diff-aware-ranking-boost"
 
-  # ──────────────────── v3.3.0 lane α (packaging / first-run works) ────────────────────
+  # ──────────────────── v3.3.0 — first-run works, MCP streams ────────────────────
+
+  # Lane α — packaging
 
   - id: packaging-fresh-install
     severity: P0
@@ -515,3 +517,27 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check packaging-fresh-install"
       expected_stdout_contains: "PASS packaging-fresh-install"
+
+  # Lane γ — MCP streaming + resources
+
+  - id: mcp-progress-notifications
+    severity: P1
+    effort: M
+    title: "`get_context_pack` emits notifications/progress when client passes progressToken"
+    outcome: "An MCP client calling `tools/call get_context_pack` with `progressToken` set receives ≥ 1 `notifications/progress` frame (sharing that token) before the final response, for any pack whose `total_est_tokens` ≥ 2000"
+    threshold: "integration harness captures ≥ 1 progress frame carrying the supplied progressToken for a pack over the 2000-token threshold; the `initialize` response advertises `capabilities.progress == true`"
+    negative_case: "packs whose token count falls below the threshold emit zero progress frames — not even a 'complete' notification — and this is documented (not a silent no-op since the threshold is a numeric, configurable gate)"
+    verify:
+      cmd: "scripts/smoke-v3.sh check mcp-progress-notifications"
+      expected_stdout_contains: "PASS mcp-progress-notifications"
+
+  - id: mcp-resources
+    severity: P1
+    effort: M
+    title: "Prior packs are exposed as MCP resources under context-router://packs/<uuid>"
+    outcome: "After a pack is built, `resources/list` returns ≥ 1 URI of the form `context-router://packs/<uuid>` and `resources/read` on that URI returns the original pack JSON byte-for-byte; the `initialize` response advertises `capabilities.resources.listChanged == true`"
+    threshold: "integration harness asserts list count ≥ 1 post-build, and the read response text equals the on-disk pack JSON exactly"
+    negative_case: "`resources/read` on an unknown URI returns a JSON-RPC error with `code == -32602` (invalid params), not a traceback"
+    verify:
+      cmd: "scripts/smoke-v3.sh check mcp-resources"
+      expected_stdout_contains: "PASS mcp-resources"
