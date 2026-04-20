@@ -112,6 +112,55 @@ class ContextPack(BaseModel):
             lines.append(item.to_compact_line())
         return "\n".join(lines)
 
+    def to_agent_format(self) -> list[dict[str, Any]]:
+        """Return a minimal agent-friendly JSON-ready array.
+
+        Each element has EXACTLY three keys::
+
+            {
+                "path":   <str>,   # file path (or symbol ref) the agent should open
+                "lines":  [start, end] | None,  # when known, 1-based inclusive
+                "reason": <str>,   # why this item is in the pack
+            }
+
+        Designed for the v3.3.0 ``--format agent`` CLI flag: AI coding
+        agents want a compact, deterministic list of pointers rather than
+        the full ``ContextItem`` surface (confidence, est_tokens, source_type,
+        freshness, tags, etc.). Lines are parsed from the ``reason`` field
+        when it matches the canonical ``lines N-M`` / ``line N`` pattern
+        emitted by :func:`core.orchestrator._build_symbol_reason`; falls
+        back to ``None`` when line metadata isn't available.
+
+        Pack-level metadata (mode, total_est_tokens, etc.) is intentionally
+        dropped — the agent format is strictly per-item pointers. Callers
+        that need the metadata should use ``--format json``.
+        """
+        import re as _re
+
+        # Canonical reason patterns from ``_build_symbol_reason``:
+        #   "Modified `name` lines 59-159"
+        #   "Added `name` line 12"
+        line_range_re = _re.compile(
+            r"\blines?\s+(\d+)(?:\s*[-–—]\s*(\d+))?\b", _re.IGNORECASE
+        )
+
+        out: list[dict[str, Any]] = []
+        for item in self.selected_items:
+            lines: list[int] | None = None
+            match = line_range_re.search(item.reason or "")
+            if match:
+                start = int(match.group(1))
+                end = int(match.group(2)) if match.group(2) else start
+                lines = [start, end]
+            out.append(
+                {
+                    "path": item.path_or_ref,
+                    "lines": lines,
+                    "reason": item.reason or item.title,
+                }
+            )
+        return out
+
 
 class Observation(BaseModel):
     """A durable memory record capturing what happened during a coding session."""

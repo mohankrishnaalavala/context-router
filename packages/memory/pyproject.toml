@@ -1,6 +1,6 @@
 [project]
 name = "context-router-memory"
-version = "3.2.0"
+version = "3.3.0"
 requires-python = ">=3.12"
 description = "Observations and decisions memory store for context-router (Phase 4)"
 dependencies = ["context-router-contracts", "context-router-storage-sqlite"]

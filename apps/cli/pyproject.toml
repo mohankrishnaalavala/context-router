@@ -1,6 +1,6 @@
 [project]
 name = "context-router-cli"
-version = "3.2.0"
+version = "3.3.0"
 requires-python = ">=3.12"
 description = "Local-first CLI and MCP server for AI coding context — minimum useful context, maximum agent performance"
 readme = "README.md"
@@ -38,6 +38,27 @@ semantic = ["sentence-transformers>=2.2"]
 
 [project.scripts]
 context-router = "cli.main:app"
+
+# Register the bundled language analyzers under the `context_router.language_analyzers`
+# entry-point group. The CLI wheel force-includes the analyzer source in the
+# `[tool.hatch.build.targets.wheel.force-include]` block below, so these entry
+# points point at the same modules that ship with the wheel. Without this block,
+# `importlib.metadata.entry_points(group="context_router.language_analyzers")`
+# returns an empty iterable on fresh `pip install context-router-cli`, the
+# PluginLoader registers zero analyzers, and `context-router index` silently
+# indexes zero files — the exact class of bug v3's quality gate forbids.
+#
+# Language plugins published as their own distributions (when that ever
+# happens) also register entry points for the same group, so importlib's
+# metadata scan finds both and the `PluginLoader` deduplicates by extension.
+[project.entry-points."context_router.language_analyzers"]
+py = "language_python:PythonAnalyzer"
+java = "language_java:JavaAnalyzer"
+ts = "language_typescript:TypeScriptAnalyzer"
+tsx = "language_typescript:TypeScriptAnalyzer"
+js = "language_typescript:TypeScriptAnalyzer"
+cs = "language_dotnet:DotnetAnalyzer"
+yaml = "language_yaml:YamlAnalyzer"
 
 [build-system]
 requires = ["hatchling"]

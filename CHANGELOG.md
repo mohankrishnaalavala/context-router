@@ -9,6 +9,51 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.3.0] — 2026-04-20
+
+First‑run works, MCP streams, agent output. Shipped in response to the external CR vs code‑review‑graph judge (2026‑04‑19) that flagged three shipping‑quality issues eclipsing algorithm gains: fresh installs indexing zero files, default pack burying the right answer in 50k+ tokens, and opaque `<external>` placeholders eating precision. Four parallel lanes (α/β/γ/δ) delivered 8 new v3‑outcome entries.
+
+### Expected impact
+
+- **First‑run index success**: 0 symbols → ≥1 symbol after `pipx install context-router-cli` + `context-router index`.
+- **Default pack size on a free‑text query**: ~50k tokens (v3.2) → ≤4000 tokens (v3.3, `--mode review` sane defaults).
+- **`<external>` placeholder items in pack output**: up to 1 of 5 top items (v3.2) → 0 (v3.3, resolved or dropped with count surfaced).
+
+### Added
+
+- `context-router doctor` subcommand — diagnoses analyzer entry points, prints per‑analyzer PASS/WARN, exits 1 on any failure. Non‑silent failure audit for `language_*` plugin discovery (lane α, PR #86).
+- `pack --format agent` — emits a JSON array of `{path, lines, reason}` for LLM‑agent consumers. Stderr advisory when paired with `--mode handover` because handover is prose‑oriented (lane β, PR #87).
+- MCP `notifications/progress` frames on `get_context_pack` when the client passes `progressToken` and the pack crosses a 2000‑token threshold — visible progress for large pack builds in Claude Code (lane γ, PR #85).
+- MCP `resources/list` + `resources/read` under `context-router://packs/<uuid>` — prior packs are addressable as MCP resources. Persistence layer: `packages/core/src/core/pack_store.py` keeps the last 20 packs (lane γ, PR #85).
+- `docs/guides/modes.md` — 30‑second decision tree, "I am trying to…" table, per‑mode reference, flag‑interaction matrix, common pitfalls (lane δ, PR #88).
+- `scripts/smoke-packaging.sh` + `apps/cli/tests/test_packaging_smoke.py` — build CLI wheel, install into clean venv, index tiny fixture, assert symbols written (lane α, PR #86).
+- `scripts/mcp_progress_notifications_probe.py` + `scripts/mcp_resources_probe.py` — subprocess‑driven MCP smoke harnesses wired into `smoke‑v3.sh` (lane γ, PR #85).
+
+### Changed
+
+- `apps/cli/pyproject.toml` now declares `[project.entry-points."context_router.language_analyzers"]` for all 7 extension keys (py, java, ts, tsx, js, cs, yaml) pointing at the bundled modules — fresh installs no longer index zero files (lane α, PR #86).
+- `PluginLoader.discover()` emits per‑analyzer stderr `WARN` on import failure or missing entry points; a bare `except: pass` that silently swallowed load errors has been replaced with error collection + single‑line stderr summary (lane α, PR #86).
+- `pack --mode review` defaults to `--top-k 5 --max-tokens 4000` when both flags are omitted. One‑line stderr advisory `review-mode defaults applied (--top-k 5 --max-tokens 4000)`; suppressed when either flag is set explicitly (lane β, PR #87).
+- `token_budget` from `.context-router/config.yaml` is now honored when `--max-tokens` is omitted (was silently ignored in v3.2). Precedence: CLI flag > env var > config.yaml > hard default (8000). Stderr advisory on explicit override (lane β, PR #87).
+- `<external>` pack items are resolved to a real path when possible; unresolved entries are dropped with the count exposed on `pack.metadata.external_dropped` — no more opaque placeholder rows (lane β, PR #87).
+- `Orchestrator` now carries a `cachetools.TTLCache` (maxsize 100, ttl 300s) keyed on `(repo_id, mode, query_sha, budget, top_k, items_sha)`; `invalidate_cache(reason=…)` emits a stderr note on repo‑id rotation after reindex (lane β, PR #87).
+- MCP `initialize` response now advertises `capabilities.progress == true` and `capabilities.resources.listChanged == true`. All `stdout` writes share a `threading.RLock` so notifications cannot interleave with responses mid‑JSON‑RPC frame (lane γ, PR #85).
+
+### Documentation
+
+- Spec: `docs/superpowers/specs/2026-04-19-v3.3.0-design.md` — approved design with DoD blocks for all 8 outcomes (lane δ, PR #88).
+- README points the `pack` mode table at the new mode decision guide (lane δ, PR #88).
+
+### Validation
+
+8 of 8 v3.3 outcomes registered in `docs/release/v3-outcomes.yaml` and wired to `scripts/smoke-v3.sh`. All four lane PRs shipped with a ship‑check verdict pasted in the PR body.
+
+### Known follow‑ups
+
+- Homebrew tap PAT scope still blocks the auto‑bump step of the release workflow (carry‑over from v3.2.0). PyPI publish + GitHub Release are unaffected.
+
+---
+
 ## [3.2.0] — 2026-04-19
 
 Ten-outcome cycle driven by the external CR vs code-review-graph eval (fastapi, 2026-04-19, `project_context/fastapi/.eval_results/`). Closes four of five scoring dimensions where CR trailed; ends the recurring manual Homebrew tap toll.
