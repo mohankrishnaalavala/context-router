@@ -45,6 +45,7 @@ class TestPackCache:
             8_000,
             False,
             orch._compute_items_hash(error_file=None, page=0, page_size=0),
+            orch._canonical_hub_boost_flag(),
         )
         pack = _make_pack()
         orch._pack_cache[key] = pack
@@ -93,6 +94,7 @@ class TestPackCache:
             8_000,
             False,
             orch._compute_items_hash(error_file=None, page=0, page_size=0),
+            orch._canonical_hub_boost_flag(),
         )
         orch._pack_cache[key] = pack
 
