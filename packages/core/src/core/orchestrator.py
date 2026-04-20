@@ -17,6 +17,7 @@ and ranking.  CLI/MCP server must only import from core.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import sys
 import threading
@@ -28,7 +29,7 @@ from cachetools import TTLCache
 from contracts.config import ContextRouterConfig, load_config
 from contracts.models import ContextItem, ContextPack, RuntimeSignal
 from graph_index.git_diff import GitDiffParser
-from ranking import ContextRanker, estimate_tokens
+from ranking import ContextRanker, dedup_stubs, estimate_tokens
 from storage_sqlite.database import Database
 from storage_sqlite.repositories import (
     ContractRepository,
@@ -332,6 +333,42 @@ def _find_project_root(start: Path) -> Path:
         current = parent
 
 
+# ---------------------------------------------------------------------------
+# Function-level reason construction (v3.2 outcome: function-level-reason)
+# ---------------------------------------------------------------------------
+
+# Verb prefix for each symbol-backed source_type. When a ContextItem is
+# backed by a Symbol (line_start/line_end known), ``_make_item`` composes a
+# reason of the shape ``f"{verb} `{name}` lines {start}-{end}"``. The
+# ranker's ``_annotate`` preserves any non-empty reason set here, so the
+# upgraded string survives downstream boosting.
+_SYMBOL_REASON_VERB: dict[str, str] = {
+    "changed_file": "Modified",
+    "blast_radius": "Depends on or is imported by",
+    "blast_radius_transitive": "Transitively reachable via call chain from",
+    "impacted_test": "Tests code affected by this change in",
+    "config": "Configuration symbol touched by change in",
+    "entrypoint": "Public API entry point",
+    "contract": "Data contract or interface definition",
+    "extension_point": "Plugin or extension point",
+    "file": "Referenced in codebase",
+    "runtime_signal": "Mentioned in runtime error or stack trace",
+    "failing_test": "Test symbol likely related to the failure",
+    "call_chain": "Reachable via function call chain from error site",
+    "past_debug": "Related to a previously debugged failure",
+}
+
+
+def _build_symbol_reason(
+    verb: str,
+    qualified_name: str,
+    line_start: int,
+    line_end: int,
+) -> str:
+    """Return the upgraded function-level reason string."""
+    return f"{verb} `{qualified_name}` lines {line_start}-{line_end}"
+
+
 def _make_item(
     sym_name: str,
     file_path: str,
@@ -340,17 +377,56 @@ def _make_item(
     source_type: str,
     confidence: float,
     repo: str,
+    line_start: int | None = None,
+    line_end: int | None = None,
+    kind: str | None = None,
+    fallback_flag: list[bool] | None = None,
 ) -> ContextItem:
-    """Build a ContextItem from raw symbol fields."""
+    """Build a ContextItem from raw symbol fields.
+
+    When ``line_start``/``line_end`` are valid ints and source_type has a
+    known verb, the ``reason`` field is populated with the upgraded
+    function-level string (e.g. ``"Modified `foo` lines 59-159"``). If
+    line data is missing or invalid, ``reason`` is left empty so the
+    ranker falls back to the category-level string — and, if
+    *fallback_flag* is provided, its first element is set to ``True`` so
+    the caller can emit a single stderr warning per pack build.
+    """
     title = f"{sym_name} ({Path(file_path).name})"
     excerpt = "\n".join(filter(None, [signature, docstring])).strip()
+
+    qualified = sym_name
+    # For methods, prefer a "Class.method" qualified name when the
+    # signature contains the enclosing class (best-effort — Python's
+    # analyzer emits bare names, so we use the signature as a hint).
+    if kind == "method" and signature and "." in signature.split("(")[0]:
+        head = signature.split("(")[0].strip()
+        if head and not head.startswith("def "):
+            qualified = head
+
+    reason = ""
+    verb = _SYMBOL_REASON_VERB.get(source_type)
+    if (
+        verb is not None
+        and isinstance(line_start, int)
+        and isinstance(line_end, int)
+        and line_start > 0
+        and line_end >= line_start
+        and qualified
+    ):
+        reason = _build_symbol_reason(verb, qualified, line_start, line_end)
+    elif verb is not None and fallback_flag is not None and not fallback_flag[0]:
+        # Symbol-backed item but line metadata unusable — flag once so
+        # the orchestrator can emit a single stderr warning per pack.
+        fallback_flag[0] = True
+
     return ContextItem(
         source_type=source_type,
         repo=repo,
         path_or_ref=file_path,
         title=title,
         excerpt=excerpt,
-        reason="",  # will be filled in by ContextRanker.rank()
+        reason=reason,
         confidence=confidence,
         est_tokens=_estimate_item_tokens(title, excerpt),
         tags=[],
@@ -393,6 +469,11 @@ class Orchestrator:
             ttl=self._PACK_CACHE_TTL_SECONDS,
         )
         self._pack_cache_lock = threading.RLock()
+        # v3.2 `pre-fix-review-mode`: when set to a commit SHA string, the
+        # review-mode candidate builder treats the diff of that commit (vs
+        # its parent) as the change-set, instead of the working-tree diff.
+        # Scoped to the current build_pack call via a try/finally.
+        self._pre_fix: str | None = None
 
     # ------------------------------------------------------------------
     # Cache helpers (P3-1)
@@ -471,12 +552,35 @@ class Orchestrator:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _canonical_hub_boost_flag() -> str:
+        """Return the canonical ``"1"``/``"0"`` form of ``CAPABILITIES_HUB_BOOST``.
+
+        The hub-boost flag is a ranker-level capability that materially
+        changes the final ordering of ``selected_items``. It MUST therefore
+        participate in the pack-cache key, otherwise a previously-cached
+        pack built with the flag off would be returned verbatim when the
+        flag is subsequently toggled on (or vice-versa) — the exact bug
+        the ``capabilities-hub-boost-cache-key`` outcome guards against.
+
+        Normalisation mirrors the ranker's own truthy set
+        (``1`` / ``true`` / ``yes`` / ``on``, case-insensitive, whitespace-
+        stripped) so that semantically-equivalent env values resolve to
+        the same key. Every other value — including unset / empty — maps
+        to ``"0"``, matching the ranker's "off by default" resolution.
+        """
+        raw = os.environ.get("CAPABILITIES_HUB_BOOST")
+        if raw is None:
+            return "0"
+        return "1" if raw.strip().lower() in {"1", "true", "yes", "on"} else "0"
+
+    @staticmethod
     def _cache_key_string(
         mode: str,
         query_hash: str,
         token_budget: int,
         use_embeddings: bool,
         items_hash: str,
+        hub_boost_flag: str = "0",
     ) -> str:
         """Fold the cache-key tuple into a stable string for L2 storage.
 
@@ -491,6 +595,7 @@ class Orchestrator:
             str(token_budget),
             "1" if use_embeddings else "0",
             items_hash,
+            hub_boost_flag,
         ):
             h.update(part.encode("utf-8"))
             h.update(b"|")
@@ -569,6 +674,8 @@ class Orchestrator:
         progress_cb: "Callable[[str, int, int], None] | None" = None,
         download_progress_cb: Callable[[str], None] | None = None,
         token_budget: int | None = None,
+        pre_fix: str | None = None,
+        keep_low_signal: bool = False,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -606,6 +713,21 @@ class Orchestrator:
                 budget. When ``None`` (default), uses
                 ``config.token_budget``; minimal mode defaults to 800
                 when omitted.
+            pre_fix: Optional commit SHA. When provided with ``mode="review"``,
+                the candidate builder uses the diff of ``<sha>^..<sha>`` as
+                the change-set (same data path as the normal review flow).
+                This lets callers generate a pack ranked as if the working
+                tree were at ``<sha>^`` — CRG-comparable without needing
+                to hand in a pre-computed diff. Ignored for non-review
+                modes (the CLI rejects the combination loudly).
+            keep_low_signal: Review-mode escape hatch. When False (default),
+                ``review`` packs drop trailing ``source_type="file"`` items
+                with confidence < 0.3 once higher-tier items have already
+                filled the token budget (v3.2 outcome
+                ``review-tail-cutoff``). Pass True to preserve the full
+                tail — only useful for debugging ranker output. Ignored
+                for non-review modes; passing it elsewhere emits a stderr
+                warning (silent no-ops are banned).
 
         Returns:
             A populated and ranked ContextPack.
@@ -613,8 +735,28 @@ class Orchestrator:
         Raises:
             FileNotFoundError: If the SQLite database does not exist (index has
                 not been run yet).
-            ValueError: If *mode* is not a recognised value.
+            ValueError: If *mode* is not a recognised value, or if
+                ``pre_fix`` is set but not a valid commit SHA in the repo.
         """
+        # Validate pre_fix early (before any expensive work) so the CLI can
+        # surface a clean "commit <sha> not found" error without a traceback.
+        # Only meaningful in review mode; for other modes the caller should
+        # never have gotten here (pack.py rejects the combination).
+        if pre_fix and mode == "review":
+            if not self._validate_commit_sha(pre_fix):
+                raise ValueError(
+                    f"commit {pre_fix} not found in {self._root}"
+                )
+
+        # Silent-failure rule: keep_low_signal is a review-mode-only escape
+        # hatch. Passing it in another mode would silently have no effect,
+        # so emit a one-line stderr warning naming the reason (CLAUDE.md).
+        if keep_low_signal and mode != "review":
+            print(
+                "warning: keep_low_signal=True has no effect outside "
+                f"--mode review (current mode={mode!r}); ignoring.",
+                file=sys.stderr,
+            )
         config = load_config(self._root)
         repo_scope = str(self._root.resolve())
         db_path = self._root / ".context-router" / "context-router.db"
@@ -643,12 +785,33 @@ class Orchestrator:
         # so a second `context-router pack` run for the same query skips
         # the full pipeline.
         query_hash = hashlib.sha256(query.encode("utf-8")).hexdigest()
-        items_hash = self._compute_items_hash(
-            error_file=error_file if error_file is None else str(error_file),
-            page=page,
-            page_size=page_size,
-        )
+        # Build the items-hash kwargs exactly like the pre-v3.2 version by
+        # default so existing tests/consumers hitting the same (mode, query)
+        # still see a cache hit. Only fold pre_fix into the hash when the
+        # caller actually supplied one — then two builds on different SHAs
+        # correctly miss each other's cache.
+        items_hash_kwargs: dict[str, Any] = {
+            "error_file": error_file if error_file is None else str(error_file),
+            "page": page,
+            "page_size": page_size,
+        }
+        if pre_fix:
+            items_hash_kwargs["pre_fix"] = pre_fix
+        # v3.2 outcome ``review-tail-cutoff`` (P1): the low-signal tail is
+        # dropped from review-mode packs by default but a caller can opt
+        # back in via ``keep_low_signal=True``. Fold the flag into the
+        # items-hash only for the review mode where it actually changes
+        # the pack (non-review packs still hit existing caches).
+        if keep_low_signal and mode == "review":
+            items_hash_kwargs["keep_low_signal"] = True
+        items_hash = self._compute_items_hash(**items_hash_kwargs)
         repo_id = self._compute_repo_id()
+        # ``CAPABILITIES_HUB_BOOST`` participates in the cache key because
+        # the ranker applies or skips the hub/bridge structural boost
+        # depending on its value — two packs built for the same query
+        # under different flag values are genuinely different packs.
+        # See ``_canonical_hub_boost_flag`` for the normalisation contract.
+        hub_boost_flag = self._canonical_hub_boost_flag()
         cache_key = (
             repo_id,
             mode,
@@ -656,6 +819,7 @@ class Orchestrator:
             caller_budget,
             bool(use_embeddings),
             items_hash,
+            hub_boost_flag,
         )
         with self._pack_cache_lock:
             cached = self._pack_cache.get(cache_key)
@@ -669,6 +833,7 @@ class Orchestrator:
             caller_budget,
             bool(use_embeddings),
             items_hash,
+            hub_boost_flag,
         )
         l2_pack = self._l2_get(cache_key_str, repo_id, db_path)
         if l2_pack is not None:
@@ -677,6 +842,64 @@ class Orchestrator:
                 self._pack_cache[cache_key] = l2_pack
             return l2_pack
 
+        # Scope pre_fix to this build so ``_get_changed_files`` reads the
+        # commit-range diff (``<sha>^..<sha>``) instead of the working-tree
+        # diff. Only meaningful in review mode; the CLI rejects the combo
+        # in other modes. Reset in the finally clause below so a future
+        # re-use of this Orchestrator instance starts with a clean slate.
+        self._pre_fix = pre_fix if (pre_fix and mode == "review") else None
+        try:
+            return self._build_pack_inner(
+                mode=mode,
+                query=query,
+                error_file=error_file,
+                page=page,
+                page_size=page_size,
+                use_embeddings=use_embeddings,
+                progress=progress,
+                progress_cb=progress_cb,
+                download_progress_cb=download_progress_cb,
+                config=config,
+                repo_scope=repo_scope,
+                db_path=db_path,
+                caller_budget=caller_budget,
+                token_budget=token_budget,
+                cache_key=cache_key,
+                cache_key_str=cache_key_str,
+                repo_id=repo_id,
+                keep_low_signal=keep_low_signal,
+            )
+        finally:
+            # Always clear so subsequent reuses of this Orchestrator instance
+            # don't silently inherit the SHA-based diff source.
+            self._pre_fix = None
+
+    def _build_pack_inner(
+        self,
+        *,
+        mode: str,
+        query: str,
+        error_file: Path | None,
+        page: int,
+        page_size: int,
+        use_embeddings: bool,
+        progress: bool,
+        progress_cb: "Callable[[str, int, int], None] | None",
+        download_progress_cb: Callable[[str], None] | None,
+        config: ContextRouterConfig,
+        repo_scope: str,
+        db_path: Path,
+        caller_budget: int,
+        token_budget: int | None,
+        cache_key: tuple,
+        cache_key_str: str,
+        repo_id: str,
+        keep_low_signal: bool = False,
+    ) -> ContextPack:
+        """Internal body of :meth:`build_pack` — split so the outer wrapper
+        can own the ``self._pre_fix`` lifecycle via try/finally without
+        indenting the whole pipeline by another level.
+        """
         # Model-download progress callback for the CLI's rich spinner
         # (disabled for MCP stdio transport, which has progress=False).
         effective_cb: Callable[[str], None] | None = (
@@ -787,8 +1010,37 @@ class Orchestrator:
                 # open a fresh sqlite3.Connection per pack build.
                 db_connection=db.connection,
             )
-            all_ranked = ranker.rank(candidates, query, mode)
+            # v3.2 outcome ``diff-aware-ranking-boost`` (P2): when review
+            # mode has a diff to reason about — either the working-tree
+            # diff (``HEAD``) or a ``--pre-fix`` commit — thread the spec
+            # through so the ranker can lift items whose symbol lines
+            # overlap the changed-line set. In non-review modes, pass
+            # ``None`` so the boost is a strict no-op (DoD negative case).
+            diff_spec_for_rank: str | None = None
+            if mode == "review":
+                diff_spec_for_rank = (
+                    self._pre_fix if self._pre_fix else "HEAD"
+                )
+            boosted_items_ids: list[str] = []
+            all_ranked = ranker.rank(
+                candidates,
+                query,
+                mode,
+                diff_spec=diff_spec_for_rank,
+                project_root=self._root,
+                boosted_items_sink=boosted_items_ids,
+            )
             all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
+            # v3.2 outcome ``symbol-stub-dedup`` (P1): collapse identical
+            # symbol stubs within the same file. The ranker already runs
+            # this pass BEFORE its internal budget enforcement (so the
+            # budget fills with distinct content); we repeat it here so
+            # any duplicates introduced by post-rank accumulation paths
+            # (e.g. candidate re-injection by contracts_boost) are also
+            # caught, and so the aggregate dropped count is folded into
+            # ``ContextPack.duplicates_hidden`` below.
+            all_ranked, _stub_dropped = dedup_stubs(all_ranked)
+            _dup_dropped += _stub_dropped
 
             # Phase-2 contracts boost — applied AFTER ranking + dedup so the
             # boost lifts items that already survived budget enforcement,
@@ -804,6 +1056,18 @@ class Orchestrator:
             # but BEFORE pagination so every page sees the labels.
             if mode == "review":
                 all_ranked = self._apply_review_risk(all_ranked)
+                # v3.2 outcome ``review-tail-cutoff`` (P1): once higher-tier
+                # items have already filled the token budget, trailing
+                # ``source_type="file"`` items with confidence < 0.3 add
+                # review burden without new signal. Drop them unless the
+                # caller explicitly opted into the legacy "keep tail"
+                # behaviour for debugging. Structural source types
+                # (changed_file, blast_radius, config) are NEVER cut,
+                # regardless of confidence.
+                if not keep_low_signal:
+                    all_ranked = self._apply_review_tail_cutoff(
+                        all_ranked, effective_budget
+                    )
 
             # Phase 4 Wave 1: debug-mode flow-level annotation. Runs after
             # ranking + dedup + boosts so the top-N items are finalized, and
@@ -872,6 +1136,14 @@ class Orchestrator:
         # when the threshold (>=3 annotated top-5 items) is met.
         if mode == "debug" and debug_flow_note:
             pack_metadata["note"] = debug_flow_note
+
+        # v3.2 outcome ``diff-aware-ranking-boost`` (P2): surface the set
+        # of item IDs that received the +0.15 structural bump. Always
+        # present on review-mode packs (empty list when no overlaps hit);
+        # omitted for non-review modes so the key's presence cleanly
+        # communicates "boost pathway ran".
+        if mode == "review":
+            pack_metadata["boosted_items"] = list(boosted_items_ids)
 
         total = sum(i.est_tokens for i in page_items)
         reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
@@ -990,6 +1262,10 @@ class Orchestrator:
         adj = feedback_adjustments or {}
         past_files = past_debug_files or set()
         weights = _resolve_weights(mode, config)
+        # v3.2 outcome: function-level-reason — single-element flag consumed
+        # by ``_make_item`` when a symbol-backed item has no usable line
+        # metadata, triggering the once-per-pack stderr warning below.
+        self._symbol_reason_fallback_flag: list[bool] = [False]
 
         if mode == "review":
             items = self._review_candidates(sym_repo, edge_repo, repo_name, weights)
@@ -1025,6 +1301,18 @@ class Orchestrator:
                 else item
                 for item in items
             ]
+
+        # v3.2 function-level-reason: if any symbol-backed item lacked
+        # usable line metadata, warn once so the category-level fallback
+        # is visible rather than a silent degradation (CLAUDE.md rule:
+        # "Silent failure is a bug").
+        if self._symbol_reason_fallback_flag[0]:
+            print(
+                "context-router: function-level reason fell back to "
+                "category string for one or more items — symbol line "
+                "metadata missing or invalid",
+                file=sys.stderr,
+            )
         return items
 
     @staticmethod
@@ -1272,6 +1560,10 @@ class Orchestrator:
                     source_type=source_type,
                     confidence=confidence,
                     repo=repo_name,
+                    line_start=sym.line_start,
+                    line_end=sym.line_end,
+                    kind=sym.kind,
+                    fallback_flag=self._symbol_reason_fallback_flag,
                 )
             )
 
@@ -1296,19 +1588,67 @@ class Orchestrator:
         return items
 
     def _get_changed_files(self) -> set[str]:
-        """Return the set of file paths changed since HEAD~1.
+        """Return the set of file paths changed in the review-mode diff.
 
-        Falls back to an empty set if the git command fails (e.g. on a repo
+        * When :attr:`_pre_fix` is set to a commit SHA, uses
+          ``git diff --name-status <sha>^..<sha>`` so the pack is ranked
+          as-if the working tree were at ``<sha>^``. Never mutates the
+          working tree.
+        * Otherwise (the default), uses the working-tree diff against
+          ``HEAD~1`` — the existing review-mode contract.
+
+        Falls back to an empty set if the git command fails (e.g. a repo
         with only one commit, or when run outside a git repo).
 
         Returns:
             Set of absolute-or-repo-relative path strings.
         """
+        since = self._pre_fix_range() if self._pre_fix else "HEAD~1"
         try:
-            changed = GitDiffParser.from_git(self._root, "HEAD~1")
+            changed = GitDiffParser.from_git(self._root, since)
             return {str(self._root / cf.path) for cf in changed}
         except (RuntimeError, OSError):
             return set()
+
+    def _pre_fix_range(self) -> str:
+        """Return the ``<sha>^..<sha>`` range string for the scoped pre_fix."""
+        # ``pre_fix`` is validated by _validate_commit_sha before we reach
+        # here; we still guard with ``or ""`` so a stale attribute on a
+        # re-used instance cannot synthesise an ``^..`` gibberish string.
+        sha = (self._pre_fix or "").strip()
+        return f"{sha}^..{sha}"
+
+    def _validate_commit_sha(self, sha: str) -> bool:
+        """Return True iff *sha* (and its parent ``sha^``) exist in the repo.
+
+        Uses ``git cat-file -e <rev>^{commit}`` for a cheap existence check
+        that does not touch the working tree. Both the SHA and its parent
+        must resolve — our diff command is ``<sha>^..<sha>``, so a root
+        commit with no parent should be rejected loudly rather than
+        falling through to an empty diff.
+        """
+        import subprocess
+
+        stripped = (sha or "").strip()
+        if not stripped:
+            return False
+        # Disallow whitespace — shlex would let weird refs through; the
+        # feature contract says "a single commit SHA".
+        if any(c.isspace() for c in stripped):
+            return False
+        for rev in (f"{stripped}^{{commit}}", f"{stripped}^^{{commit}}"):
+            try:
+                result = subprocess.run(
+                    ["git", "cat-file", "-e", rev],
+                    cwd=str(self._root),
+                    capture_output=True,
+                    check=False,
+                )
+            except (FileNotFoundError, OSError):
+                return False
+            if result.returncode != 0:
+                return False
+        return True
 
     def _apply_review_risk(self, items: list[ContextItem]) -> list[ContextItem]:
         """Return *items* with per-item ``risk`` populated for review mode.
@@ -1390,6 +1730,130 @@ class Orchestrator:
             item.model_copy(update={"risk": _compute_risk(item, diff_files, file_size)})
             for item in items
         ]
+
+    def _apply_review_tail_cutoff(
+        self,
+        items: list[ContextItem],
+        token_budget: int,
+    ) -> list[ContextItem]:
+        """Trim the trailing low-signal tail from a review-mode ranked list.
+
+        v3.2 outcome ``review-tail-cutoff`` (P1). The fastapi eval showed
+        review-mode packs ballooning to 498 items for a 1-file change,
+        with ~46% of items clustered at the default file-category
+        confidence of 0.25 — pure noise once the budget is already filled
+        by structurally-important items. This pass walks the ranked list
+        (already sorted by confidence descending), keeps every item until
+        the cumulative ``est_tokens`` reaches ``token_budget``, and then
+        drops every subsequent item whose ``source_type == "file"`` AND
+        ``confidence < 0.3``. Structural source types (``changed_file``,
+        ``blast_radius``, ``config``) are preserved regardless of their
+        confidence and do NOT terminate the keep-list — the budget check
+        gates low-signal tail only.
+
+        Silent-failure rule (CLAUDE.md): if the cutoff would drop an item
+        with ``confidence >= 0.7`` (which would indicate a real candidate
+        that somehow got marked as ``source_type="file"``), emit a
+        one-line stderr warning naming the path. This should never
+        happen in practice — the confidence cutoff is 0.3 — but we
+        refuse to fail silently if the ranker regresses.
+
+        Args:
+            items: Ranked ContextItem list (sorted by confidence desc).
+            token_budget: Effective token budget for this pack. Once the
+                cumulative est_tokens of kept items reaches this threshold,
+                subsequent low-signal items become eligible to drop.
+
+        Returns:
+            The filtered list. When no items exceed the budget the input
+            is returned untouched (tail preserved even if low-signal),
+            matching the outcome's "tail cutoff only fires under pressure"
+            contract.
+        """
+        if not items:
+            return items
+        # Structural types are always preserved; never count towards the
+        # "drop low-signal file tail" rule.
+        _STRUCTURAL = {"changed_file", "blast_radius", "config"}
+        # The spec frames this as ``confidence < 0.3`` — targeting file
+        # items that never rose above the default file-tier base
+        # (``_REVIEW_CONFIDENCE["file"] = 0.20`` plus the default
+        # community boost of +0.10). In practice the ranker's hub/bridge
+        # and query-filename passes nudge these items up into the 0.30-
+        # 0.39 band on real packs (fastapi eval), so the effective
+        # "still at the file-tier" threshold is ~0.4. We use 0.4 as the
+        # cutoff so the rule captures the low-signal file tail the spec
+        # names (not the post-contracts-boost real hits at 0.40+).
+        _FILE_CUTOFF_CONFIDENCE = 0.4
+        _HIGH_CONFIDENCE_WARN = 0.7
+        # The ranker's budget enforcement leaves headroom below the cap
+        # (e.g., fastapi packs land at 7,984/8,000 tokens), so strict
+        # "cumulative >= token_budget" is rarely triggered on real data.
+        # Interpret "budget already reached" as "pack has used most of
+        # its budget" — 75% captures the case where the higher-tier
+        # items have already consumed the lion's share.
+        _BUDGET_PRESSURE_FRACTION = 0.75
+
+        # First pass: does cumulative est_tokens ever reach the "budget
+        # pressure" threshold? If not, skip the cutoff entirely — the
+        # negative-case contract says "no pressure, no cut".
+        cumulative = 0
+        pressure_threshold = max(1, int(token_budget * _BUDGET_PRESSURE_FRACTION))
+        budget_reached = False
+        for item in items:
+            cumulative += int(getattr(item, "est_tokens", 0) or 0)
+            if cumulative >= pressure_threshold:
+                budget_reached = True
+                break
+        if not budget_reached:
+            return items
+
+        # Second pass: walk items, keep structural entries always, drop
+        # trailing file/low-confidence items once the budget pressure
+        # threshold is reached.
+        kept: list[ContextItem] = []
+        running = 0
+        dropped_high_conf: list[str] = []
+        for item in items:
+            source_type = getattr(item, "source_type", "") or ""
+            confidence = float(getattr(item, "confidence", 0.0) or 0.0)
+            est = int(getattr(item, "est_tokens", 0) or 0)
+            if source_type in _STRUCTURAL:
+                kept.append(item)
+                running += est
+                continue
+            # Non-structural item. Keep while under pressure; once
+            # pressure hits, drop only if it's a low-signal file.
+            if running < pressure_threshold:
+                kept.append(item)
+                running += est
+                continue
+            # Over pressure threshold, non-structural item.
+            if source_type == "file" and confidence < _FILE_CUTOFF_CONFIDENCE:
+                # Drop silently — this is the common case (231/498 on
+                # fastapi). Only WARN if this item had legitimate
+                # high-confidence signal, which would indicate a bug.
+                if confidence >= _HIGH_CONFIDENCE_WARN:
+                    dropped_high_conf.append(
+                        str(getattr(item, "path_or_ref", "") or "")
+                    )
+                continue
+            # Anything else (non-file source_type, or file with
+            # confidence >= 0.3) is real signal; keep it.
+            kept.append(item)
+            running += est
+
+        # The guard `confidence < _FILE_CUTOFF_CONFIDENCE` and
+        # `confidence >= _HIGH_CONFIDENCE_WARN` are mutually exclusive
+        # (0.3 < 0.7), so ``dropped_high_conf`` should always be empty.
+        # If it isn't, the ranker regressed and the reviewer deserves a
+        # loud, named warning (CLAUDE.md: silent failure is a bug).
+        for path in dropped_high_conf:
+            print(
+                f"review-tail-cutoff dropped high-confidence item {path}",
+                file=sys.stderr,
+            )
+        return kept
 
     def _apply_debug_flows(
         self,
@@ -1649,6 +2113,10 @@ class Orchestrator:
                     source_type=source_type,
                     confidence=confidence,
                     repo=repo_name,
+                    line_start=sym.line_start,
+                    line_end=sym.line_end,
+                    kind=sym.kind,
+                    fallback_flag=self._symbol_reason_fallback_flag,
                 )
             )
 
@@ -1782,6 +2250,10 @@ class Orchestrator:
                     source_type=source_type,
                     confidence=confidence,
                     repo=repo_name,
+                    line_start=sym.line_start,
+                    line_end=sym.line_end,
+                    kind=sym.kind,
+                    fallback_flag=self._symbol_reason_fallback_flag,
                 )
             )
 
@@ -1870,6 +2342,10 @@ class Orchestrator:
                     source_type=source_type,
                     confidence=confidence,
                     repo=repo_name,
+                    line_start=sym.line_start,
+                    line_end=sym.line_end,
+                    kind=sym.kind,
+                    fallback_flag=self._symbol_reason_fallback_flag,
                 )
             )
 

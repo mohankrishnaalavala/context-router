@@ -223,3 +223,4 @@ docs/benchmarks/
 # Outputs (run reports, per-phase re-reviews, smoke diffs) go here:
 internal_docs/ship-check/
 internal_docs/*
+.context-router/

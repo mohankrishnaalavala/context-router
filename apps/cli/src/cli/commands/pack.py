@@ -109,6 +109,38 @@ def pack(
             ),
         ),
     ] = "",
+    pre_fix: Annotated[
+        str,
+        typer.Option(
+            "--pre-fix",
+            help=(
+                "Commit SHA. Only meaningful with --mode review. "
+                "Treats the diff of <sha>^..<sha> as the change-set so the "
+                "pack is ranked as if the working tree were at <sha>^. "
+                "Does NOT touch the working tree."
+            ),
+        ),
+    ] = "",
+    top_k: Annotated[
+        int,
+        typer.Option(
+            "--top-k",
+            help="Cap selected_items at N after ranking (0 or unset = no cap).",
+        ),
+    ] = 0,
+    keep_low_signal: Annotated[
+        bool,
+        typer.Option(
+            "--keep-low-signal/--no-keep-low-signal",
+            help=(
+                "Review-mode escape hatch: preserve the full low-signal "
+                "tail instead of dropping trailing source_type='file' "
+                "items with confidence < 0.3 once the budget is full. "
+                "Only meaningful with --mode review; ignored elsewhere "
+                "(with a stderr warning)."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Generate a context pack for the given task MODE.
 
@@ -145,6 +177,17 @@ def pack(
         )
         raise typer.Exit(code=2)
 
+    # Silent-failure rule (pre-fix-review-mode): --pre-fix is a review-mode-
+    # only option. Using it with any other mode would silently ignore the
+    # flag and ship the user a working-tree pack — a footgun. Reject loudly.
+    if pre_fix and mode != "review":
+        typer.secho(
+            "error: --pre-fix is only valid with --mode review",
+            err=True,
+            fg="red",
+        )
+        raise typer.Exit(code=2)
+
     # Silent-failure rule: minimal mode requires a non-empty query so the
     # suggested next-tool hint and ranked items are meaningful.
     if mode == "minimal" and not query.strip():
@@ -160,6 +203,17 @@ def pack(
     root = Path(project_root) if project_root else None
     err_path = Path(error_file) if error_file else None
 
+    # Silent-failure rule (mode-mismatch-warning): review mode is designed
+    # to summarise a PR diff, not to find code from a free-text description.
+    # When the caller passes `--mode review --query "..."` against a repo
+    # with no staged/unstaged diff, warn them on stderr that they likely
+    # wanted `--mode debug`. Skipped (with a notice) on non-git trees so
+    # we never silently fail. When --pre-fix is set the user is explicitly
+    # pointing at a commit SHA, so the working-tree cleanliness check is
+    # irrelevant — the diff comes from <sha>^..<sha>.
+    if mode == "review" and query.strip() and not pre_fix:
+        _maybe_warn_review_needs_diff(root if root else Path.cwd())
+
     # --wiki short-circuits the pack pipeline: no ranker, no token budget.
     # It needs a concrete project_root so the wiki generator can find
     # .context-router/context-router.db — mirror the orchestrator's
@@ -167,6 +221,30 @@ def pack(
     if wiki:
         _emit_wiki(root=root, out_path=Path(out) if out else None)
         return
+
+    # Silent-failure rule: --keep-low-signal is only meaningful in review
+    # mode. In other modes the flag is a no-op (the tail cutoff never
+    # fires), so warn on stderr so users know why nothing changed. The
+    # orchestrator also warns if the flag leaks through, but catching
+    # it here gives the cleanest user-facing message.
+    if keep_low_signal and mode != "review":
+        typer.secho(
+            "warning: --keep-low-signal has no effect outside --mode review "
+            f"(current mode={mode!r}); ignoring.",
+            err=True,
+            fg="yellow",
+        )
+
+    # Silent-failure rule: a negative --top-k would be a silent no-op
+    # (treated as "no cap"). Warn on stderr and normalise to "no cap" so
+    # the downstream path behaves predictably.
+    if top_k < 0:
+        typer.secho(
+            f"warning: --top-k={top_k} is negative; ignoring (no cap applied).",
+            err=True,
+            fg="yellow",
+        )
+        top_k = 0
 
     try:
         result = _run_build_pack(
@@ -179,10 +257,39 @@ def pack(
             use_embeddings=use_embeddings,
             show_progress=show_progress,
             max_tokens=max_tokens,
+            pre_fix=pre_fix or None,
+            keep_low_signal=keep_low_signal,
         )
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1)
+    except ValueError as exc:
+        # Surface orchestrator validation errors (e.g. unknown commit SHA
+        # for --pre-fix) as clean stderr messages with exit 1 — NOT a
+        # traceback per the pre-fix-review-mode negative_case contract.
+        typer.secho(f"error: {exc}", err=True, fg="red")
+        raise typer.Exit(code=1)
+
+    # Apply --top-k cap post-ranking. When top_k == 0 (unset), the pack is
+    # unchanged — v3.1 behaviour preserved. When the pool is smaller than
+    # top_k we return the full pool without warning (documented behaviour).
+    if top_k > 0 and len(result.selected_items) > top_k:
+        result.selected_items = result.selected_items[:top_k]
+        # Refresh the derived token total so downstream renderers and the
+        # JSON payload stay internally consistent with the truncated pool.
+        try:
+            result.total_est_tokens = sum(
+                int(getattr(i, "est_tokens", 0) or 0) for i in result.selected_items
+            )
+        except Exception:  # noqa: BLE001 — totals are cosmetic; never fail the run
+            pass
+        # total_items is a caller-facing count used by pagination helpers;
+        # keep it aligned with the post-cap pool so "Items: N" matches.
+        if hasattr(result, "total_items"):
+            try:
+                result.total_items = len(result.selected_items)
+            except Exception:  # noqa: BLE001
+                pass
 
     # --json flag takes precedence for backwards compatibility
     effective_format = "json" if json_output else format
@@ -204,6 +311,68 @@ def pack(
         return
 
     _print_pack(result)
+
+
+def _maybe_warn_review_needs_diff(project_root) -> None:  # type: ignore[no-untyped-def]
+    """Warn on stderr when ``--mode review --query ...`` runs diff-less.
+
+    Review mode is built around summarising a diff (staged + unstaged work
+    tree changes). If the caller supplies a free-text query against a
+    clean working tree, they almost certainly meant ``--mode debug``. We
+    emit a one-line stderr nudge — silent no-op would be a footgun per
+    the project quality gate.
+
+    * Clean git tree  → warn with the canonical ``try --mode debug`` text.
+    * Dirty git tree  → silent (the happy path).
+    * Non-git tree / git failure → emit a skip notice on stderr so the
+      absence of the main warning is never silent.
+    """
+    import subprocess
+    from pathlib import Path as _Path
+
+    root_path = _Path(project_root)
+    try:
+        unstaged = subprocess.run(
+            ["git", "diff", "--quiet"],
+            cwd=str(root_path),
+            capture_output=True,
+            check=False,
+        )
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=str(root_path),
+            capture_output=True,
+            check=False,
+        )
+    except (FileNotFoundError, OSError) as exc:
+        typer.secho(
+            f"notice: review-mode diff check skipped ({type(exc).__name__}: {exc})",
+            err=True,
+            fg="yellow",
+        )
+        return
+
+    # Git returns non-zero rc for "not a repo" (usually 128) — we cannot
+    # distinguish "clean tree" from "no repo" by rc 0 alone, so treat any
+    # rc >= 2 as a git-level failure and surface it.
+    if unstaged.returncode >= 2 or staged.returncode >= 2:
+        reason = (unstaged.stderr or staged.stderr or b"").decode(
+            "utf-8", errors="replace"
+        ).strip()
+        typer.secho(
+            f"notice: review-mode diff check skipped (not a git repo or git error: {reason})",
+            err=True,
+            fg="yellow",
+        )
+        return
+
+    # rc 0 on both = clean tree, rc 1 on either = diff present (happy path).
+    if unstaged.returncode == 0 and staged.returncode == 0:
+        typer.secho(
+            "warning: review mode expects a diff; for query-only input, try --mode debug",
+            err=True,
+            fg="yellow",
+        )
 
 
 def _emit_wiki(*, root, out_path) -> None:  # type: ignore[no-untyped-def]
@@ -279,6 +448,8 @@ def _run_build_pack(
     use_embeddings: bool,
     show_progress: bool,
     max_tokens: int = 0,
+    pre_fix: str | None = None,
+    keep_low_signal: bool = False,
 ):
     """Call Orchestrator.build_pack with an optional rich progress bar.
 
@@ -307,6 +478,17 @@ def _run_build_pack(
     # Treat 0/unset as "no override"; otherwise forward caller's cap.
     token_budget_override = max_tokens if max_tokens and max_tokens > 0 else None
 
+    # Only forward pre_fix when the caller actually supplied one — keeps
+    # the existing ``build_pack`` invocation identical for the default
+    # review flow so test mocks without the new kwarg still work.
+    # Same pattern for keep_low_signal: only widen the signature when
+    # the caller opted in so pre-existing test mocks still work.
+    extra_kwargs: dict = {}
+    if pre_fix:
+        extra_kwargs["pre_fix"] = pre_fix
+    if keep_low_signal:
+        extra_kwargs["keep_low_signal"] = True
+
     if not needs_progress:
         return orch.build_pack(
             mode,
@@ -317,6 +499,7 @@ def _run_build_pack(
             use_embeddings=use_embeddings,
             progress=False,
             token_budget=token_budget_override,
+            **extra_kwargs,
         )
 
     # First-time semantic run — wrap with rich progress.
@@ -348,6 +531,7 @@ def _run_build_pack(
             progress=True,
             download_progress_cb=_cb,
             token_budget=token_budget_override,
+            **extra_kwargs,
         )
 
 

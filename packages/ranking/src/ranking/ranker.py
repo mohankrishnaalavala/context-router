@@ -88,6 +88,80 @@ class _BM25Scorer:
         return total
 
 
+def _dedup_stubs(
+    items: list[ContextItem],
+) -> tuple[list[ContextItem], int]:
+    """Collapse near-duplicate symbol stubs within the same file.
+
+    v3.2 outcome ``symbol-stub-dedup`` (P1): indexers emit one ContextItem
+    per Symbol, so a file with many ``__init__`` / ``__enter__`` / tiny
+    helper methods produces many items whose stub excerpts are identical
+    byte-for-byte (e.g. ``def __init__(`` with no body). A reviewer can
+    only read so many "same-shape" stubs before they stop being useful —
+    condense them into one representative item and record the collapsed
+    count.
+
+    Dedup key: all three conditions must hold::
+
+        1. same ``path_or_ref``  (same file)
+        2. same ``title`` prefix (the leading identifier token — e.g.
+           ``__init__`` is the same regardless of ``(self, x)`` suffixes)
+        3. same ``excerpt``      (byte-for-byte)
+
+    The first occurrence (highest-confidence after the caller's sort) is
+    kept as the representative and its existing ``duplicates_hidden``
+    counter is bumped by ``N - 1``. Later duplicates are dropped.
+
+    Negative case: two items with the same ``title`` but DIFFERENT
+    excerpts (e.g. two distinct classes both named ``Config``) are NOT
+    merged — the excerpt equality check guarantees distinct content
+    always survives.
+
+    Args:
+        items: Ranked ContextItems, ordered so the highest-confidence
+            item of each duplicate set appears first. The function does
+            not re-sort.
+
+    Returns:
+        Tuple of ``(deduped_items, hidden_count)`` where ``hidden_count``
+        is the total number of items dropped (i.e. the sum of per-group
+        ``N - 1`` bumps). Callers should add this to
+        ``ContextPack.duplicates_hidden``.
+    """
+    if not items:
+        return [], 0
+
+    # Map dedup_key -> index into `out` of the representative item.
+    first_idx: dict[tuple[str, str, str], int] = {}
+    out: list[ContextItem] = []
+    dropped = 0
+
+    for item in items:
+        title_prefix = item.title.split("(", 1)[0].strip()
+        key = (
+            item.path_or_ref.strip().lstrip("./").lower(),
+            title_prefix,
+            item.excerpt,
+        )
+        idx = first_idx.get(key)
+        if idx is None:
+            first_idx[key] = len(out)
+            out.append(item)
+            continue
+        # Duplicate: bump the representative's duplicates_hidden counter
+        # and drop this item.
+        rep = out[idx]
+        out[idx] = rep.model_copy(
+            update={"duplicates_hidden": getattr(rep, "duplicates_hidden", 0) + 1}
+        )
+        dropped += 1
+    return out, dropped
+
+
+# Public alias for cross-package use (orchestrator, tests).
+dedup_stubs = _dedup_stubs
+
+
 def _embed_model_is_cached(model_name: str = _EMBED_MODEL_NAME) -> bool:
     """Return True if the Hugging Face model directory for *model_name* exists.
 
@@ -306,6 +380,10 @@ class ContextRanker:
         items: list[ContextItem],
         query: str,
         mode: str,
+        *,
+        diff_spec: str | None = None,
+        project_root: Path | None = None,
+        boosted_items_sink: list[str] | None = None,
     ) -> list[ContextItem]:
         """Rank *items* and enforce the token budget.
 
@@ -315,8 +393,12 @@ class ContextRanker:
         3. If ``use_embeddings=True``, apply semantic similarity boost in
            every mode (a model must be available; otherwise the call is a
            no-op at the boost helper level).
-        4. Sort by ``confidence`` descending.
-        5. Trim to token budget while keeping at least one item per
+        4. v3.2 ``diff-aware-ranking-boost`` (P2): when *diff_spec* is
+           supplied, bump confidence by ``+0.15`` on any item whose
+           underlying symbol's ``[line_start, line_end]`` overlaps the
+           changed-line set for its file.
+        5. Sort by ``confidence`` descending.
+        6. Trim to token budget while keeping at least one item per
            ``source_type`` (so every category of evidence is represented).
 
         Args:
@@ -324,6 +406,20 @@ class ContextRanker:
             query: Free-text task description used for relevance boosting.
             mode: Task mode — currently informational. The semantic boost is
                 applied in every mode when ``use_embeddings=True``.
+            diff_spec: Optional diff spec passed through to the v3.2
+                ``diff-aware-ranking-boost`` helper. ``"HEAD"`` means
+                staged + unstaged vs. ``HEAD``; any other value is treated
+                as a commit SHA to diff against its parent. When ``None``
+                the boost is a strict no-op (the contractual negative case
+                in the DoD).
+            project_root: Repository root for the ``git diff`` subprocess.
+                Required when *diff_spec* is set; ignored otherwise. When
+                missing despite *diff_spec* being set, the boost emits a
+                single stderr warning and proceeds without boosting.
+            boosted_items_sink: Optional list the ranker appends the ``id``
+                of every diff-boosted item to. The Orchestrator supplies
+                this to surface telemetry under
+                ``ContextPack.metadata["boosted_items"]``.
 
         Returns:
             Ranked and budget-enforced list of ContextItems.
@@ -351,7 +447,25 @@ class ContextRanker:
         # for future per-mode tuning but no longer gates the call.
         if self._use_embeddings:
             boosted = self._apply_semantic_boost(boosted, query)
+        # v3.2 outcome ``diff-aware-ranking-boost`` (P2): run AFTER BM25 +
+        # hub/bridge + semantic so the +0.15 structural nudge composes on
+        # top of the content-based signals, and BEFORE the final sort so
+        # boosted items can actually change the order. Strict no-op when
+        # ``diff_spec`` is None (the DoD's negative case).
+        if diff_spec:
+            boosted = self._apply_diff_aware_boost(
+                boosted,
+                diff_spec=diff_spec,
+                project_root=project_root,
+                boosted_items_sink=boosted_items_sink,
+            )
         sorted_items = sorted(boosted, key=lambda i: i.confidence, reverse=True)
+
+        # v3.2 outcome ``symbol-stub-dedup`` (P1): collapse identical
+        # symbol stubs within the same file BEFORE budget enforcement so
+        # the budget fills with distinct content. Runs unconditionally —
+        # the helper is a no-op when no near-duplicates exist.
+        sorted_items, _ = _dedup_stubs(sorted_items)
 
         if self._budget <= 0:
             return sorted_items
@@ -854,8 +968,277 @@ class ContextRanker:
         except Exception:  # noqa: BLE001
             pass
 
+    # ------------------------------------------------------------------
+    # Diff-aware structural boost (v3.2: diff-aware-ranking-boost)
+    # ------------------------------------------------------------------
+
+    def _apply_diff_aware_boost(
+        self,
+        items: list[ContextItem],
+        *,
+        diff_spec: str,
+        project_root: Path | None,
+        boosted_items_sink: list[str] | None,
+    ) -> list[ContextItem]:
+        """Bump items whose symbol overlaps changed lines in *diff_spec*.
+
+        Formula: ``new_conf = min(0.95, conf + 0.15)`` for any item whose
+        underlying symbol's ``[line_start, line_end]`` intersects the set
+        of changed lines for its file. Items whose path isn't in the diff,
+        or whose symbol can't be resolved, are passed through unchanged.
+
+        Silent-failure rule: if ``git diff`` fails (not a repo, invalid
+        SHA, missing git), emit a single stderr warning
+        ``"diff-aware boost skipped: <reason>"`` and return the items
+        unchanged — never silent.
+
+        Args:
+            items: Candidates AFTER BM25/hub/semantic boosts.
+            diff_spec: ``"HEAD"`` or a commit SHA.
+            project_root: Repo root for ``git diff``. Required.
+            boosted_items_sink: Optional list receiving the ``id`` of each
+                item that received the +0.15 boost (telemetry).
+
+        Returns:
+            The list with bumped-confidence copies for overlap hits.
+        """
+        if not items:
+            return items
+        if project_root is None:
+            self._warn_diff_aware_skipped("no project_root supplied")
+            return items
+
+        # Deferred import — ranking should not import graph_index at module
+        # load time (avoids a cycle when graph_index imports ranking via
+        # the orchestrator in future refactors).
+        try:
+            from graph_index.blame import (  # noqa: PLC0415
+                get_changed_lines,
+                symbol_overlaps_diff,
+            )
+        except ImportError as exc:
+            self._warn_diff_aware_skipped(f"graph_index.blame unavailable: {exc}")
+            return items
+
+        try:
+            changed_by_path = get_changed_lines(Path(project_root), diff_spec)
+        except Exception as exc:  # noqa: BLE001 — boost is best-effort
+            self._warn_diff_aware_skipped(
+                f"git diff failed ({type(exc).__name__}: {exc})"
+            )
+            return items
+
+        if not changed_by_path:
+            # Either the diff is empty OR git refused to emit one. The
+            # blame module swallows failures silently, so an empty dict
+            # here can mean "no changes" or "not a git repo / invalid
+            # SHA". Surface the latter conservatively: warn only when
+            # *project_root* isn't inside a repo (cheap to detect via
+            # ``git rev-parse``); otherwise treat as "no changes" and
+            # skip the boost silently — empty diff is NOT a failure.
+            if not self._is_git_repo(Path(project_root)):
+                self._warn_diff_aware_skipped(
+                    f"not a git repository: {project_root}"
+                )
+            return items
+
+        # Prefer the project_root's DB when present so tests and CLI
+        # invocations resolving relative item paths don't accidentally
+        # pick up the AGENT's repo DB via ``Path.resolve()`` upward-walk.
+        proj_db = Path(project_root) / ".context-router" / "context-router.db"
+        if proj_db.is_file():
+            db_path: Path | None = proj_db
+        else:
+            db_path = _discover_db_path(items)
+        sym_lines_by_item = self._resolve_symbol_line_ranges(items, db_path)
+
+        # Build a per-path changed-line lookup that tolerates absolute /
+        # relative / leading-"./" forms. Symbol records store repo-relative
+        # paths; the diff emits repo-relative posix paths; items may carry
+        # either form. Normalise on the lookup side.
+        try:
+            root_abs = Path(project_root).resolve()
+        except (OSError, RuntimeError):
+            root_abs = Path(project_root)
+
+        norm_changed: dict[str, set[int]] = {}
+        for rel_path, lines in changed_by_path.items():
+            abs_form = str((root_abs / rel_path).resolve())
+            for key in {
+                rel_path,
+                rel_path.lstrip("./"),
+                f"./{rel_path}",
+                abs_form,
+            }:
+                norm_changed[key] = lines
+
+        out: list[ContextItem] = []
+        for item in items:
+            lines_for_item = self._lookup_item_diff_lines(
+                item.path_or_ref, norm_changed, root_abs
+            )
+            if not lines_for_item:
+                out.append(item)
+                continue
+            symbol_range = sym_lines_by_item.get(id(item))
+            if symbol_range is None:
+                # Item backed by a file but no symbol-level line data —
+                # cannot safely claim "overlaps changed lines". Skip.
+                out.append(item)
+                continue
+            start, end = symbol_range
+            if not symbol_overlaps_diff(start, end, lines_for_item):
+                out.append(item)
+                continue
+            new_conf = min(0.95, item.confidence + 0.15)
+            boosted = item.model_copy(update={"confidence": new_conf})
+            out.append(boosted)
+            if boosted_items_sink is not None:
+                try:
+                    boosted_items_sink.append(boosted.id)
+                except Exception:  # noqa: BLE001 — telemetry never blocks ranking
+                    pass
+        return out
+
+    @staticmethod
+    def _lookup_item_diff_lines(
+        path_or_ref: str,
+        norm_changed: dict[str, set[int]],
+        root_abs: Path,
+    ) -> set[int]:
+        """Return the changed-line set for *path_or_ref* across path forms."""
+        if not path_or_ref:
+            return set()
+        if path_or_ref in norm_changed:
+            return norm_changed[path_or_ref]
+        # Absolute variant of a relative item path.
+        try:
+            abs_variant = str((root_abs / path_or_ref).resolve())
+        except (OSError, RuntimeError):
+            abs_variant = path_or_ref
+        if abs_variant in norm_changed:
+            return norm_changed[abs_variant]
+        # Relative variant of an absolute item path.
+        try:
+            rel_variant = str(Path(path_or_ref).resolve().relative_to(root_abs))
+        except (OSError, RuntimeError, ValueError):
+            rel_variant = path_or_ref
+        return norm_changed.get(rel_variant, set())
+
+    def _resolve_symbol_line_ranges(
+        self,
+        items: list[ContextItem],
+        db_path: Path | None,
+    ) -> dict[int, tuple[int, int]]:
+        """Return ``{id(item): (line_start, line_end)}`` for resolvable items.
+
+        Mirrors :meth:`_resolve_symbol_ids` — same ``(file_path, name)``
+        lookup but returns the line range instead of the symbol id.
+        Returns an empty mapping on any failure so the boost path degrades
+        gracefully.
+        """
+        if db_path is None or not items:
+            return {}
+        try:
+            import sqlite3  # noqa: PLC0415
+
+            if self._db_connection is not None:
+                conn = self._db_connection
+                owns_conn = False
+                prev_factory = conn.row_factory
+                conn.row_factory = sqlite3.Row
+            else:
+                conn = sqlite3.connect(db_path)
+                conn.row_factory = sqlite3.Row
+                owns_conn = True
+                prev_factory = None
+            try:
+                by_repo: dict[str, list[ContextItem]] = {}
+                for it in items:
+                    by_repo.setdefault(it.repo or "default", []).append(it)
+
+                result: dict[int, tuple[int, int]] = {}
+                for repo_name, group in by_repo.items():
+                    keys: list[tuple[str, str]] = []
+                    item_by_key: dict[tuple[str, str], list[ContextItem]] = {}
+                    for it in group:
+                        name = it.title.split(" (")[0].strip()
+                        if not name or not it.path_or_ref:
+                            continue
+                        key = (it.path_or_ref, name)
+                        keys.append(key)
+                        item_by_key.setdefault(key, []).append(it)
+                    if not keys:
+                        continue
+                    placeholders = ",".join("(?, ?)" for _ in keys)
+                    flat: list[str] = []
+                    for fp, nm in keys:
+                        flat.append(fp)
+                        flat.append(nm)
+                    rows = conn.execute(
+                        f"""
+                        WITH wanted(file_path, name) AS (VALUES {placeholders})
+                        SELECT s.file_path, s.name, s.line_start, s.line_end
+                        FROM symbols s
+                        JOIN wanted w
+                          ON s.file_path = w.file_path AND s.name = w.name
+                        WHERE s.repo = ?
+                        """,
+                        (*flat, repo_name),
+                    ).fetchall()
+                    for r in rows:
+                        key = (r["file_path"], r["name"])
+                        ls = int(r["line_start"] or 0)
+                        le = int(r["line_end"] or 0)
+                        for it in item_by_key.get(key, []):
+                            result[id(it)] = (ls, le)
+                return result
+            finally:
+                if owns_conn:
+                    conn.close()
+                elif prev_factory is not None:
+                    conn.row_factory = prev_factory
+        except Exception:  # noqa: BLE001 — boost degrades gracefully
+            return {}
+
+    @staticmethod
+    def _is_git_repo(root: Path) -> bool:
+        """Return True iff ``git rev-parse --is-inside-work-tree`` succeeds."""
+        import subprocess  # noqa: PLC0415
+
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--is-inside-work-tree"],
+                cwd=str(root),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except (FileNotFoundError, OSError):
+            return False
+        return result.returncode == 0
+
+    def _warn_diff_aware_skipped(self, reason: str) -> None:
+        """Emit the single stderr line when the diff-aware boost can't run."""
+        try:
+            print(
+                f"context-router: diff-aware boost skipped: {reason}",
+                file=sys.stderr,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     def _annotate(self, item: ContextItem) -> ContextItem:
-        """Return a copy of *item* with the reason field populated."""
+        """Return a copy of *item* with the reason field populated.
+
+        v3.2 outcome: function-level-reason — the orchestrator may have
+        already set an upgraded reason string (e.g.
+        ``"Modified `foo` lines 12-34"``) when the item is backed by a
+        Symbol with known line data. Preserve that upgraded string; only
+        fill the category fallback when ``reason`` is empty.
+        """
+        if item.reason:
+            return item
         reason = _REASON.get(item.source_type, _DEFAULT_REASON)
         return item.model_copy(update={"reason": reason})
 

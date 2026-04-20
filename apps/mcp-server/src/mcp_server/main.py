@@ -214,6 +214,16 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     ),
                     "default": False,
                 },
+                "top_k": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": (
+                        "Cap selected_items at N after ranking. 0 (default) "
+                        "applies no cap. When the ranked pool is smaller "
+                        "than top_k, the full pool is returned."
+                    ),
+                    "default": 0,
+                },
                 "progressToken": {
                     "type": ["string", "integer"],
                     "description": (
@@ -222,6 +232,32 @@ _TOOLS: dict[str, dict[str, Any]] = {
                         "tools/call. Notifications are only sent when the built "
                         "pack exceeds 2,000 tokens."
                     ),
+                },
+                "pre_fix": {
+                    "type": "string",
+                    "description": (
+                        "Commit SHA. Only meaningful with mode='review'. "
+                        "Treats the diff of <sha>^..<sha> as the change-set "
+                        "so the pack is ranked as if the working tree were "
+                        "at <sha>^ — CRG-comparable without needing to hand "
+                        "in a pre-computed diff. Returns an error (no "
+                        "traceback) on unknown SHA or non-review mode."
+                    ),
+                    "default": "",
+                },
+                "keep_low_signal": {
+                    "type": "boolean",
+                    "description": (
+                        "Review-mode escape hatch (v3.2 review-tail-cutoff). "
+                        "When false (default), review packs drop trailing "
+                        "source_type='file' items with confidence < 0.3 "
+                        "once the token budget is filled by structurally-"
+                        "important items (changed_file, blast_radius, "
+                        "config). Pass true to preserve the full tail for "
+                        "debugging. Ignored (with a stderr warning) for "
+                        "non-review modes."
+                    ),
+                    "default": False,
                 },
             },
         },

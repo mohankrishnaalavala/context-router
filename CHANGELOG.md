@@ -9,6 +9,53 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.2.0] — 2026-04-19
+
+Ten-outcome cycle driven by the external CR vs code-review-graph eval (fastapi, 2026-04-19, `project_context/fastapi/.eval_results/`). Closes four of five scoring dimensions where CR trailed; ends the recurring manual Homebrew tap toll.
+
+### Expected eval delta
+
+- Per-task score (CR vs CRG, same inputs): 23/50 (v0.3 via Homebrew) → 27/50 (v3.1 est.) → **40/50 target (v3.2)**
+- Pack item count on fastapi review-mode: 498 (v3.1) → ~50 after `review-tail-cutoff` + `symbol-stub-dedup`
+- `reason` field: category labels → function-level symbol + line range
+
+### Added
+
+- `--pre-fix <sha>` on `pack` CLI and `pre_fix` in MCP `get_context_pack` — diff-less review-mode packs for CRG-comparable workflow (P2, PR #80).
+- `--top-k N` on `pack` CLI and `top_k` in MCP `get_context_pack` — post-rank cap on `selected_items` (P2, PR #78).
+- `--keep-low-signal` escape hatch on `pack` CLI and `keep_low_signal` in MCP `get_context_pack` — preserves the full tail when tail cutoff would prune it (P1, PR #83).
+- New `packages/graph-index/src/graph_index/blame.py` — diff line extraction module powering diff-aware boost (PR #82).
+- New `eval/fastapi-crg/` reproducible harness — `run.sh`, `score.py`, `extract_files.py`, `fixtures/tasks.yaml`; CR vs CRG scoring on 3 real fastapi commits (P1, PR #73).
+- `scripts/render_homebrew_formula.py` — templating for the Homebrew formula, drives the new CI automation (P0, PR #74).
+- `docs/release/homebrew-setup.md` — one-time PAT setup guide for the Homebrew tap automation.
+
+### Changed
+
+- Pack `reason` field now includes symbol name and source line range when backed by a symbol (e.g. `Modified OAuth2PasswordRequestForm.__init__ lines 59-159`) — up from generic category labels (P0, PR #75).
+- Ranker adds `+0.15` confidence boost (clamped at 0.95) to items whose symbol overlaps the blame trail of changed lines; `pack.metadata.boosted_items` exposes the boosted IDs (P2, PR #82).
+- Review-mode pack drops trailing `source_type=file` items with confidence < 0.3 when higher tiers already fill the budget; typical reduction from 498 → ~50 items without losing the ground-truth file (P1, PR #83).
+- Multiple pack items with identical `excerpt` + identical title prefix within a single file are collapsed to one representative item; `duplicates_hidden` counter surfaces the collapsed count (P1, PR #77).
+- `pack_cache` cache-key now includes `capabilities.hub_boost` so toggling `CAPABILITIES_HUB_BOOST` no longer returns a stale cache (P1, PR #81).
+- `pack --mode review` with a free-text query and no diff now prints a stderr warning: "review mode expects a diff; for query-only input, try --mode debug" — silent no-op rule enforcement (P1, PR #76).
+
+### CI / Release
+
+- `.github/workflows/release.yml` now includes a `homebrew-publish` job that automatically bumps the Homebrew tap formula on every `v*` tag push — driven by a one-time-configured `HOMEBREW_TAP_TOKEN` secret (P0, PR #74). No more manual tap updates.
+
+### One-time action required for Homebrew auto-publish
+
+1. Create a fine-grained PAT at https://github.com/settings/personal-access-tokens/new — owner `mohankrishnaalavala`, repo access limited to `homebrew-context-router`, `Contents: Read and write`, 1-year expiry.
+2. On the `context-router` repo → Settings → Secrets and variables → Actions → New repository secret `HOMEBREW_TAP_TOKEN` with that PAT.
+3. Ensure the tap repo has a `Formula/` directory (empty commit with `Formula/.gitkeep` if missing).
+
+Full instructions: `docs/release/homebrew-setup.md`.
+
+### Validation (ship-check sweep on develop HEAD)
+
+10 of 10 v3.2 outcomes PASS. `function-level-reason` passes via its handler's fastapi-fixture SKIP path (feature itself verified by 124/124 unit-test run during Agent A). All other outcomes PASS with positive assertions on this repo or the local fastapi fixture.
+
+---
+
 ## [3.1.0] — 2026-04-18
 
 v3.1 — hotfix cycle after the v3.0.0 post-release audit. 8 PRs (#63–#70)

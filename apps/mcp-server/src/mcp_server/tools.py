@@ -17,6 +17,91 @@ def _orchestrator(project_root: str = "") -> "Orchestrator":
     return Orchestrator(project_root=root)
 
 
+_REVIEW_DIFFLESS_MSG = (
+    "review mode expects a diff; for query-only input, try --mode debug"
+)
+
+
+def _maybe_warn_review_needs_diff(project_root: str) -> None:
+    """Mirror of the CLI mode-mismatch warning for MCP callers.
+
+    Sends an MCP ``notifications/message`` (level=warning) when
+    ``get_context_pack(mode="review", query="...")`` runs against a clean
+    git tree, and a ``level=info`` skip notice on non-git / git-error
+    trees so the absence of the warning is never silent.
+
+    Writes go through ``main._notify`` so they share the stdout
+    ``_write_lock`` and cannot interleave with JSON-RPC responses.
+    Falls back to stderr if the server module isn't importable (e.g.
+    tools.py is exercised directly by a unit test).
+    """
+    import subprocess
+    import sys
+
+    root = Path(project_root).resolve() if project_root else Path.cwd()
+
+    try:
+        unstaged = subprocess.run(
+            ["git", "diff", "--quiet"],
+            cwd=str(root),
+            capture_output=True,
+            check=False,
+        )
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=str(root),
+            capture_output=True,
+            check=False,
+        )
+    except (FileNotFoundError, OSError) as exc:
+        _emit_mcp_log(
+            "info",
+            f"review-mode diff check skipped ({type(exc).__name__}: {exc})",
+        )
+        return
+
+    if unstaged.returncode >= 2 or staged.returncode >= 2:
+        reason = (unstaged.stderr or staged.stderr or b"").decode(
+            "utf-8", errors="replace"
+        ).strip()
+        _emit_mcp_log(
+            "info",
+            f"review-mode diff check skipped (not a git repo or git error: {reason})",
+        )
+        return
+
+    if unstaged.returncode == 0 and staged.returncode == 0:
+        _emit_mcp_log("warning", _REVIEW_DIFFLESS_MSG)
+        # Also mirror to stderr — keeps non-MCP callers (unit tests,
+        # programmatic invocations) observable without JSON-RPC framing.
+        print(f"warning: {_REVIEW_DIFFLESS_MSG}", file=sys.stderr)
+
+
+def _emit_mcp_log(level: str, text: str) -> None:
+    """Send a ``notifications/message`` frame to the MCP client.
+
+    Falls back to stderr if the server module isn't loaded (unit tests
+    call the tool function directly, outside the stdio transport).
+    """
+    try:
+        from mcp_server.main import _notify  # local import — transport layer
+    except Exception:  # noqa: BLE001 — fallback keeps the warning audible
+        import sys
+        print(f"[mcp-server] {level}: {text}", file=sys.stderr)
+        return
+    try:
+        _notify(
+            "notifications/message",
+            {"level": level, "logger": "context-router", "data": text},
+        )
+    except Exception as exc:  # noqa: BLE001 — never crash the tool response
+        import sys
+        print(
+            f"[mcp-server] notifications/message failed ({exc}); text: {text}",
+            file=sys.stderr,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Index tools
 # ---------------------------------------------------------------------------
@@ -117,7 +202,10 @@ def get_context_pack(
     page: int = 0,
     page_size: int = 0,
     use_embeddings: bool = False,
+    top_k: int = 0,
     progress_cb=None,
+    pre_fix: str = "",
+    keep_low_signal: bool = False,
 ) -> dict:
     """Generate a ranked context pack.
 
@@ -131,25 +219,109 @@ def get_context_pack(
         page_size: Items per page. 0 = no pagination (return all ranked items).
         use_embeddings: Opt-in semantic ranking (triggers a one-time ~33 MB
             model download). Defaults to False.
+        top_k: Cap ``selected_items`` at N after ranking. 0 (default) applies
+            no cap; negative values are treated as 0 with a stderr warning.
+            When the ranked pool has fewer than ``top_k`` items, the full
+            pool is returned unchanged (no warning).
         progress_cb: Optional ``(stage, progress, total)`` callable invoked at
             build milestones.  Supplied by the MCP dispatcher when the caller
             sends a ``progressToken``; normal CLI callers leave this ``None``.
+        pre_fix: Optional commit SHA. Only meaningful with ``mode="review"``.
+            Treats the diff of ``<sha>^..<sha>`` as the change-set so the
+            pack is ranked as if the working tree were at ``<sha>^``.
+            Returns ``{"error": ...}`` (no traceback) when the SHA is not
+            found or the combination is invalid.
+        keep_low_signal: Review-mode escape hatch (v3.2 ``review-tail-cutoff``).
+            When ``False`` (default), review-mode packs drop trailing
+            ``source_type="file"`` items with confidence < 0.3 once the
+            token budget has been filled by structurally-important items
+            (``changed_file``, ``blast_radius``, ``config``). Pass
+            ``True`` to preserve the full tail — only useful for
+            debugging ranker output. Ignored with a stderr warning for
+            non-review modes.
 
     Returns:
         Serialised ContextPack as a dict, or {"text": ...} when format="compact".
     """
+    # Reject pre_fix with a non-review mode loudly — otherwise the flag
+    # would silently no-op, and silent failures are banned (CLAUDE.md).
+    if pre_fix and mode != "review":
+        return {"error": "pre_fix is only valid with mode='review'"}
+
+    # Silent-failure rule (mode-mismatch-warning): warn callers who invoke
+    # review mode with only a free-text query against a clean tree. We
+    # emit an MCP ``notifications/message`` (level=warning) — writing to
+    # stdout would corrupt JSON-RPC framing, and silent no-op is banned.
+    # Skipped when pre_fix is set because the diff source is the commit,
+    # not the working tree — the warning would be misleading noise.
+    if mode == "review" and query.strip() and not pre_fix:
+        _maybe_warn_review_needs_diff(project_root)
+
+    # Silent-failure rule: negative top_k is a silent no-op under a naive
+    # truncate. Normalise to "no cap" and warn on stderr — stdout is
+    # reserved for JSON-RPC frames on the MCP transport.
+    if top_k is not None and top_k < 0:
+        import sys
+        print(
+            f"warning: top_k={top_k} is negative; ignoring (no cap applied).",
+            file=sys.stderr,
+            flush=True,
+        )
+        top_k = 0
+
+    # Silent-failure rule: keep_low_signal is a review-mode-only escape
+    # hatch. Passing it in another mode is a no-op, so warn on stderr
+    # (stdout is reserved for JSON-RPC frames).
+    if keep_low_signal and mode != "review":
+        import sys
+        print(
+            "warning: keep_low_signal has no effect outside mode='review' "
+            f"(current mode={mode!r}); ignoring.",
+            file=sys.stderr,
+            flush=True,
+        )
+
+    # Only forward pre_fix as a kwarg when the caller actually supplied one
+    # — keeps the existing ``build_pack`` call shape identical for the vast
+    # majority of callers (including test mocks that don't accept the new
+    # parameter) and only widens the signature for the review/pre-fix path.
+    build_pack_kwargs: dict = {
+        "page": page,
+        "page_size": page_size,
+        "use_embeddings": use_embeddings,
+        "progress": False,
+        "progress_cb": progress_cb,
+    }
+    if pre_fix:
+        build_pack_kwargs["pre_fix"] = pre_fix
+    # Only forward keep_low_signal when the caller opted in, so pre-existing
+    # test mocks that don't declare the kwarg continue to work untouched.
+    if keep_low_signal:
+        build_pack_kwargs["keep_low_signal"] = True
     try:
         # progress=False is critical on MCP stdio transport — stdout is
         # reserved for JSON-RPC frames; any progress output would corrupt it.
         pack = _orchestrator(project_root).build_pack(
             mode,
             query,
-            page=page,
-            page_size=page_size,
-            use_embeddings=use_embeddings,
-            progress=False,
-            progress_cb=progress_cb,
+            **build_pack_kwargs,
         )
+        # Apply the caller-facing cap post-ranking. No cap when ``top_k``
+        # is 0/unset; when the pool is smaller than the cap, the full pool
+        # is returned unchanged (documented; no warning).
+        if top_k and top_k > 0 and len(pack.selected_items) > top_k:
+            pack.selected_items = pack.selected_items[:top_k]
+            try:
+                pack.total_est_tokens = sum(
+                    int(getattr(i, "est_tokens", 0) or 0) for i in pack.selected_items
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            if hasattr(pack, "total_items"):
+                try:
+                    pack.total_items = len(pack.selected_items)
+                except Exception:  # noqa: BLE001
+                    pass
         if format == "compact":
             return {"text": pack.to_compact_text(), "has_more": pack.has_more, "total_items": pack.total_items}
         return pack.model_dump(mode="json")

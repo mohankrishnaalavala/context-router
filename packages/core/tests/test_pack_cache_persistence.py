@@ -246,6 +246,7 @@ class TestPackCachePersistence:
             8_000,
             False,
             items_hash,
+            orch._canonical_hub_boost_flag(),
         )
         orch._pack_cache[cache_key] = pack
 
