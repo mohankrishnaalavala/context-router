@@ -1052,6 +1052,12 @@ def _handle(request: dict) -> dict | None:
             "capabilities": {
                 "tools": {},
                 "resources": {"listChanged": True},
+                # v3.3.0 γ1: advertise the server's ``notifications/progress``
+                # support so clients know it's safe to pass ``progressToken``
+                # on ``tools/call``. Non-standard key but MCP draft permits
+                # vendor-defined capability flags and Claude Code ignores
+                # unknown ones — surfacing it beats a silent no-op.
+                "progress": True,
             },
             "serverInfo": {"name": "context-router", "version": _SERVER_VERSION},
         })
