@@ -46,6 +46,16 @@ class TestInitializeCapabilities:
         assert "resources" in caps
         assert caps["resources"] == {"listChanged": True}
 
+    def test_declares_progress_capability(self) -> None:
+        """v3.3.0 γ1: initialize response must advertise `progress: true`."""
+        from mcp_server.main import _handle
+        resp = _handle({"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {}})
+        caps = resp["result"]["capabilities"]
+        assert caps.get("progress") is True, (
+            "capabilities.progress must be True so clients know "
+            "progressToken on tools/call is supported"
+        )
+
 
 # ---------------------------------------------------------------------------
 # resources/list + resources/read
