@@ -51,14 +51,14 @@ class TestInitialize:
         assert resp["result"]["serverInfo"]["version"] != "0.1.0"
         assert resp["result"]["serverInfo"]["version"] != "0.0.0+unknown"
 
-    def test_import_fails_clearly_when_package_missing(self, monkeypatch):
-        """Phase-4 mcp-serverinfo-version negative case: if the package
-        metadata cannot be resolved, module import MUST raise ImportError
-        with a clear message — NOT silently fall back to a stub version.
+    def test_falls_back_to_cli_bundle_version_when_mcp_server_dist_missing(self, monkeypatch):
+        """v3.3.1: when `context-router-mcp-server` is absent (the
+        production path — PyPI/pipx/brew users install `context-router-cli`
+        only and the mcp_server module ships bundled via hatch force-include),
+        serverInfo.version MUST resolve to `context-router-cli`'s version.
 
-        We drop the already-loaded ``mcp_server.main`` from ``sys.modules``
-        and re-import it under a patched ``importlib.metadata.version``
-        that raises for our distribution name.
+        Pre-v3.3.1, this raised ImportError and `context-router mcp`
+        could not start on any fresh end-user install.
         """
         import importlib
         import importlib.metadata as md
@@ -66,20 +66,48 @@ class TestInitialize:
 
         real_version = md.version
 
-        def _raise(name: str) -> str:
+        def _fake(name: str) -> str:
             if name == "context-router-mcp-server":
+                raise md.PackageNotFoundError(name)
+            if name == "context-router-cli":
+                return "9.9.9"
+            return real_version(name)
+
+        monkeypatch.setattr(md, "version", _fake)
+        monkeypatch.delitem(sys.modules, "mcp_server.main", raising=False)
+        try:
+            module = importlib.import_module("mcp_server.main")
+            assert module._SERVER_VERSION == "9.9.9"
+        finally:
+            monkeypatch.setattr(md, "version", real_version)
+            sys.modules.pop("mcp_server.main", None)
+            importlib.import_module("mcp_server.main")
+
+    def test_import_fails_clearly_when_both_dists_missing(self, monkeypatch):
+        """Negative case: if NEITHER `context-router-mcp-server` NOR
+        `context-router-cli` is installed (the module is being imported
+        from a context where context-router was never pip-installed at
+        all), import MUST raise ImportError with a clear message naming
+        both distributions. This is the boundary that keeps silent stub
+        versions from riding into production handshakes.
+        """
+        import importlib
+        import importlib.metadata as md
+        import sys
+
+        real_version = md.version
+
+        def _raise_both(name: str) -> str:
+            if name in ("context-router-mcp-server", "context-router-cli"):
                 raise md.PackageNotFoundError(name)
             return real_version(name)
 
-        monkeypatch.setattr(md, "version", _raise)
-        # Drop any cached copy so the module-level version lookup re-runs.
+        monkeypatch.setattr(md, "version", _raise_both)
         monkeypatch.delitem(sys.modules, "mcp_server.main", raising=False)
         try:
-            with pytest.raises(ImportError, match="not installed"):
+            with pytest.raises(ImportError, match="context-router-cli"):
                 importlib.import_module("mcp_server.main")
         finally:
-            # Restore real version resolution and force a clean reload so
-            # subsequent tests see a healthy module.
             monkeypatch.setattr(md, "version", real_version)
             sys.modules.pop("mcp_server.main", None)
             importlib.import_module("mcp_server.main")

@@ -179,7 +179,45 @@ PY
     _fail "symbols table has ${row_count} rows (expected >= 1)"
   fi
 
-  _pass "${symbols} symbols written, ${row_count} rows in symbols table, entry points: ${ep_out}"
+  # v3.3.1 regression guard: the MCP server bundled into the CLI wheel
+  # must start and answer a JSON-RPC `initialize` frame. Pre-v3.3.1 the
+  # server crashed at import time because it resolved its version from a
+  # PyPI distribution (`context-router-mcp-server`) that is never
+  # published — so the bundled path (everyone on pip/pipx/brew) was
+  # fatally broken while source checkouts passed.
+  local init_req='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke-packaging","version":"0"}}}'
+  local init_resp
+  init_resp="$(printf '%s\n' "${init_req}" | "${venv}/bin/context-router" mcp 2>/dev/null | head -n1)" \
+    || _fail "context-router mcp failed to produce a response — bundled MCP server cannot start"
+  local mcp_version
+  mcp_version="$("${venv}/bin/python3" - "${init_resp}" <<'PY'
+import json, sys
+try:
+    obj = json.loads(sys.argv[1])
+except Exception as exc:
+    print(f"PARSE_ERROR:{exc}")
+    raise SystemExit(0)
+if obj.get("jsonrpc") != "2.0" or obj.get("id") != 1:
+    print("SHAPE_ERROR:not a JSON-RPC 2.0 response with id=1")
+    raise SystemExit(0)
+result = obj.get("result") or {}
+version = (result.get("serverInfo") or {}).get("version")
+if not version:
+    print("VERSION_MISSING:serverInfo.version not set")
+    raise SystemExit(0)
+print(version)
+PY
+)"
+  case "${mcp_version}" in
+    PARSE_ERROR:*|SHAPE_ERROR:*|VERSION_MISSING:*)
+      _fail "MCP initialize response invalid — ${mcp_version}"
+      ;;
+  esac
+  if [[ -z "${mcp_version}" ]]; then
+    _fail "MCP initialize produced no serverInfo.version"
+  fi
+
+  _pass "${symbols} symbols, ${row_count} rows, entry points: ${ep_out}, mcp: ${mcp_version}"
 }
 
 main "$@"
