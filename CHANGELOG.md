@@ -9,6 +9,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [3.3.1] — 2026-04-20
+
+Hotfix: bundled MCP server could not start after `pip install context-router-cli`.
+
+### Fixed
+
+- **MCP server bundled in `context-router-cli` wheel now starts.** `mcp_server/main.py` resolved `serverInfo.version` from PyPI distribution `context-router-mcp-server`, which is never published to PyPI — only `context-router-cli` is. On any fresh `pip install` / `pipx install` / `brew install`, the module crashed at import time with `PackageNotFoundError` before a single JSON-RPC frame could be read, making `context-router mcp` unusable for every end‑user install path. Fix: fall back to `context-router-cli`'s distribution version when `context-router-mcp-server` is absent (release process bumps both in lockstep, so either's version is truthful). Source‑checkout users (`pip install -e apps/mcp-server`) keep their original path.
+
+### Validation
+
+- **`scripts/smoke-packaging.sh`** now pipes a JSON‑RPC `initialize` frame into `context-router mcp` inside the clean‑venv fixture and asserts a valid response with `serverInfo.version` set. This regression guard closes the gap that let v3.3.0 ship with the bundled MCP path broken while source checkouts passed green.
+
+### Why this slipped v3.3.0
+
+`smoke-packaging.sh` proved `context-router index` works on a fresh install but never exercised `context-router mcp`. Every developer machine runs from a source checkout where `context-router-mcp-server` is installed editable, masking the bundled‑wheel failure mode. The pre-release smoke harness is now the first thing users rely on: it exercises the exact install path end-users take.
+
+---
+
 ## [3.3.0] — 2026-04-20
 
 First‑run works, MCP streams, agent output. Shipped in response to the external CR vs code‑review‑graph judge (2026‑04‑19) that flagged three shipping‑quality issues eclipsing algorithm gains: fresh installs indexing zero files, default pack burying the right answer in 50k+ tokens, and opaque `<external>` placeholders eating precision. Four parallel lanes (α/β/γ/δ) delivered 8 new v3‑outcome entries.
