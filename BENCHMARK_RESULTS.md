@@ -1,6 +1,54 @@
-# context-router Benchmark Results
+# context-router Benchmark Results — v3.3.1
 
-Real-world measurements, updated per release. Numbers tagged by release.
+Real-world measurements, updated per release. Numbers tagged by release. The
+currently published version is **v3.3.1** (2026-04-23, MCP hotfix release over
+the v3.3 baseline). Self-repo numbers in the TL;DR below were re-measured on
+the v3.3.1 CLI against this repository. External-repo numbers (bulletproof-react,
+eShopOnWeb, spring-petclinic, secret-scan-360, project_handover) were NOT
+re-run for v3.3.1 — v3.3.1 is an MCP-only hotfix, ranking/selection behaviour
+is unchanged vs v3.2, and those repos are not currently checked out at a pinned
+SHA. They are scheduled for re-measurement at v4.0. Existing v3.0.0 / v0.6
+numbers for external repos are retained below with an italic caveat.
+
+---
+
+## v3.3.1 — self-repo refresh (2026-04-23)
+
+Scope: self-repo only (context-router @ commit `0c9bbd7`, develop branch).
+Re-run under the v3.3.1 CLI installed from `apps/cli` into a scratch venv.
+Suite: `generic` (the Python-oriented 20-task suite used for self-repo in v3.0.0).
+Token budget: 8,000 (default). Runs: 10 per task. Latency measured with
+`time.perf_counter()` across all 10 repetitions per task (no warm/cold
+separation in the default suite).
+
+### TL;DR (v3.3.1 — self only)
+
+| Repo | Files | Symbols | Task suite | Mean reduction | Latency (mean) | Tasks OK | Hit rate (router vs random) |
+|---|---|---|---|---|---|---|---|
+| context-router (self) | 1,009 | 10,569 | generic | **99.2%** (CI 99.1–99.2) | 407 ms (CI 239–574) | 20 / 20 | 51.1% vs 33.3% |
+
+Raw artifacts: `internal_docs/benchmarks/v3.3.1-self.json` (raw run) and
+`internal_docs/benchmarks/v3.3.1-self.report.md` (Markdown render).
+
+Notes on interpretation:
+- **Higher reduction vs v3.0.0 (94.85% → 99.2%) is driven mostly by a larger naive baseline.** The worktree indexed 1,009 files / 10,569 symbols (vs 426 / 1,768 in v3.0.0) because it contains the full monorepo including vendored packages, agent worktrees, and internal docs. The absolute selected-pack size is 7,446 tokens (v3.0.0 was also budget-bound near 8,000). The reduction ratio climbs because the denominator grew.
+- **Hit rate (51.1%) now beats random (33.3%) by +17.8 pp on the generic suite**, including 100% on `imp-05` (structured logging) and 67% on most debug queries. The v3.0.0 self-repo line in this doc did not publish a hit-rate number.
+- **Latency is higher than v3.0.0 (407 ms vs 5.84 ms warm)** because the v3.3.1 run here is end-to-end wall time per task including pack construction, not the inner-pipeline warm number v3.0.0 isolated. The CI bands on latency are wide (std ~1.2 s per task) because the first run of each task eats cold cache population; subsequent runs are much faster. Not a regression in the hot path.
+- **Known benign stderr noise**: `context-router benchmark run` emits informational warnings about a function-level-reason fallback and about dropping ~90 opaque `<external>` placeholder items per pack. Neither affects the metrics above; both are logged to `internal_docs/benchmarks/v3.3.1-self.stderr.log` for traceability.
+
+### Reproduce
+
+```bash
+uv venv .venv-bench --python 3.12
+uv pip install --python .venv-bench/bin/python -e apps/cli
+.venv-bench/bin/context-router init  --project-root .
+.venv-bench/bin/context-router index --project-root .
+.venv-bench/bin/context-router benchmark run \
+  --project-root . --runs 10 --json \
+  --output internal_docs/benchmarks/v3.3.1-self.json
+.venv-bench/bin/context-router benchmark report \
+  --input internal_docs/benchmarks/v3.3.1-self.json
+```
 
 ---
 
@@ -24,14 +72,17 @@ the JSON report for programmatic consumers.
 
 Token budget: 8,000 (default). Runs: 10 per task. Latency measured warm (after L2 cache fill). `--runs 10` produces non-null 95% CIs on every metric.
 
-### TL;DR (v3.0.0 — across 3 real OSS repos + self)
+### TL;DR (v3.0.0 — 3 real OSS repos)
 
 | Repo | Files | Symbols | Task suite | Mean reduction | Latency (warm) | Tasks OK |
 |---|---|---|---|---|---|---|
-| context-router (self) | 426 | 1,768 | generic | **94.85%** (CI 94.84–94.86) | 5.84 ms (CI 5.52–6.15) | 20 / 20 |
 | bulletproof-react | 426 | 769 | typescript | **78.69%** (CI 78.69–78.70) | 5.77 ms (CI 5.49–6.05) | 15 / 15 |
 | eShopOnWeb | 352 | 1,386 | dotnet | **90.40%** (CI 90.39–90.41) | 5.77 ms (CI 5.49–6.05) | 15 / 15 |
 | spring-petclinic | 48 | 217 | java | **52.63%** (CI 52.41–52.85) | 5.53 ms (CI 5.24–5.82) | 15 / 15 |
+
+_External-repo numbers predate v3.2 ranking work; not re-run for v3.3.1 (MCP hotfix only). Scheduled for v4.0 re-measurement._
+
+The v3.0.0 self-repo row previously published here (94.85% reduction, 426 files, 1,768 symbols) has been removed because the self-repo is now measured in the v3.3.1 TL;DR above.
 
 Methodology: `uv run context-router benchmark run --project-root <repo> --task-suite <suite> --runs 10 --json`. CI = mean ± 1.96·σ/√n.
 
@@ -76,6 +127,8 @@ Retained for trend tracking.
 | secret-scan-360 (security scanner) | 183 | 543 | **49.4%** | **48.1% vs 35.2%** | 105 ms |
 | context-router (self) | 190 | 1,100 | **80.9%** | 37.2% vs 41.2% | 333 ms |
 
+_External-repo numbers predate v3.2 ranking work; not re-run for v3.3.1 (MCP hotfix only). Scheduled for v4.0 re-measurement._ The v0.6 self-repo row is superseded by the v3.3.1 TL;DR at the top of this document.
+
 > **Quality note:** Hit rate measures what fraction of "expected relevant symbols" the router
 > selected. Router outperforms random baseline by **+12.9 pp** on secret-scan-360 (domain match).
 > Self-benchmark hit rate is below random — expected, since generic task queries (auth, rate
@@ -101,6 +154,8 @@ Retained for trend tracking.
 | **Hit rate (router)** | **48.1%** |
 | Hit rate (random baseline) | 35.2% |
 | Rank quality (conf ≥ 0.70) | **75.5%** |
+
+_External-repo numbers predate v3.2 ranking work; not re-run for v3.3.1 (MCP hotfix only). Scheduled for v4.0 re-measurement._
 
 The router selects at **~2× better** hit rate than random sampling for domain-matched tasks.
 75.5% of selected items have confidence ≥ 0.70, indicating strong signal from structural sources.
@@ -170,6 +225,8 @@ Reduction: **49.0%** | Tokens: **5,245** | Latency: **104 ms** | Hit rate: **44.
 | implement | add support for Notion export format | 7,998 / 38,319 | **79.1%** | ~710 ms |
 | handover | _(no query)_ | 8,000 / 38,319 | **79.1%** | ~680 ms |
 | debug | AttributeError in LLM client (with error-file) | 8,180 / 38,430 | **78.7%** | ~850 ms |
+
+_External-repo numbers predate v3.2 ranking work; not re-run for v3.3.1 (MCP hotfix only). Scheduled for v4.0 re-measurement._
 
 **Naive (all 1,313 symbols):** ~38,319 tokens · Router selects 8,000 → **79% reduction, 4.8× more efficient.**
 
@@ -281,4 +338,4 @@ token_budget: 16000
 - **Router output**: confidence-ranked symbols within the 8,000-token budget (≥1 item per source type preserved).
 - **Latency** includes process startup; warm invocations (benchmark harness) are faster.
 
-_Generated by [context-router](https://github.com/mohankrishnaalavala/context-router) v0.6.0_
+_Generated by [context-router](https://github.com/mohankrishnaalavala/context-router); self-repo TL;DR refreshed against v3.3.1 on 2026-04-23. Historical sections retained for trend tracking._
