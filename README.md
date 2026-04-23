@@ -495,7 +495,7 @@ context-router benchmark report [--project-root PATH] [--input PATH] [--json]
 
 `--runs N` (default **10**) controls how many times each task is executed; 95% confidence intervals are published in the JSON output at `metrics[].ci95` when `N >= 10`. At `N < 10` the CLI prints a stderr warning (`warning: benchmark ran with n=<N> runs; ci95 is null …`) and every `ci95` field is `null` — honest nulls beat noisy intervals.
 
-See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real numbers on external codebases (**49–81% average token reduction**, quality metrics, and per-mode breakdown). Token reduction is highest on large repos (project_handover: 79%, context-router self: 81%). Hit-rate benchmarks use a Python-optimized task suite; accuracy on non-Python repos improves with language-specific task suites.
+See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real numbers on external codebases (**49–90% average token reduction**, quality metrics, and per-mode breakdown). Token reduction is highest on large repos (project_handover: 79%, eShopOnWeb: 90%, context-router self on v3.3.1: **99%** at a 10.5k-symbol baseline). Hit-rate benchmarks use a Python-optimized task suite; accuracy on non-Python repos improves with language-specific task suites. External-repo numbers predate v3.2 ranking work and were not re-run for v3.3.1 (MCP hotfix only); scheduled for v4.0 re-measurement.
 
 ---
 
@@ -790,13 +790,24 @@ Install your package into the workspace and `context-router index` will pick it 
 
 ## Benchmark Results
 
-Measured on two external Python codebases using the built-in 20-task suite (5 tasks × 4 modes):
+Self-repo numbers were refreshed against v3.3.1 on 2026-04-23. External-repo numbers predate v3.2 ranking work and were not re-run for v3.3.1 (MCP hotfix only); scheduled for v4.0 re-measurement.
+
+### v3.3.1 — self-repo (2026-04-23)
+
+| Codebase | Files | Symbols | Avg reduction (CI) | Hit rate vs random | Latency |
+|---|---|---|---|---|---|
+| context-router (self) | 1,009 | 10,569 | **99.2%** (99.1–99.2) | **51.1% vs 33.3%** | 407 ms |
+
+20 / 20 tasks succeeded at 10 runs per task. The higher reduction vs prior runs is driven by a larger naive baseline (monorepo + vendored packages) rather than a behavioural regression; absolute pack size remains near the 8,000-token budget. See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for detail.
+
+### v0.6 / historical — external Python codebases (not re-run for v3.3.1)
 
 | Codebase | Symbols | Avg reduction | Hit rate vs random | Latency |
 |---|---|---|---|---|
 | secret-scan-360 (security scanner) | 543 | **49.4%** | **48.1% vs 35.2%** | 105 ms |
 | project_handover (Python CLI) | 1,313 | **79.1%** | — | ~750 ms |
-| context-router (self) | 1,100 | **80.9%** | 37.2% vs 41.2% | 333 ms |
+
+_External-repo numbers predate v3.2 ranking work; not re-run for v3.3.1 (MCP hotfix only). Scheduled for v4.0 re-measurement._
 
 **Hit rate** measures whether the right symbols were selected, not just token count. The router outperforms random sampling by +12.9 pp on domain-matched repos (on Python repositories with domain-matched queries).
 

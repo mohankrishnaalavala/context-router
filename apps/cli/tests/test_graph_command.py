@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -37,7 +38,67 @@ class TestGraphCommand:
         assert out.exists()
         content = out.read_text()
         assert "context-router graph" in content
-        assert "d3js.org" in content
+        # D3 is now inlined into the page; the old CDN tag must not return.
+        assert 'src="https://d3js.org' not in content
+        assert 'src="http://d3js.org' not in content
+
+    def test_generated_html_has_no_external_scripts(self, tmp_path):
+        """The generated graph.html must be fully self-contained.
+
+        Prior versions loaded D3 from ``https://d3js.org/...`` which caused
+        a blank canvas on machines that were offline, behind a firewall, or
+        under a strict CSP. The fix inlines D3 as a ``<script>...</script>``
+        block. This test locks in that contract.
+        """
+        _init_and_index(tmp_path)
+        out = tmp_path / "out.html"
+        result = runner.invoke(
+            app, ["graph", "--project-root", str(tmp_path), "--output", str(out)]
+        )
+        assert result.exit_code == 0, result.output
+        content = out.read_text(encoding="utf-8")
+
+        # (a) No <script src="http(s)://..."> tags pointing at a remote host.
+        # Match all <script> openings and inspect any src= attribute.
+        script_opens = re.findall(
+            r"<script\b[^>]*>", content, flags=re.IGNORECASE
+        )
+        assert script_opens, "expected at least one <script> tag in generated HTML"
+        for tag in script_opens:
+            src_match = re.search(
+                r"""\bsrc\s*=\s*['"]([^'"]+)['"]""", tag, flags=re.IGNORECASE
+            )
+            if src_match is None:
+                continue  # inline <script> — that's what we want.
+            src = src_match.group(1)
+            assert not re.match(r"^https?://", src, flags=re.IGNORECASE), (
+                f"generated HTML contains external <script src=...> ({src!r}); "
+                "D3 must be inlined so graph.html works offline"
+            )
+
+        # (b) An inline <script> block must contain a D3 API literal.
+        # d3.min.js contains the literal ".select" and ".forceSimulation" as
+        # attached methods on the d3 namespace; searching for those strings
+        # is enough to confirm the full D3 bundle was inlined.
+        assert "d3.select" in content or ".select=" in content, (
+            "inlined D3 bundle not found: missing d3.select"
+        )
+        assert "forceSimulation" in content, (
+            "inlined D3 bundle not found: missing forceSimulation"
+        )
+
+        # (c) The fallback for no-JS environments must be present.
+        assert "<noscript>" in content.lower()
+
+        # (d) No <link> tags that would fetch remote stylesheets/fonts either.
+        for link in re.findall(r"<link\b[^>]*>", content, flags=re.IGNORECASE):
+            href = re.search(
+                r"""\bhref\s*=\s*['"]([^'"]+)['"]""", link, flags=re.IGNORECASE
+            )
+            if href and re.match(r"^https?://", href.group(1), flags=re.IGNORECASE):
+                raise AssertionError(
+                    f"generated HTML contains external <link href=...> ({href.group(1)!r})"
+                )
 
     def test_json_output(self, tmp_path):
         _init_and_index(tmp_path)
