@@ -51,6 +51,8 @@ def load_queries(path: Path) -> list[Query]:
                 raise QueryFileError(f"line {lineno}: invalid JSON — {exc}") from exc
             if "id" not in obj:
                 raise QueryFileError(f"line {lineno}: missing 'id' field")
+            if "q" not in obj:
+                raise QueryFileError(f"line {lineno}: missing 'q' field")
             if not obj.get("gold"):
                 raise QueryFileError(f"line {lineno}: empty 'gold' list")
             if obj["id"] in seen:

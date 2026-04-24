@@ -48,3 +48,14 @@ class TestLoadQueries:
         p.write_text('{"id":"Q1","q":"x","gold":["a"],"repos":["r"]}\n\n  \n')
         queries = load_queries(p)
         assert len(queries) == 1
+
+    def test_rejects_missing_q(self, tmp_path):
+        path = _write(tmp_path, [{"id": "Q1", "gold": ["a.py"], "repos": ["r"]}])
+        with pytest.raises(QueryFileError, match="missing 'q'"):
+            load_queries(path)
+
+    def test_rejects_invalid_json(self, tmp_path):
+        p = tmp_path / "q.jsonl"
+        p.write_text("not-json\n")
+        with pytest.raises(QueryFileError, match="invalid JSON"):
+            load_queries(p)
