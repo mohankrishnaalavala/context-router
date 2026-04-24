@@ -271,7 +271,9 @@ def capture(
       1 — database not initialised
     """
     from contracts.models import Observation
+    from core.orchestrator import _find_project_root
     from memory.capture import capture_observation
+    from memory.file_writer import MemoryFileWriter
 
     files_list = [f for f in files.split() if f] if files else []
 
@@ -289,17 +291,193 @@ def capture(
     finally:
         db.close()
 
+    # Also write a git-tracked .md file when the observation passes the write
+    # gate (summary >= 60 chars, files_touched non-empty, task_type != scratch).
+    # This mirrors the MCP save_observation behaviour so the two surfaces stay
+    # consistent.  A failed write gate is NOT a hard error — it just means the
+    # observation lives only in SQLite (e.g. it was too short).
+    # Pre-check the gate so the writer never emits its own stderr warning
+    # during `capture`; callers that only want the SQLite record (e.g. very
+    # short summaries) are not surprised by unexpected stderr output.
+    md_path: str | None = None
+    if row_id is not None:
+        root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+        memory_dir = root / ".context-router" / "memory"
+        writer = MemoryFileWriter(memory_dir)
+        if not writer._check_gate(obs):
+            file_result = writer.write_observation(obs)
+            if file_result.written:
+                writer.update_index()
+                md_path = str(file_result.path)
+
     if json_output:
         import json
         if row_id is None:
             typer.echo(json.dumps({"captured": False, "reason": "duplicate"}))
         else:
-            typer.echo(json.dumps({"captured": True, "id": row_id}))
+            result: dict = {"captured": True, "id": row_id}
+            if md_path:
+                result["file"] = md_path
+            typer.echo(json.dumps(result))
     else:
         if row_id is None:
             typer.echo("Skipped: duplicate observation (same task type + summary).")
         else:
             typer.echo(f"Captured observation #{row_id}.")
+
+
+@memory_app.command("show")
+def show(
+    id: Annotated[str, typer.Argument(help="Observation ID (stem of the .md file).")],
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Show the full contents of a single observation by ID.
+
+    Searches {project_root}/.context-router/memory/observations/ for {id}.md.
+    If an exact match is not found, falls back to any file whose stem starts
+    with the given id (partial prefix match).
+
+    Exit codes:
+      0 — found
+      1 — not found or directory not initialised
+    """
+    import json as _json
+
+    from core.orchestrator import _find_project_root
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    observations_dir = root / ".context-router" / "memory" / "observations"
+
+    if not observations_dir.exists():
+        typer.echo(f"No observation found with id: {id}", err=True)
+        raise typer.Exit(1)
+
+    # Exact match first
+    candidate = observations_dir / f"{id}.md"
+    if not candidate.exists():
+        # Partial prefix match — pick the first alphabetically
+        matches = sorted(observations_dir.glob(f"{id}*.md"))
+        if not matches:
+            typer.echo(f"No observation found with id: {id}", err=True)
+            raise typer.Exit(1)
+        candidate = matches[0]
+
+    content = candidate.read_text(encoding="utf-8")
+
+    if not json_output:
+        typer.echo(content, nl=False)
+        return
+
+    # Parse YAML frontmatter for --json output
+    try:
+        import yaml  # type: ignore[import-untyped]
+        _yaml_available = True
+    except ImportError:
+        _yaml_available = False
+
+    parts = content.split("---\n", 2)
+    if len(parts) >= 3 and _yaml_available:
+        frontmatter_text = parts[1]
+        body = parts[2]
+        fm = yaml.safe_load(frontmatter_text) or {}
+    else:
+        # Fallback: surface raw content as body only
+        fm = {}
+        body = content
+
+    result = {
+        "id": fm.get("id", candidate.stem),
+        "type": fm.get("type", "observation"),
+        "task": fm.get("task", ""),
+        "files_touched": fm.get("files_touched", []),
+        "created_at": str(fm.get("created_at", "")),
+        "author": fm.get("author", ""),
+        "body": body.strip(),
+    }
+    typer.echo(_json.dumps(result, indent=2))
+
+
+@memory_app.command("migrate-from-sqlite")
+def migrate_from_sqlite(
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Show what would be written without writing files."),
+    ] = False,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """Migrate all SQLite observations to git-tracked Markdown files.
+
+    Reads every observation from the SQLite ObservationStore and writes each
+    one as a .md file under .context-router/memory/observations/.  The write
+    gate inside MemoryFileWriter silently skips observations that are too
+    short, have no files_touched, or are tagged as scratch work.
+
+    After writing, MEMORY.md is regenerated as an index of all observation
+    files.
+
+    Exit codes:
+      0 — success
+      1 — database not found
+    """
+    import json as _json
+
+    from core.orchestrator import _find_project_root
+    from memory.file_writer import MemoryFileWriter
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    memory_dir = root / ".context-router" / "memory"
+
+    store, db = _open_store(project_root)
+    try:
+        all_obs = store._get_all()
+    finally:
+        db.close()
+
+    total = len(all_obs)
+    migrated = 0
+    skipped = 0
+
+    writer = MemoryFileWriter(memory_dir)
+
+    for obs in all_obs:
+        # Check write gate without writing when --dry-run
+        rejection = writer._check_gate(obs)
+        if rejection:
+            skipped += 1
+            if not json_output:
+                typer.echo(f"  skip [{obs.summary[:50]}]: {rejection}", err=True)
+            continue
+
+        if dry_run:
+            typer.echo(f"  would write: {obs.summary[:60]}")
+            migrated += 1
+            continue
+
+        result = writer.write_observation(obs)
+        if result.written:
+            migrated += 1
+        else:
+            skipped += 1
+
+    if not dry_run and migrated > 0:
+        writer.update_index()
+
+    summary_line = f"Migrated {migrated} / {total} observations ({skipped} skipped by write gate)"
+    if dry_run:
+        summary_line = f"[dry-run] Would migrate {migrated} / {total} observations ({skipped} skipped by write gate)"
+
+    if json_output:
+        typer.echo(_json.dumps({"migrated": migrated, "skipped": skipped, "total": total}))
+    else:
+        typer.echo(summary_line)
 
 
 @memory_app.command("export")

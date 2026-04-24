@@ -161,6 +161,60 @@ def _dedup_stubs(
 # Public alias for cross-package use (orchestrator, tests).
 dedup_stubs = _dedup_stubs
 
+# Matches test files and common test-directory layouts across Python, Java, TS/JS, C#.
+_TEST_PATH_RE = re.compile(
+    r"(^|[\\/])tests?[\\/]"
+    r"|(^|[\\/])__tests__[\\/]"
+    r"|(^|[\\/])spec[\\/]"
+    r"|(^|[\\/])test_[^/\\]+"
+    r"|(^|[\\/])[^/\\]+_test\.[a-zA-Z]"
+    r"|(^|[\\/])[^/\\]+[Tt]est\.[a-zA-Z]"
+    r"|(^|[\\/])[^/\\]+[Ss]pec\.[a-zA-Z]",
+)
+
+_AUX_PATH_RE = re.compile(r"(^|[\\/])scripts?[\\/]", re.IGNORECASE)
+
+
+def _is_test_or_script_path(path: str) -> bool:
+    """Return True when *path* looks like a test file or auxiliary script."""
+    return bool(_TEST_PATH_RE.search(path) or _AUX_PATH_RE.search(path))
+
+
+def _dedup_by_file(
+    items: list[ContextItem],
+) -> tuple[list[ContextItem], int]:
+    """Keep only the highest-confidence item per unique path_or_ref.
+
+    ``_dedup_stubs`` collapses same-title+excerpt duplicates, but multiple
+    distinct symbols from the same file each survive with their own slot.
+    In dense codebases this means Pet.java (×3) + Owner.java (×2) fills a
+    5-item window, leaving no room for PetController.java.
+
+    Items must already be sorted by confidence descending so the first
+    occurrence of each path is the best representative.
+
+    Returns:
+        Tuple of ``(deduped_items, hidden_count)``.
+    """
+    if not items:
+        return [], 0
+    seen: dict[str, int] = {}
+    out: list[ContextItem] = []
+    dropped = 0
+    for item in items:
+        key = item.path_or_ref.strip().lstrip("./").lower()
+        idx = seen.get(key)
+        if idx is None:
+            seen[key] = len(out)
+            out.append(item)
+        else:
+            rep = out[idx]
+            out[idx] = rep.model_copy(
+                update={"duplicates_hidden": getattr(rep, "duplicates_hidden", 0) + 1}
+            )
+            dropped += 1
+    return out, dropped
+
 
 def _embed_model_is_cached(model_name: str = _EMBED_MODEL_NAME) -> bool:
     """Return True if the Hugging Face model directory for *model_name* exists.
@@ -266,8 +320,14 @@ _DEFAULT_REASON = "Included in context pack"
 
 
 def _tokenize(text: str) -> set[str]:
-    """Return lowercase tokens from *text* that are at least _MIN_TOKEN_LEN chars."""
-    return {t for t in re.split(r"[^a-z0-9]+", text.lower()) if len(t) >= _MIN_TOKEN_LEN}
+    """Return lowercase tokens from *text* that are at least _MIN_TOKEN_LEN chars.
+
+    CamelCase/PascalCase identifiers are split before lowercasing so that
+    ``OAuth2PasswordBearer`` contributes ``oauth2``, ``password``, ``bearer``
+    to the BM25 corpus — matching queries that use those individual terms.
+    """
+    expanded = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", text)
+    return {t for t in re.split(r"[^a-z0-9]+", expanded.lower()) if len(t) >= _MIN_TOKEN_LEN}
 
 
 def _discover_db_path(items: list[ContextItem]) -> Path | None:
@@ -429,7 +489,7 @@ class ContextRanker:
 
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
-        boosted = self._apply_bm25_boost(annotated, query_tokens)
+        boosted = self._apply_bm25_boost(annotated, query_tokens, mode=mode)
         # v3 phase-3 (outcome: hub-bridge-ranking-signals): structural
         # boost applied AFTER BM25 so BM25's normalised signal is not
         # flattened, and BEFORE the semantic pass so both additive
@@ -466,6 +526,12 @@ class ContextRanker:
         # the budget fills with distinct content. Runs unconditionally —
         # the helper is a no-op when no near-duplicates exist.
         sorted_items, _ = _dedup_stubs(sorted_items)
+
+        # v4.1 fix: after stub-dedup, enforce one item per unique file path.
+        # Multiple symbols from the same file (different excerpts) each
+        # survive stub-dedup and waste top-k slots — Pet.java ×3 consumed
+        # 3/5 slots in the v4.0 benchmark, missing PetController.java.
+        sorted_items, _ = _dedup_by_file(sorted_items)
 
         if self._budget <= 0:
             return sorted_items
@@ -684,7 +750,12 @@ class ContextRanker:
             # Stderr write failure should never break ranking.
             pass
 
-    def _apply_bm25_boost(self, items: list[ContextItem], query_tokens: set[str]) -> list[ContextItem]:
+    def _apply_bm25_boost(
+        self,
+        items: list[ContextItem],
+        query_tokens: set[str],
+        mode: str = "",
+    ) -> list[ContextItem]:
         """Re-score items using BM25 relevance combined with structural confidence.
 
         Formula: ``final_conf = min(0.95, 0.6 × structural_conf + 0.4 × bm25_score)``
@@ -695,12 +766,23 @@ class ContextRanker:
         structural score — they remain in the pack but yield priority to
         query-relevant symbols.
 
-        Using title + excerpt only — path_or_ref causes false positives when
-        the repository name happens to contain a query term.
+        v4.1: corpus now includes the file basename so that queries naming a
+        specific file (e.g. "Fix OAuth2 form docstrings") give a stronger
+        signal to ``oauth2.py`` over ``test_security_oauth2_optional.py``.
+        Full path_or_ref is still excluded — repository names with query
+        terms would cause false positives.
+
+        v4.1: a 0.85× multiplier is applied to test files and auxiliary
+        scripts in non-debug modes, preventing test functions that echo
+        query terms from outranking the source file they test.
         """
         if not query_tokens or not items:
             return items
-        corpus = [f"{i.title} {i.excerpt}" for i in items]
+        corpus = [
+            f"{Path(i.path_or_ref).name} {i.title} {i.excerpt}"
+            if i.path_or_ref else f"{i.title} {i.excerpt}"
+            for i in items
+        ]
         # P1-6: cache BM25 corpus per unique items set to avoid rebuilding on every call
         items_key = hash(tuple(i.path_or_ref + i.title for i in items))
         if items_key not in self._bm25_cache:
@@ -714,6 +796,12 @@ class ContextRanker:
         result = []
         for item, bm25 in zip(items, bm25_scores):
             new_conf = min(0.95, 0.6 * item.confidence + 0.4 * bm25)
+            # In review/implement/handover modes, test and script files are
+            # secondary evidence. A 0.85× multiplier prevents them from
+            # outranking the source files they test when BM25 scores are close.
+            # Debug mode is excluded — test failures are primary evidence there.
+            if mode != "debug" and _is_test_or_script_path(item.path_or_ref or ""):
+                new_conf = new_conf * 0.85
             result.append(item.model_copy(update={"confidence": new_conf}))
         return result
 

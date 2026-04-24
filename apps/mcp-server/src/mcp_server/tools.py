@@ -207,6 +207,7 @@ def get_context_pack(
     pre_fix: str = "",
     keep_low_signal: bool = False,
     use_workspace: bool = False,
+    use_memory: bool = False,
 ) -> dict:
     """Generate a ranked context pack.
 
@@ -240,9 +241,14 @@ def get_context_pack(
             ``True`` to preserve the full tail — only useful for
             debugging ranker output. Ignored with a stderr warning for
             non-review modes.
+        use_memory: When ``True``, append a ``memory_hits`` list of the top-8
+            BM25+recency ranked observation excerpts to the returned dict.
+            If the memory directory does not exist or contains no observations,
+            ``memory_hits`` is set to ``[]`` silently (no stderr output).
 
     Returns:
         Serialised ContextPack as a dict, or {"text": ...} when format="compact".
+        When ``use_memory=True``, the dict also contains a ``memory_hits`` key.
     """
     # Reject pre_fix with a non-review mode loudly — otherwise the flag
     # would silently no-op, and silent failures are banned (CLAUDE.md).
@@ -346,8 +352,33 @@ def get_context_pack(
                 except Exception:  # noqa: BLE001
                     pass
         if format == "compact":
-            return {"text": pack.to_compact_text(), "has_more": pack.has_more, "total_items": pack.total_items}
-        return pack.model_dump(mode="json")
+            result = {"text": pack.to_compact_text(), "has_more": pack.has_more, "total_items": pack.total_items}
+        else:
+            result = pack.model_dump(mode="json")
+
+        # use_memory: inject BM25+recency ranked observation excerpts.
+        # MCP tools must not print to stderr unexpectedly, so no-observations
+        # is a silent empty list (not a warning).
+        if use_memory:
+            from memory.file_retriever import retrieve_observations
+
+            _root = Path(project_root).resolve() if project_root else Path.cwd()
+            _memory_dir = _root / ".context-router" / "memory"
+            try:
+                _hits = retrieve_observations(query, _memory_dir, k=8)
+            except Exception:  # noqa: BLE001 — memory retrieval is best-effort
+                _hits = []
+            result["memory_hits"] = [
+                {
+                    "id": h.id,
+                    "excerpt": h.excerpt,
+                    "score": round(h.score, 6),
+                    "files_touched": h.files_touched,
+                }
+                for h in _hits
+            ]
+
+        return result
     except FileNotFoundError as exc:
         return {"error": str(exc)}
     except ValueError as exc:
@@ -770,7 +801,17 @@ def save_observation(
 
     if row_id is None:
         return {"saved": False, "reason": "duplicate observation (same task_type + summary)"}
-    return {"saved": True, "id": row_id}
+
+    from memory.file_writer import MemoryFileWriter
+    memory_dir = root / ".context-router" / "memory"
+    writer = MemoryFileWriter(memory_dir)
+    file_result = writer.write_observation(obs)
+    writer.update_index()
+
+    result: dict = {"saved": True, "id": row_id}
+    if file_result.written:
+        result["file"] = str(file_result.path)
+    return result
 
 
 def save_decision(

@@ -16,7 +16,7 @@ def _item(
     return ContextItem(
         source_type=source_type,
         repo="test",
-        path_or_ref="foo.py",
+        path_or_ref=f"{title}.py",
         title=title,
         excerpt="def foo(): ...",
         reason="",
@@ -209,7 +209,7 @@ def test_original_items_not_mutated() -> None:
     item = ContextItem(
         source_type="file",
         repo="test",
-        path_or_ref="foo.py",
+        path_or_ref="sym.py",
         title="sym",
         excerpt="def foo(): ...",
         reason="original reason",

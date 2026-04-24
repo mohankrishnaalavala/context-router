@@ -69,3 +69,56 @@ outcomes:
         cmd: >-
           uv run pytest packages/core/tests/test_workspace_orchestrator.py::TestWorkspaceDbBackedBoost
         expected_stdout_contains: "passed"
+
+  - id: v4.1-save-observation-file
+    phase: v4.1
+    priority: P0
+    description: >-
+      save_observation writes a git-tracked .md file under
+      .context-router/memory/observations/ with YAML frontmatter.
+    dod:
+      outcome: >-
+        After save_observation, a .md file exists whose frontmatter
+        lists files_touched. Write gate rejects obs with no files_touched.
+      threshold: >-
+        .context-router/memory/observations/*.md exists after a valid
+        save_observation call.
+      negative_case: >-
+        save_observation with no files_touched does not write a .md file.
+      verify:
+        cmd: bash scripts/smoke-v4.1.sh
+        expected_stdout_contains: "PASS: 4/4"
+
+  - id: v4.1-pack-use-memory
+    phase: v4.1
+    priority: P0
+    description: >-
+      pack --use-memory includes top-8 ranked observations in JSON output.
+    dod:
+      outcome: >-
+        pack --use-memory --json output contains memory_hits key with
+        at least 0 items (no crash when memory is empty).
+      threshold: >-
+        "memory_hits": appears in pack --use-memory --json output.
+      negative_case: >-
+        pack without --use-memory does not include memory_hits key.
+      verify:
+        cmd: bash scripts/smoke-v4.1.sh
+        expected_stdout_contains: "PASS: 4/4"
+
+  - id: v4.1-migrate-sqlite
+    phase: v4.1
+    priority: P1
+    description: >-
+      memory migrate-from-sqlite writes one .md file per valid SQLite row.
+    dod:
+      outcome: >-
+        migrate-from-sqlite reads all SQLite observations and writes .md
+        files for those passing the write gate.
+      threshold: >-
+        Exit code 0 and JSON output includes migrated count.
+      negative_case: >-
+        Short-summary observations are skipped (write gate enforced).
+      verify:
+        cmd: bash scripts/smoke-v4.1.sh
+        expected_stdout_contains: "PASS: 4/4"

@@ -3,6 +3,7 @@ name = "context-router-ranking"
 version = "4.0.0"
 requires-python = ">=3.12"
 description = "Mode-specific context rankers and token budget enforcer for context-router (Phase 2)"
+license = {text = "Apache-2.0"}
 dependencies = [
     "context-router-contracts",
     "context-router-graph-index",

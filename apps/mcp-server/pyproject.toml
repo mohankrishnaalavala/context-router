@@ -3,6 +3,7 @@ name = "context-router-mcp-server"
 version = "4.0.0"
 requires-python = ">=3.12"
 description = "MCP server entrypoint for context-router (Phase 5)"
+license = {text = "Apache-2.0"}
 dependencies = [
     "context-router-contracts",
     "context-router-core",
