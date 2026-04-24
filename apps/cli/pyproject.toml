@@ -1,6 +1,6 @@
 [project]
 name = "context-router-cli"
-version = "3.3.1"
+version = "4.0.0"
 requires-python = ">=3.12"
 description = "Local-first CLI and MCP server for AI coding context — minimum useful context, maximum agent performance"
 readme = "README.md"
@@ -26,6 +26,7 @@ dependencies = [
     "tree-sitter-java>=0.21",
     "tree-sitter-c-sharp>=0.21",
     "watchdog>=4.0",
+    "context-router-evaluation",
 ]
 
 [project.urls]
@@ -69,7 +70,14 @@ packages = ["src/cli"]
 
 # Bundle all workspace-internal sub-packages so the wheel is self-contained.
 # These paths are relative to apps/cli/ (this file's directory).
+#
+# The cli/assets/d3.v7.min.js entry ships the bundled D3.js used by the
+# `context-router graph` command. It is force-included (in addition to being
+# under `packages = ["src/cli"]`) because hatchling's default file-selection
+# excludes non-.py files in some configurations, and a silent drop here
+# would reintroduce the offline blank-canvas bug that this rule guards.
 [tool.hatch.build.targets.wheel.force-include]
+"src/cli/assets/d3.v7.min.js"                  = "cli/assets/d3.v7.min.js"
 "../../packages/contracts/src/contracts"       = "contracts"
 "../../packages/core/src/core"                 = "core"
 "../../packages/storage-sqlite/src/storage_sqlite" = "storage_sqlite"
@@ -80,6 +88,7 @@ packages = ["src/cli"]
 "../../packages/workspace/src/workspace"       = "workspace"
 "../../packages/contracts-extractor/src/contracts_extractor" = "contracts_extractor"
 "../../packages/benchmark/src/benchmark"       = "benchmark"
+"../../packages/evaluation/src/evaluation"     = "evaluation"
 "../../packages/language-python/src/language_python" = "language_python"
 "../../packages/language-yaml/src/language_yaml"     = "language_yaml"
 "../../packages/language-typescript/src/language_typescript" = "language_typescript"

@@ -265,6 +265,16 @@ _TOOLS: dict[str, dict[str, Any]] = {
                     ),
                     "default": False,
                 },
+                "use_workspace": {
+                    "type": "boolean",
+                    "description": (
+                        "When true, uses WorkspaceOrchestrator to build a "
+                        "cross-repo context pack from workspace.yaml. Falls "
+                        "back to single-repo orchestrator with a stderr "
+                        "warning when workspace.yaml is not found."
+                    ),
+                    "default": False,
+                },
             },
         },
         "outputSchema": _PACK_OUTPUT,

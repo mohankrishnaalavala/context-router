@@ -4,12 +4,37 @@ from __future__ import annotations
 
 import json
 import webbrowser
+from importlib import resources
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 graph_app = typer.Typer(help="Generate an interactive graph visualization.")
+
+
+def _load_d3_source() -> str:
+    """Return the bundled D3.js v7 source as a string.
+
+    The asset is shipped inside the ``cli.assets`` package so
+    ``graph.html`` is fully self-contained and renders offline. If the
+    asset is missing (e.g. a broken wheel build), raise a loud error —
+    silent fallback to a CDN is explicitly forbidden because that is
+    the bug this change fixes.
+    """
+    try:
+        return (
+            resources.files("cli.assets")
+            .joinpath("d3.v7.min.js")
+            .read_text(encoding="utf-8")
+        )
+    except (FileNotFoundError, ModuleNotFoundError) as exc:  # pragma: no cover
+        # Wheel integrity guard — see scripts/smoke-packaging.sh.
+        raise RuntimeError(
+            "bundled D3.js asset missing from context-router-cli wheel "
+            "(cli/assets/d3.v7.min.js). Reinstall the package; see "
+            "scripts/smoke-packaging.sh."
+        ) from exc
 
 # ---------------------------------------------------------------------------
 # D3.js HTML template
@@ -74,7 +99,11 @@ _HTML_TEMPLATE = '''<!DOCTYPE html>
   <div class="meta" id="p-file"></div>
   <div class="sig" id="p-sig"></div>
 </div>
-<script src="https://d3js.org/d3.v7.min.js"></script>
+<noscript>This graph requires JavaScript. If you see this, your browser has JS disabled.</noscript>
+<script>
+/*! D3.js v7.9.0 — ISC licensed. Bundled offline with context-router-cli. */
+__D3_SOURCE__
+</script>
 <script>
 const GRAPH = __GRAPH_DATA__;
 
@@ -315,9 +344,15 @@ def graph(
         typer.echo(json.dumps(graph_data, indent=2))
         return
 
-    # Embed into HTML
+    # Embed into HTML. D3 is inlined (rather than loaded from a CDN) so the
+    # generated file is fully self-contained — it must render offline, behind
+    # a firewall, and under a strict CSP. The CDN tag that used to live here
+    # caused silent blank-canvas failures on restricted networks.
     graph_json = json.dumps(graph_data)
-    html_content = _HTML_TEMPLATE.replace("__GRAPH_DATA__", graph_json)
+    d3_source = _load_d3_source()
+    html_content = _HTML_TEMPLATE.replace("__D3_SOURCE__", d3_source).replace(
+        "__GRAPH_DATA__", graph_json
+    )
 
     out_path = Path(output) if Path(output).is_absolute() else root / output
     out_path.write_text(html_content, encoding="utf-8")

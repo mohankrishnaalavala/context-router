@@ -9,6 +9,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.0.0] — 2026-04-23
+
+### Added
+- `context-router eval --queries <path>` subcommand: Recall@K / Precision@K / F1@K evaluation harness.
+- `context-router workspace sync`: rebuild the cross-repo edge cache into `.context-router/workspace.db`.
+- `.context-router/workspace.db` at workspace root — stores `repo_registry` + `cross_repo_edges` (ADR §7.4).
+- Synthetic workspace fixture under `tests/fixtures/workspaces/synthetic/` with 10 queries.
+- `scripts/fetch-benchmark-repos.sh` clones 3 real OSS repos at pinned SHAs for nightly evaluation.
+- CI workflow `eval-synthetic` enforces `Recall@20 >= 0.65` on every PR.
+
+### Changed
+- `WorkspaceOrchestrator` exposes `cross_repo_edges_for_repo(repo_id)` — reads from `workspace.db` instead of recomputing at pack time.
+- `get_context_pack` MCP tool accepts `use_workspace: bool` (default `false`) — when true, routes through `WorkspaceOrchestrator`.
+- Reconcile is per-repo scoped; a change in one repo no longer rescans siblings.
+
+### Fixed
+- `context-router eval` runner now resolves `fixture_root` to absolute path before stripping pack result paths (was returning 0.0 recall despite correct files in pack).
+- `context-router eval` CLI: `pack.selected_items` was referenced as `pack.items` (AttributeError on run).
+
+---
+
 ## [3.3.1] — 2026-04-20
 
 Hotfix: bundled MCP server could not start after `pip install context-router-cli`.

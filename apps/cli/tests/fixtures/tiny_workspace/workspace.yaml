@@ -1,0 +1,8 @@
+name: synthetic-checkout
+repos:
+  - name: backend
+    path: backend
+    language: python
+  - name: frontend
+    path: frontend
+    language: typescript

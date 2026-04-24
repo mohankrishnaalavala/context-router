@@ -242,11 +242,11 @@ class TestGetContextPackPagination:
 
 class TestRecordFeedbackFilesRead:
     def test_record_feedback_accepts_files_read(self, project_root: Path):
-        from mcp_server.tools import record_feedback
-        from storage_sqlite.database import Database
-
         # Save an observation first to get a valid pack_id-like UUID
         import uuid
+
+        from mcp_server.tools import record_feedback
+        from storage_sqlite.database import Database
         pack_id = str(uuid.uuid4())
         result = record_feedback(
             pack_id=pack_id,
@@ -264,8 +264,9 @@ class TestRecordFeedbackFilesRead:
         assert row["repo_scope"] == str(project_root.resolve())
 
     def test_record_feedback_without_files_read_still_works(self, project_root: Path):
-        from mcp_server.tools import record_feedback
         import uuid
+
+        from mcp_server.tools import record_feedback
 
         result = record_feedback(
             pack_id=str(uuid.uuid4()),
@@ -435,3 +436,17 @@ class TestGetCallChain:
         )
         for item in result["items"]:
             assert isinstance(item["file"], str)
+
+
+def test_get_context_pack_use_workspace_falls_back_with_warning(tmp_path, capfd):
+    from mcp_server.tools import get_context_pack
+    # tmp_path has no workspace.yaml — use_workspace=True must warn + fall back
+    result = get_context_pack(
+        mode="implement",
+        query="test",
+        project_root=str(tmp_path),
+        use_workspace=True,
+    )
+    _, err = capfd.readouterr()
+    assert "no workspace.yaml" in err.lower()
+    assert isinstance(result, dict)

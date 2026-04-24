@@ -206,6 +206,7 @@ def get_context_pack(
     progress_cb=None,
     pre_fix: str = "",
     keep_low_signal: bool = False,
+    use_workspace: bool = False,
 ) -> dict:
     """Generate a ranked context pack.
 
@@ -281,6 +282,28 @@ def get_context_pack(
             flush=True,
         )
 
+    # Resolve the orchestrator: WorkspaceOrchestrator when use_workspace=True
+    # and workspace.yaml exists; regular Orchestrator otherwise.
+    # Silent-failure rule: use_workspace=True with no workspace.yaml must
+    # warn on stderr (stdout is reserved for JSON-RPC frames) so the
+    # caller knows the flag had no effect.
+    if use_workspace:
+        import sys as _sys
+        _ws_root = Path(project_root).resolve() if project_root else Path.cwd()
+        if (_ws_root / "workspace.yaml").exists():
+            from core.workspace_orchestrator import WorkspaceOrchestrator
+            _orch = WorkspaceOrchestrator(workspace_root=_ws_root)
+        else:
+            print(
+                f"warning: use_workspace=True but no workspace.yaml found at {_ws_root}; "
+                "falling back to single-repo orchestrator.",
+                file=_sys.stderr,
+                flush=True,
+            )
+            _orch = _orchestrator(project_root)
+    else:
+        _orch = _orchestrator(project_root)
+
     # Only forward pre_fix as a kwarg when the caller actually supplied one
     # — keeps the existing ``build_pack`` call shape identical for the vast
     # majority of callers (including test mocks that don't accept the new
@@ -301,7 +324,7 @@ def get_context_pack(
     try:
         # progress=False is critical on MCP stdio transport — stdout is
         # reserved for JSON-RPC frames; any progress output would corrupt it.
-        pack = _orchestrator(project_root).build_pack(
+        pack = _orch.build_pack(
             mode,
             query,
             **build_pack_kwargs,

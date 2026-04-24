@@ -263,7 +263,7 @@ def workspace_pack(
     r = _root_path(root)
 
     if mode not in ("review", "implement", "debug", "handover"):
-        typer.echo(f"Error: --mode must be one of: review, implement, debug, handover", err=True)
+        typer.echo("Error: --mode must be one of: review, implement, debug, handover", err=True)
         raise typer.Exit(2)
 
     try:
@@ -292,6 +292,39 @@ def workspace_pack(
         title = item.title[:44]
         source = item.source_type[:17]
         typer.echo(f"{title:<45} {source:<18} {item.confidence:>5.2f} {item.est_tokens:>6}")
+
+
+# ---------------------------------------------------------------------------
+# workspace sync
+# ---------------------------------------------------------------------------
+
+@workspace_app.command("sync")
+def workspace_sync(
+    root: str = typer.Option(".", "--project-root"),
+) -> None:
+    """Rebuild the workspace cross-repo edge cache from each repo's current state."""
+    from workspace.reconcile import reconcile_repo
+    from workspace_store.store import RepoRecord, WorkspaceStore
+
+    ws_root = _root_path(root)
+    ws = _load_or_die(ws_root)
+    store = WorkspaceStore.open(ws_root / ".context-router" / "workspace.db")
+
+    for r in ws.repos:
+        store.register_repo(RepoRecord(
+            repo_id=f"{ws.name}:{r.name}",
+            name=r.name,
+            root=str((ws_root / r.path).resolve()),
+        ))
+
+    siblings = [(f"{ws.name}:{r.name}", (ws_root / r.path).resolve()) for r in ws.repos]
+    total = 0
+    for repo_id, root_path in siblings:
+        others = [s for s in siblings if s[0] != repo_id]
+        n = reconcile_repo(store, repo_id=repo_id, repo_root=root_path, sibling_repos=others)
+        total += n
+        typer.echo(f"reconciled {repo_id}: {n} edges")
+    typer.echo(f"TOTAL: {total} cross-repo edges in workspace.db")
 
 
 # ---------------------------------------------------------------------------

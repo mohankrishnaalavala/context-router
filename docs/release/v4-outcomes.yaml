@@ -1,0 +1,71 @@
+# docs/release/v4-outcomes.yaml — v4.0 feature outcome registry.
+outcomes:
+  - id: v4.0-evaluation-harness
+    phase: v4.0
+    priority: P0
+    dod:
+      outcome: >-
+        `context-router eval --help` prints the subcommand help and
+        `context-router eval --queries <path> --json` emits a JSON report.
+      threshold: >-
+        Report JSON has keys recall_at_k, k, n_queries, mean_pack_tokens,
+        token_efficiency, per_query.
+      negative_case: >-
+        `context-router eval --queries /nonexistent.jsonl` exits non-zero with
+        a stderr message naming the missing file.
+      verify:
+        cmd: context-router eval --help
+        expected_stdout_contains: "Recall@K"
+
+  - id: v4.0-workspace-db-sync
+    phase: v4.0
+    priority: P0
+    dod:
+      outcome: >-
+        `context-router workspace sync` writes cross-repo edges into
+        .context-router/workspace.db scoped per src_repo.
+      threshold: >-
+        Running `workspace sync` on the synthetic fixture completes without
+        error and prints a TOTAL line to stdout.
+      negative_case: >-
+        Running `workspace sync` without a workspace.yaml prints a warning to
+        stderr (via _load_or_die) and exits non-zero.
+      verify:
+        cmd: >-
+          context-router workspace sync
+            --project-root tests/fixtures/workspaces/synthetic
+        expected_stdout_contains: "TOTAL:"
+
+  - id: v4.0-synthetic-recall-gate
+    phase: v4.0
+    priority: P0
+    dod:
+      outcome: >-
+        CI runs scripts/eval-synthetic.sh on every PR and fails if
+        Recall@20 < 0.65 on the synthetic fixture.
+      threshold: >-
+        scripts/eval-synthetic.sh exits 0 with "PASS synthetic-recall-gate"
+        on the current codebase.
+      negative_case: >-
+        If the fixture is missing, the script exits non-zero with
+        "FAIL synthetic-recall-gate: fixture not found".
+      verify:
+        cmd: bash scripts/eval-synthetic.sh
+        expected_stdout_contains: "PASS synthetic-recall-gate"
+
+  - id: v4.0-workspace-orchestrator
+    phase: v4.0
+    priority: P0
+    dod:
+      outcome: >-
+        `WorkspaceOrchestrator(workspace_root=path).cross_repo_edges_for_repo(repo_id)`
+        reads edges from workspace.db without recomputing them.
+      threshold: >-
+        TestWorkspaceDbBackedBoost.test_reads_edges_from_workspace_db passes.
+      negative_case: >-
+        When workspace.db does not exist, `cross_repo_edges_for_repo` returns
+        an empty list (no error).
+      verify:
+        cmd: >-
+          uv run pytest packages/core/tests/test_workspace_orchestrator.py::TestWorkspaceDbBackedBoost
+        expected_stdout_contains: "passed"

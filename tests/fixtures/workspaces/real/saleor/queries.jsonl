@@ -1,0 +1,10 @@
+{"id": "SAL01", "q": "complete a checkout and create an order", "gold": ["saleor/graphql/checkout/mutations/checkout_complete.py", "saleor/checkout/models.py"], "repos": ["saleor"]}
+{"id": "SAL02", "q": "add a product variant with pricing to a new product", "gold": ["saleor/graphql/product/mutations/product/product_create.py", "saleor/graphql/product/mutations/product_variant/product_variant_create.py"], "repos": ["saleor"]}
+{"id": "SAL03", "q": "add line items to an existing checkout", "gold": ["saleor/graphql/checkout/mutations/checkout_lines_add.py", "saleor/checkout/models.py"], "repos": ["saleor"]}
+{"id": "SAL04", "q": "create a new checkout session for a customer", "gold": ["saleor/graphql/checkout/mutations/checkout_create.py", "saleor/checkout/models.py"], "repos": ["saleor"]}
+{"id": "SAL05", "q": "cancel an existing order and trigger refund logic", "gold": ["saleor/graphql/order/mutations/order_cancel.py", "saleor/order/models.py"], "repos": ["saleor"]}
+{"id": "SAL06", "q": "create a draft order with customer and shipping address", "gold": ["saleor/graphql/order/mutations/draft_order_create.py", "saleor/order/models.py"], "repos": ["saleor"]}
+{"id": "SAL07", "q": "fulfill an order by assigning warehouse stock", "gold": ["saleor/graphql/order/mutations/order_fulfill.py", "saleor/graphql/order/mutations/order_lines_create.py"], "repos": ["saleor"]}
+{"id": "SAL08", "q": "attach a payment method to a checkout session", "gold": ["saleor/graphql/payment/mutations/payment/checkout_payment_create.py", "saleor/payment/models.py"], "repos": ["saleor"]}
+{"id": "SAL09", "q": "register a new customer account with email and password", "gold": ["saleor/graphql/account/mutations/account/account_register.py", "saleor/graphql/account/mutations/account/account_update.py"], "repos": ["saleor"]}
+{"id": "SAL10", "q": "update product details including SEO and description", "gold": ["saleor/graphql/product/mutations/product/product_update.py", "saleor/product/models.py"], "repos": ["saleor"]}

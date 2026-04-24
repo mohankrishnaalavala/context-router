@@ -1,0 +1,10 @@
+{"id": "RW01", "q": "implement the create article endpoint following the RealWorld spec", "gold": ["specs/api/openapi.yml", "docs/src/content/docs/specifications/backend/endpoints.md"], "repos": ["realworld"]}
+{"id": "RW02", "q": "add error handling for invalid JWT token", "gold": ["docs/src/content/docs/specifications/backend/error-handling.md", "specs/api/openapi.yml"], "repos": ["realworld"]}
+{"id": "RW03", "q": "implement user registration with username and email validation", "gold": ["specs/api/bruno/auth/01-register.bru", "docs/src/content/docs/specifications/backend/endpoints.md"], "repos": ["realworld"]}
+{"id": "RW04", "q": "return correct JSON envelope for article list response", "gold": ["docs/src/content/docs/specifications/backend/api-response-format.md", "specs/api/openapi.yml"], "repos": ["realworld"]}
+{"id": "RW05", "q": "implement article creation with optional tag list", "gold": ["specs/api/bruno/articles/02-create-article-with-tags.bru", "specs/api/openapi.yml"], "repos": ["realworld"]}
+{"id": "RW06", "q": "add article comment creation and deletion", "gold": ["specs/api/bruno/comments/03-create-comment.bru", "docs/src/content/docs/specifications/backend/endpoints.md"], "repos": ["realworld"]}
+{"id": "RW07", "q": "implement follow and unfollow profile endpoints", "gold": ["specs/api/bruno/profiles/05-follow-profile.bru", "docs/src/content/docs/specifications/backend/endpoints.md"], "repos": ["realworld"]}
+{"id": "RW08", "q": "implement article favoriting and unfavoriting", "gold": ["specs/api/bruno/favorites/03-favorite-article.bru", "specs/api/openapi.yml"], "repos": ["realworld"]}
+{"id": "RW09", "q": "implement the authenticated user feed endpoint", "gold": ["specs/api/bruno/feed/07-main-checks-feed.bru", "docs/src/content/docs/specifications/backend/endpoints.md"], "repos": ["realworld"]}
+{"id": "RW10", "q": "configure CORS for frontend clients", "gold": ["docs/src/content/docs/specifications/backend/cors.md", "docs/src/content/docs/specifications/backend/endpoints.md"], "repos": ["realworld"]}
