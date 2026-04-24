@@ -46,7 +46,8 @@ def run_evaluation(cfg: EvalConfig, build_pack: BuildPack) -> EvalReport:
     def _fetch(q: Query) -> list[str]:
         result = build_pack(q, cfg.fixture_root, cfg.workspace_roots)
         pack_cache[q.id] = result
-        return result.files
+        prefix = str(cfg.fixture_root.resolve()).rstrip("/") + "/"
+        return [f[len(prefix):] if f.startswith(prefix) else f for f in result.files]
 
     recall = score_recall_at_k(queries, _fetch, k=cfg.k)
     total_tokens = sum(p.tokens for p in pack_cache.values())
