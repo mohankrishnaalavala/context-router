@@ -793,14 +793,34 @@ class ContextRanker:
                 del self._bm25_cache[oldest]
         scorer = self._bm25_cache[items_key]
         bm25_scores = scorer.scores_normalized(query_tokens)
+
+        # Pass 1: compute pre-penalty scores and max non-test score.
+        # This lets us detect whether a test file is the *sole* high-signal
+        # item (e.g. bulletproof-react T3: GT is src/test/server/handlers/…).
+        # When no non-test item scores as high, the penalty is skipped so the
+        # correct file is not suppressed.
+        pre_scores = [
+            min(0.95, 0.6 * item.confidence + 0.4 * bm25)
+            for item, bm25 in zip(items, bm25_scores)
+        ]
+        max_non_test_conf = max(
+            (s for item, s in zip(items, pre_scores)
+             if not _is_test_or_script_path(item.path_or_ref or "")),
+            default=0.0,
+        )
+
+        # Pass 2: build result, applying the 0.85× penalty to test/script
+        # files only when a non-test competitor scores at least as well.
+        # In debug mode the penalty never fires (test failures are primary
+        # evidence there).
         result = []
-        for item, bm25 in zip(items, bm25_scores):
-            new_conf = min(0.95, 0.6 * item.confidence + 0.4 * bm25)
-            # In review/implement/handover modes, test and script files are
-            # secondary evidence. A 0.85× multiplier prevents them from
-            # outranking the source files they test when BM25 scores are close.
-            # Debug mode is excluded — test failures are primary evidence there.
-            if mode != "debug" and _is_test_or_script_path(item.path_or_ref or ""):
+        for item, pre_score in zip(items, pre_scores):
+            new_conf = pre_score
+            if (
+                mode != "debug"
+                and _is_test_or_script_path(item.path_or_ref or "")
+                and max_non_test_conf >= new_conf
+            ):
                 new_conf = new_conf * 0.85
             result.append(item.model_copy(update={"confidence": new_conf}))
         return result

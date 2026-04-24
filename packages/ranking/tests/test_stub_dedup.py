@@ -315,3 +315,29 @@ def test_bm25_boost_applies_test_penalty_non_debug() -> None:
     assert source_out.confidence > test_out.confidence, (
         f"source ({source_out.confidence:.4f}) should outrank test ({test_out.confidence:.4f})"
     )
+
+
+def test_bm25_test_penalty_skipped_when_test_file_dominates() -> None:
+    """If the test file is the best BM25 match with no source competitor,
+    the 0.85× penalty must NOT be applied (guard: no non-test item >= score).
+
+    Simulates bulletproof-react T3: GT is src/test/server/handlers/comments.ts.
+    The mock-handler file genuinely contains the most relevant tokens; there
+    is no source file that matches the query as well.
+    """
+    # Only one item — it's a test path and it's the top-scorer by definition.
+    handler = _file_item("src/test/server/handlers/comments.ts", "comments_handler", conf=0.9)
+    source = _file_item("src/components/Comment.tsx", "Comment", conf=0.3)
+    ranker = ContextRanker(token_budget=100_000)
+    out = ranker.rank(
+        [handler, source],
+        "mock comments handler delete user comment",
+        "review",
+    )
+    handler_out = next(i for i in out if "comments.ts" in i.path_or_ref)
+    source_out = next(i for i in out if "Comment.tsx" in i.path_or_ref)
+    # Test file outscores source → no penalty → test file should rank #1
+    assert handler_out.confidence > source_out.confidence, (
+        f"mock handler ({handler_out.confidence:.4f}) should outrank source "
+        f"({source_out.confidence:.4f}) — no penalty when test dominates"
+    )
