@@ -314,3 +314,33 @@ class WorkspaceOrchestrator:
         if not path.exists():
             return None
         return ContextPack.model_validate_json(path.read_text())
+
+    # ------------------------------------------------------------------
+    # Workspace DB helpers (Task 12)
+    # ------------------------------------------------------------------
+
+    def _store(self):
+        """Open and return a WorkspaceStore if workspace.db exists; else None."""
+        db = self._root / ".context-router" / "workspace.db"
+        if not db.exists():
+            return None
+        from workspace.store import WorkspaceStore
+        return WorkspaceStore.open(db)
+
+    def cross_repo_edges_for_repo(self, repo_id: str):
+        """Return cross-repo edges sourced from *repo_id* stored in workspace.db.
+
+        Args:
+            repo_id: The source repo identifier to query.
+
+        Returns:
+            List of :class:`workspace.store.CrossRepoEdge` instances, or an
+            empty list when workspace.db does not exist.
+        """
+        store = self._store()
+        if store is None:
+            return []
+        try:
+            return list(store.edges_from(repo_id))
+        finally:
+            store.close()

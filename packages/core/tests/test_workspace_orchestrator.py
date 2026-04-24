@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
-
 from contracts.models import ContextItem, ContextPack, RepoDescriptor, WorkspaceDescriptor
 from workspace import WorkspaceLoader
 
@@ -146,7 +144,7 @@ class TestLinkBoost:
         assert boosted[0].confidence > item.confidence
 
     def test_boost_capped_at_max(self):
-        from core.workspace_orchestrator import _boost_linked_items, _MAX_CONFIDENCE
+        from core.workspace_orchestrator import _MAX_CONFIDENCE, _boost_linked_items
 
         item = ContextItem(
             source_type="file",
@@ -225,3 +223,28 @@ class TestTitlePrefix:
         )
         prefixed = _prefix_title(item, "service-a")
         assert prefixed.title.count("[service-a]") == 1
+
+
+# ---------------------------------------------------------------------------
+# WorkspaceStore-backed cross-repo edges
+# ---------------------------------------------------------------------------
+
+class TestWorkspaceDbBackedBoost:
+    def test_reads_edges_from_workspace_db(self, tmp_path):
+        from workspace.store import CrossRepoEdge, RepoRecord, WorkspaceStore
+
+        db = tmp_path / ".context-router" / "workspace.db"
+        store = WorkspaceStore.open(db)
+        store.register_repo(RepoRecord(repo_id="a", name="a", root=str(tmp_path / "a")))
+        store.register_repo(RepoRecord(repo_id="b", name="b", root=str(tmp_path / "b")))
+        store.replace_edges_for_src("a", [CrossRepoEdge(
+            src_repo_id="a", src_symbol_id=None, src_file="src/x.ts",
+            dst_repo_id="b", dst_symbol_id=None, dst_file="src/y.py",
+            edge_kind="consumes_openapi", confidence=0.9,
+        )])
+        store.close()
+
+        from core.workspace_orchestrator import WorkspaceOrchestrator
+        orch = WorkspaceOrchestrator(workspace_root=tmp_path)
+        linked = orch.cross_repo_edges_for_repo("a")
+        assert any(e.dst_file == "src/y.py" for e in linked)
