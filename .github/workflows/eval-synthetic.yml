@@ -1,0 +1,18 @@
+name: eval-synthetic
+on:
+  pull_request:
+  push:
+    branches: [develop, main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.12"
+      - name: Install workspace
+        run: uv sync --all-packages
+      - name: Run synthetic recall gate
+        run: ./scripts/eval-synthetic.sh
