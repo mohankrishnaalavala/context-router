@@ -26,6 +26,7 @@ dependencies = [
     "tree-sitter-java>=0.21",
     "tree-sitter-c-sharp>=0.21",
     "watchdog>=4.0",
+    "context-router-evaluation",
 ]
 
 [project.urls]
@@ -87,6 +88,7 @@ packages = ["src/cli"]
 "../../packages/workspace/src/workspace"       = "workspace"
 "../../packages/contracts-extractor/src/contracts_extractor" = "contracts_extractor"
 "../../packages/benchmark/src/benchmark"       = "benchmark"
+"../../packages/evaluation/src/evaluation"     = "evaluation"
 "../../packages/language-python/src/language_python" = "language_python"
 "../../packages/language-yaml/src/language_yaml"     = "language_yaml"
 "../../packages/language-typescript/src/language_typescript" = "language_typescript"
