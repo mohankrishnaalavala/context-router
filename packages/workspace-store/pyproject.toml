@@ -3,6 +3,7 @@ name = "context-router-workspace-store"
 version = "4.0.0"
 requires-python = ">=3.12"
 description = "Workspace-scoped edge database for context-router multi-repo mode"
+license = {text = "Apache-2.0"}
 dependencies = []
 
 [build-system]

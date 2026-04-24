@@ -3,6 +3,7 @@ name = "context-router-language-typescript"
 version = "4.0.0"
 requires-python = ">=3.12"
 description = "TypeScript/JavaScript language analyzer plugin for context-router"
+license = {text = "Apache-2.0"}
 dependencies = [
     "context-router-contracts",
     "tree-sitter>=0.21",

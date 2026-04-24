@@ -3,6 +3,7 @@ name = "context-router-root"
 version = "0.0.0"
 requires-python = ">=3.12"
 description = "Workspace root — not a distributable package"
+license = {text = "Apache-2.0"}
 readme = "README.md"
 
 # This root package is NOT published to PyPI.

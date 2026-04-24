@@ -3,6 +3,7 @@ name = "context-router-evaluation"
 version = "4.0.0"
 requires-python = ">=3.12"
 description = "Recall@K and token-efficiency evaluation harness for context-router packs"
+license = {text = "Apache-2.0"}
 dependencies = [
     "pydantic>=2.0",
     "context-router-contracts",
