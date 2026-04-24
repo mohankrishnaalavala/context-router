@@ -7,9 +7,10 @@ Both return sensible defaults when absent.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from contracts.models import WorkspaceDescriptor
 
@@ -57,6 +58,22 @@ class ContextRouterConfig(BaseModel):
     # Each inner dict maps source_type -> float in [0, 1]. Missing keys fall back to
     # the hardcoded defaults in core.orchestrator. Absent config = current behaviour.
     confidence_weights: dict[str, dict[str, float]] | None = None
+    # Fraction of the token budget reserved for memory/decision items.
+    # Must be in (0, 1). Values outside that range fall back to 0.15 with a warning.
+    memory_budget_pct: float = 0.15
+
+    @field_validator("memory_budget_pct", mode="before")
+    @classmethod
+    def _validate_memory_budget_pct(cls, value: object) -> float:
+        try:
+            v = float(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            sys.stderr.write("warning: memory_budget_pct out of range, using 0.15\n")
+            return 0.15
+        if v <= 0 or v >= 1:
+            sys.stderr.write("warning: memory_budget_pct out of range, using 0.15\n")
+            return 0.15
+        return v
 
 
 def load_config(project_root: Path) -> ContextRouterConfig:
@@ -108,6 +125,8 @@ DEFAULT_CONFIG_YAML = """\
 # See docs/architecture.md for all options.
 
 token_budget: 8000
+
+# memory_budget_pct: 0.15   # cap memory hits at 15% of token budget
 
 capabilities:
   llm_summarization: false
