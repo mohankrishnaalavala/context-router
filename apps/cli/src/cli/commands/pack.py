@@ -177,6 +177,13 @@ def pack(
             ),
         ),
     ] = False,
+    use_memory: Annotated[
+        bool,
+        typer.Option(
+            "--use-memory",
+            help="Include top-8 memory observations in pack output.",
+        ),
+    ] = False,
 ) -> None:
     """Generate a context pack for the given task MODE.
 
@@ -408,6 +415,31 @@ def pack(
         # addition to the canonical ``selected_items``. Adding the alias here
         # keeps the Pydantic contract untouched.
         payload["items"] = payload.get("selected_items", [])
+
+        # --use-memory: inject BM25+recency ranked observations.
+        if use_memory:
+            from pathlib import Path as _Path
+            from memory.file_retriever import retrieve_observations
+
+            _mem_root = _Path(project_root) if project_root else _Path.cwd()
+            _memory_dir = _mem_root / ".context-router" / "memory"
+            _hits = retrieve_observations(query, _memory_dir, k=8)
+            if not _hits:
+                typer.secho(
+                    f"warning: no memory observations found at {_memory_dir}",
+                    err=True,
+                    fg="yellow",
+                )
+            payload["memory_hits"] = [
+                {
+                    "id": h.id,
+                    "excerpt": h.excerpt,
+                    "score": round(h.score, 6),
+                    "files_touched": h.files_touched,
+                }
+                for h in _hits
+            ]
+
         typer.echo(_json.dumps(payload, indent=2))
         return
 
@@ -425,6 +457,28 @@ def pack(
         return
 
     _print_pack(result)
+
+    # --use-memory: append memory hits to human-readable output.
+    if use_memory:
+        from pathlib import Path as _Path
+        from memory.file_retriever import retrieve_observations
+
+        _mem_root = _Path(project_root) if project_root else _Path.cwd()
+        _memory_dir = _mem_root / ".context-router" / "memory"
+        _hits = retrieve_observations(query, _memory_dir, k=8)
+        if not _hits:
+            typer.secho(
+                f"warning: no memory observations found at {_memory_dir}",
+                err=True,
+                fg="yellow",
+            )
+        else:
+            typer.echo("")
+            typer.echo("Memory Observations (BM25 + recency)")
+            typer.echo("-" * 40)
+            for h in _hits:
+                typer.echo(f"[{h.id}] (score={h.score:.4f})")
+                typer.echo(f"  {h.excerpt[:120]}")
 
 
 def _resolve_token_budget(
