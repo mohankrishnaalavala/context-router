@@ -12,6 +12,7 @@ members = [
     "context-router-contracts",
     "context-router-contracts-extractor",
     "context-router-core",
+    "context-router-evaluation",
     "context-router-graph-index",
     "context-router-language-dotnet",
     "context-router-language-java",
@@ -225,6 +226,7 @@ version = "3.3.1"
 source = { editable = "apps/cli" }
 dependencies = [
     { name = "cachetools" },
+    { name = "context-router-evaluation" },
     { name = "pydantic" },
     { name = "pyyaml" },
     { name = "rich" },
@@ -245,6 +247,7 @@ semantic = [
 [package.metadata]
 requires-dist = [
     { name = "cachetools", specifier = ">=5.3" },
+    { name = "context-router-evaluation", editable = "packages/evaluation" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=13.0" },
@@ -314,6 +317,23 @@ requires-dist = [
     { name = "context-router-runtime", editable = "packages/runtime" },
     { name = "context-router-storage-sqlite", editable = "packages/storage-sqlite" },
     { name = "context-router-workspace", editable = "packages/workspace" },
+]
+
+[[package]]
+name = "context-router-evaluation"
+version = "4.0.0"
+source = { editable = "packages/evaluation" }
+dependencies = [
+    { name = "context-router-contracts" },
+    { name = "context-router-core" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "context-router-contracts", editable = "packages/contracts" },
+    { name = "context-router-core", editable = "packages/core" },
+    { name = "pydantic", specifier = ">=2.0" },
 ]
 
 [[package]]
