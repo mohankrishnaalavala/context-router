@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 from workspace.reconcile import reconcile_repo
-from workspace.store import RepoRecord, WorkspaceStore
+from workspace_store.store import RepoRecord, WorkspaceStore
 
 
 @pytest.fixture

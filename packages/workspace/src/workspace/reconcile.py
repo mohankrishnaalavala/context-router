@@ -4,7 +4,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from workspace.store import CrossRepoEdge, WorkspaceStore
+from workspace_store.store import CrossRepoEdge, WorkspaceStore
 
 
 def _per_repo_db_path(repo_root: Path) -> Path:

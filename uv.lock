@@ -546,12 +546,14 @@ source = { editable = "packages/workspace" }
 dependencies = [
     { name = "context-router-contracts" },
     { name = "context-router-contracts-extractor" },
+    { name = "context-router-workspace-store" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "context-router-contracts", editable = "packages/contracts" },
     { name = "context-router-contracts-extractor", editable = "packages/contracts-extractor" },
+    { name = "context-router-workspace-store", editable = "packages/workspace-store" },
 ]
 
 [[package]]

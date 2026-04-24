@@ -304,7 +304,7 @@ def workspace_sync(
 ) -> None:
     """Rebuild the workspace cross-repo edge cache from each repo's current state."""
     from workspace.reconcile import reconcile_repo
-    from workspace.store import RepoRecord, WorkspaceStore
+    from workspace_store.store import RepoRecord, WorkspaceStore
 
     ws_root = _root_path(root)
     ws = _load_or_die(ws_root)

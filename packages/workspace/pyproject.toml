@@ -6,6 +6,7 @@ description = "Multi-repo workspace registry and cross-repo link model for conte
 dependencies = [
     "context-router-contracts",
     "context-router-contracts-extractor",
+    "context-router-workspace-store",
 ]
 
 [build-system]

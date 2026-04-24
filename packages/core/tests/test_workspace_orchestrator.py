@@ -231,7 +231,7 @@ class TestTitlePrefix:
 
 class TestWorkspaceDbBackedBoost:
     def test_reads_edges_from_workspace_db(self, tmp_path):
-        from workspace.store import CrossRepoEdge, RepoRecord, WorkspaceStore
+        from workspace_store.store import CrossRepoEdge, RepoRecord, WorkspaceStore
 
         db = tmp_path / ".context-router" / "workspace.db"
         store = WorkspaceStore.open(db)

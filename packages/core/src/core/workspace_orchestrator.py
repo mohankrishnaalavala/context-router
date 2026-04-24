@@ -324,7 +324,7 @@ class WorkspaceOrchestrator:
         db = self._root / ".context-router" / "workspace.db"
         if not db.exists():
             return None
-        from workspace.store import WorkspaceStore
+        from workspace_store.store import WorkspaceStore
         return WorkspaceStore.open(db)
 
     def cross_repo_edges_for_repo(self, repo_id: str):
@@ -334,7 +334,7 @@ class WorkspaceOrchestrator:
             repo_id: The source repo identifier to query.
 
         Returns:
-            List of :class:`workspace.store.CrossRepoEdge` instances, or an
+            List of :class:`workspace_store.store.CrossRepoEdge` instances, or an
             empty list when workspace.db does not exist.
         """
         store = self._store()
