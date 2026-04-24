@@ -43,3 +43,8 @@ class TestRecallAtK:
         queries = [_mk("Q1", ["backend/src/a.py"])]
         out = score_recall_at_k(queries, lambda q: ["backend\\src\\a.py"], k=20)
         assert out.recall_at_k == 1.0
+
+    def test_path_normalisation_dot_slash_prefix(self):
+        queries = [_mk("Q1", ["backend/src/a.py"])]
+        out = score_recall_at_k(queries, lambda q: ["./backend/src/a.py"], k=20)
+        assert out.recall_at_k == 1.0

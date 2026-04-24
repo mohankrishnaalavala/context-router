@@ -27,7 +27,7 @@ class RecallResult:
 
 
 def _normalise(path: str) -> str:
-    return path.replace("\\", "/")
+    return path.replace("\\", "/").removeprefix("./")
 
 
 def score_recall_at_k(
