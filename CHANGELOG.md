@@ -9,6 +9,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.2.0] — 2026-04-24
+
+### Added
+- **Memory sub-budget cap:** memory/decision items are capped at 15% of the total token budget. Configurable via `memory_budget_pct` in `.context-router/config.yaml` (default `0.15`; values ≤ 0 or ≥ 1 warn to stderr and fall back).
+- **Adaptive top-k:** trailing pack items whose `confidence < 0.6 × leader_confidence` are dropped in `review` and `implement` modes, recovering v3.3.0-level precision on single-file ground-truth tasks. No-op in `debug` and `handover` modes.
+- **Observation provenance:** `MemoryHit.provenance` classifies each `.md` observation as `"committed"`, `"staged"`, or `"branch_local"` via `git ls-files`. On the `main` branch, non-committed observations are filtered out of packs (teammate isolation).
+- `budget: {total_tokens, memory_tokens, memory_ratio}` key added to all `--json` pack outputs.
+- `memory_hits_summary: {committed, staged}` key added alongside `memory_hits` in JSON output.
+- `scripts/smoke-v4.2.sh` — 4-test smoke gate (memory staging, budget JSON, memory_ratio, adaptive top-k constant).
+- 3 DoD entries in `docs/release/v4-outcomes.yaml` (`v4.2-memory-promotion`, `v4.2-memory-sub-budget`, `v4.2-adaptive-top-k`).
+
+### Fixed
+- **Conditional test-file penalty:** the 0.85× confidence penalty is now skipped when the test/mock file is the best-matching item with no non-test competitor — fixing the bulletproof-react T3 regression introduced in v4.1.0 (`src/test/server/handlers/comments.ts` returns to rank 1).
+
+---
+
 ## [4.1.0] — 2026-04-24
 
 ### Added
