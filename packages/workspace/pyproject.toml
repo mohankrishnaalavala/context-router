@@ -1,6 +1,6 @@
 [project]
 name = "context-router-workspace"
-version = "3.3.1"
+version = "4.0.0"
 requires-python = ">=3.12"
 description = "Multi-repo workspace registry and cross-repo link model for context-router (Phase 7)"
 dependencies = [

@@ -1,6 +1,6 @@
 [project]
 name = "context-router-language-java"
-version = "3.3.1"
+version = "4.0.0"
 requires-python = ">=3.12"
 description = "Java language analyzer plugin for context-router (Phase 1)"
 dependencies = [
