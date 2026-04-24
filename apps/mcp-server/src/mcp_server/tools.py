@@ -770,7 +770,17 @@ def save_observation(
 
     if row_id is None:
         return {"saved": False, "reason": "duplicate observation (same task_type + summary)"}
-    return {"saved": True, "id": row_id}
+
+    from memory.file_writer import MemoryFileWriter
+    memory_dir = root / ".context-router" / "memory"
+    writer = MemoryFileWriter(memory_dir)
+    file_result = writer.write_observation(obs)
+    writer.update_index()
+
+    result: dict = {"saved": True, "id": row_id}
+    if file_result.written:
+        result["file"] = str(file_result.path)
+    return result
 
 
 def save_decision(
