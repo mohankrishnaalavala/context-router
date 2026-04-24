@@ -32,6 +32,7 @@ class MemoryHit:
     score: float
     files_touched: list[str] = field(default_factory=list)
     task: str = ""
+    provenance: str = "committed"
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +118,57 @@ def _recency_boost(created_at: datetime) -> float:
     return 1.0 / (1.0 + days ** 0.5)
 
 
+def _classify_memory_files(obs_dir: Path, project_root: Path) -> dict[str, str]:
+    """Classify .md files in obs_dir as 'committed', 'staged', or 'branch_local'.
+
+    Runs two git subprocess calls:
+    - ``git ls-files`` → committed files
+    - ``git diff --cached --name-only`` → staged-but-uncommitted files
+    Files in obs_dir that appear in neither set are 'branch_local'.
+
+    Returns a dict mapping file stem (without .md) to provenance string.
+    Falls back to marking all files as 'committed' on any error (git absent,
+    not a repo, etc.) so the function always degrades gracefully.
+    """
+    import subprocess
+
+    provenance: dict[str, str] = {}
+    try:
+        result_committed = subprocess.run(
+            ["git", "ls-files", str(obs_dir)],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        # Non-zero exit code (e.g. 128 = not a git repo) → graceful fallback
+        if result_committed.returncode != 0:
+            return {}
+        committed_paths = set(result_committed.stdout.splitlines())
+
+        result_staged = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=str(project_root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        staged_paths = set(result_staged.stdout.splitlines())
+    except Exception:  # noqa: BLE001
+        # git absent, not a repo, timeout — treat all as committed
+        return {}
+
+    for md_path in obs_dir.glob("*.md"):
+        rel = str(md_path.relative_to(project_root)) if project_root else md_path.name
+        if rel in committed_paths:
+            provenance[md_path.stem] = "committed"
+        elif rel in staged_paths:
+            provenance[md_path.stem] = "staged"
+        else:
+            provenance[md_path.stem] = "branch_local"
+    return provenance
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -125,6 +177,7 @@ def retrieve_observations(
     query: str,
     memory_dir: Path,
     k: int = 8,
+    project_root: Path | None = None,
 ) -> list[MemoryHit]:
     """Return top-k observations from ``memory_dir/observations/`` ranked by BM25 + recency.
 
@@ -142,6 +195,10 @@ def retrieve_observations(
         query: Free-text query string.
         memory_dir: The ``.context-router/memory`` directory.
         k: Maximum number of hits to return.
+        project_root: Optional path to the project root used to classify
+            each hit's provenance via git (committed/staged/branch_local).
+            When omitted, all hits default to ``provenance="committed"``.
+            On the main branch, branch_local and staged hits are filtered out.
 
     Returns:
         List of :class:`MemoryHit` objects, most relevant first.
@@ -240,6 +297,33 @@ def retrieve_observations(
                 task=task,
             )
         )
+
+    # Classify provenance and optionally filter to committed-only on main branch
+    if project_root is not None:
+        prov_map = _classify_memory_files(obs_dir, project_root)
+        # Determine if we're on main branch
+        on_main = False
+        try:
+            import subprocess
+            branch = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                cwd=str(project_root), capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+            on_main = branch == "main"
+        except Exception:  # noqa: BLE001
+            pass
+
+        filtered_hits = []
+        for hit in hits:
+            prov = prov_map.get(hit.id, "committed")  # default committed when not in map
+            hit = MemoryHit(
+                id=hit.id, path=hit.path, excerpt=hit.excerpt, score=hit.score,
+                files_touched=hit.files_touched, task=hit.task, provenance=prov,
+            )
+            if on_main and prov != "committed":
+                continue  # filter branch-local/staged on main checkout
+            filtered_hits.append(hit)
+        hits = filtered_hits
 
     hits.sort(key=lambda h: h.score, reverse=True)
     return hits[:k]

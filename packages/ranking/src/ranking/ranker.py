@@ -318,6 +318,10 @@ _REASON: dict[str, str] = {
 
 _DEFAULT_REASON = "Included in context pack"
 
+# Adaptive top-k constants (v4.2 T3)
+_ADAPTIVE_TOPK_FLOOR_RATIO: float = 0.6
+_ADAPTIVE_TOPK_MODES: frozenset[str] = frozenset({"review", "implement"})
+
 
 def _tokenize(text: str) -> set[str]:
     """Return lowercase tokens from *text* that are at least _MIN_TOKEN_LEN chars.
@@ -392,6 +396,7 @@ class ContextRanker:
         progress_cb: Callable[[str], None] | None = None,
         use_hub_boost: bool | None = None,
         db_connection: Any | None = None,
+        memory_budget_pct: float = 0.15,
     ) -> None:
         """Initialise the ranker with a token budget.
 
@@ -428,6 +433,7 @@ class ContextRanker:
         self._progress_cb = progress_cb
         self._use_hub_boost = use_hub_boost
         self._db_connection = db_connection
+        self._memory_budget_pct = memory_budget_pct
         # P1-6: BM25 corpus cache — maps items_key -> _BM25Scorer
         # Bounded at 5 entries to avoid unbounded memory growth.
         self._bm25_cache: dict[int, Any] = {}
@@ -534,13 +540,45 @@ class ContextRanker:
         sorted_items, _ = _dedup_by_file(sorted_items)
 
         if self._budget <= 0:
-            return sorted_items
+            return self._apply_adaptive_top_k(sorted_items, mode)
 
-        return self._enforce_budget(sorted_items)
+        # Sub-budget: memory/decision items capped at memory_budget_pct of total budget
+        _mem_types = frozenset({"memory", "decision"})
+        memory_items = [i for i in sorted_items if i.source_type in _mem_types]
+        code_items = [i for i in sorted_items if i.source_type not in _mem_types]
+
+        memory_cap = int(self._budget * self._memory_budget_pct)
+        trimmed_memory = self._enforce_budget(memory_items, cap=memory_cap)
+        remaining = self._budget - sum(i.est_tokens for i in trimmed_memory)
+        trimmed_code = self._enforce_budget(
+            sorted(code_items, key=lambda i: i.confidence, reverse=True),
+            cap=max(0, remaining),
+        )
+
+        result = sorted(trimmed_memory + trimmed_code, key=lambda i: i.confidence, reverse=True)
+        return self._apply_adaptive_top_k(result, mode)
 
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _apply_adaptive_top_k(
+        self, items: list[ContextItem], mode: str
+    ) -> list[ContextItem]:
+        """Drop trailing items whose confidence is below FLOOR_RATIO × leader's confidence.
+
+        Only active in review/implement modes (where precision matters more than
+        completeness). A no-op in debug/handover modes and when fewer than 2 items
+        are present.
+        """
+        if len(items) < 2 or mode not in _ADAPTIVE_TOPK_MODES:
+            return items
+        floor = _ADAPTIVE_TOPK_FLOOR_RATIO * items[0].confidence
+        # Keep the longest prefix where every item is above the floor.
+        last_keep = len(items) - 1
+        while last_keep > 0 and items[last_keep].confidence < floor:
+            last_keep -= 1
+        return items[: last_keep + 1]
 
     def _apply_semantic_boost(self, items: list[ContextItem], query: str) -> list[ContextItem]:
         """Boost items using cosine similarity from sentence-transformers.
@@ -793,14 +831,34 @@ class ContextRanker:
                 del self._bm25_cache[oldest]
         scorer = self._bm25_cache[items_key]
         bm25_scores = scorer.scores_normalized(query_tokens)
+
+        # Pass 1: compute pre-penalty scores and max non-test score.
+        # This lets us detect whether a test file is the *sole* high-signal
+        # item (e.g. bulletproof-react T3: GT is src/test/server/handlers/…).
+        # When no non-test item scores as high, the penalty is skipped so the
+        # correct file is not suppressed.
+        pre_scores = [
+            min(0.95, 0.6 * item.confidence + 0.4 * bm25)
+            for item, bm25 in zip(items, bm25_scores)
+        ]
+        max_non_test_conf = max(
+            (s for item, s in zip(items, pre_scores)
+             if not _is_test_or_script_path(item.path_or_ref or "")),
+            default=0.0,
+        )
+
+        # Pass 2: build result, applying the 0.85× penalty to test/script
+        # files only when a non-test competitor scores at least as well.
+        # In debug mode the penalty never fires (test failures are primary
+        # evidence there).
         result = []
-        for item, bm25 in zip(items, bm25_scores):
-            new_conf = min(0.95, 0.6 * item.confidence + 0.4 * bm25)
-            # In review/implement/handover modes, test and script files are
-            # secondary evidence. A 0.85× multiplier prevents them from
-            # outranking the source files they test when BM25 scores are close.
-            # Debug mode is excluded — test failures are primary evidence there.
-            if mode != "debug" and _is_test_or_script_path(item.path_or_ref or ""):
+        for item, pre_score in zip(items, pre_scores):
+            new_conf = pre_score
+            if (
+                mode != "debug"
+                and _is_test_or_script_path(item.path_or_ref or "")
+                and max_non_test_conf >= new_conf
+            ):
                 new_conf = new_conf * 0.85
             result.append(item.model_copy(update={"confidence": new_conf}))
         return result
@@ -1330,7 +1388,9 @@ class ContextRanker:
         reason = _REASON.get(item.source_type, _DEFAULT_REASON)
         return item.model_copy(update={"reason": reason})
 
-    def _enforce_budget(self, items: list[ContextItem]) -> list[ContextItem]:
+    def _enforce_budget(
+        self, items: list[ContextItem], cap: int | None = None
+    ) -> list[ContextItem]:
         """Trim *items* to the budget using a value-per-token ordering.
 
         Items are admitted greedily in descending ``confidence / est_tokens``
@@ -1339,7 +1399,14 @@ class ContextRanker:
         least one item per ``source_type`` survives even if admitting it
         slightly exceeds the budget. Returned items are re-sorted by raw
         confidence (descending) to match the original output contract.
+
+        Args:
+            items: Candidates to trim.
+            cap: Optional explicit budget ceiling. When provided, overrides
+                ``self._budget`` as the admission limit. Used by the memory
+                sub-budget pass in ``rank()``.
         """
+        budget = cap if cap is not None else self._budget
         admission_order = sorted(
             items,
             key=lambda i: (
@@ -1355,7 +1422,7 @@ class ContextRanker:
 
         for item in admission_order:
             is_first_of_type = item.source_type not in seen_types
-            fits = accumulated + item.est_tokens <= self._budget
+            fits = accumulated + item.est_tokens <= budget
 
             if fits or is_first_of_type:
                 admitted.append(item)

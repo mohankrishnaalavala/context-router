@@ -35,12 +35,14 @@ def test_empty_input_returns_empty() -> None:
 
 
 def test_sorts_by_confidence_descending() -> None:
+    # Use "debug" mode to avoid adaptive top-k trimming the low-confidence
+    # tail — this test is about sort order, not filtering precision.
     items = [
         _item(confidence=0.2, title="low"),
         _item(confidence=0.9, title="high"),
         _item(confidence=0.5, title="mid"),
     ]
-    result = ContextRanker(token_budget=100_000).rank(items, "", "review")
+    result = ContextRanker(token_budget=100_000).rank(items, "", "debug")
     titles = [i.title for i in result]
     assert titles == ["high", "mid", "low"]
 
@@ -62,13 +64,16 @@ def test_unknown_source_type_gets_default_reason() -> None:
 # -----------------------------------------------------------------------
 
 def test_budget_trims_lowest_confidence_items() -> None:
+    # Use "debug" mode to isolate budget enforcement from adaptive top-k.
+    # In "review" mode adaptive top-k can also trim items below the
+    # confidence floor, which is a different mechanism than budget trimming.
     items = [
         _item(confidence=0.9, est_tokens=50, title="a"),
         _item(confidence=0.5, est_tokens=50, title="b"),
         _item(confidence=0.1, est_tokens=50, title="c"),
     ]
     # budget = 100, only first two fit
-    result = ContextRanker(token_budget=100).rank(items, "", "review")
+    result = ContextRanker(token_budget=100).rank(items, "", "debug")
     titles = {i.title for i in result}
     assert "a" in titles
     assert "b" in titles
@@ -78,19 +83,22 @@ def test_budget_trims_lowest_confidence_items() -> None:
 def test_zero_budget_returns_all_sorted() -> None:
     # Distinct titles so the v3.2 symbol-stub-dedup pass doesn't merge
     # these items — the test case is about sort order, not dedup.
+    # Use "debug" mode to avoid adaptive top-k trimming the low-confidence tail.
     items = [_item(confidence=0.3, title="low"), _item(confidence=0.9, title="high")]
-    result = ContextRanker(token_budget=0).rank(items, "", "review")
+    result = ContextRanker(token_budget=0).rank(items, "", "debug")
     assert len(result) == 2
     assert result[0].confidence == 0.9
 
 
 def test_budget_preserves_one_per_source_type() -> None:
     """Even if budget is tiny, at least one item per source_type survives."""
+    # Use "debug" mode to avoid adaptive top-k removing the low-confidence
+    # "file" item before the budget-preservation assertion can be checked.
     items = [
         _item(source_type="changed_file", confidence=0.9, est_tokens=500, title="cf"),
         _item(source_type="file", confidence=0.2, est_tokens=500, title="f"),
     ]
-    result = ContextRanker(token_budget=100).rank(items, "", "review")
+    result = ContextRanker(token_budget=100).rank(items, "", "debug")
     seen_types = {i.source_type for i in result}
     assert "changed_file" in seen_types
     assert "file" in seen_types
@@ -440,3 +448,139 @@ def test_semantic_boost_changes_ranking_in_handover(monkeypatch) -> None:
         "handover mode ranking with --with-semantic must differ from "
         "plain ranking (phase-2 outcome threshold)"
     )
+
+
+# -----------------------------------------------------------------------
+# v4.2 T3 — Adaptive top-k
+# -----------------------------------------------------------------------
+
+def test_adaptive_topk_drops_low_confidence_tail_in_review_mode() -> None:
+    """Trailing items below FLOOR_RATIO × leader are dropped in review mode."""
+    # floor = 0.6 * 0.9 = 0.54; items with conf 0.2 and 0.1 are below the floor
+    items = [
+        _item(confidence=0.9, title="a"),
+        _item(confidence=0.8, title="b"),
+        _item(confidence=0.7, title="c"),
+        _item(confidence=0.2, title="d"),
+        _item(confidence=0.1, title="e"),
+    ]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "review")
+    titles = [i.title for i in result]
+    assert "d" not in titles
+    assert "e" not in titles
+    assert "a" in titles and "b" in titles and "c" in titles
+
+
+def test_adaptive_topk_noop_in_debug_mode() -> None:
+    """Adaptive top-k is a no-op in debug mode — all items kept."""
+    items = [
+        _item(confidence=0.9, title="a"),
+        _item(confidence=0.8, title="b"),
+        _item(confidence=0.7, title="c"),
+        _item(confidence=0.2, title="d"),
+        _item(confidence=0.1, title="e"),
+    ]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "debug")
+    assert len(result) == 5
+
+
+def test_adaptive_topk_noop_in_handover_mode() -> None:
+    """Adaptive top-k is a no-op in handover mode — all items kept."""
+    items = [
+        _item(confidence=0.9, title="a"),
+        _item(confidence=0.8, title="b"),
+        _item(confidence=0.7, title="c"),
+        _item(confidence=0.2, title="d"),
+        _item(confidence=0.1, title="e"),
+    ]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "handover")
+    assert len(result) == 5
+
+
+def test_adaptive_topk_noop_when_all_above_floor() -> None:
+    """No items dropped when all are above the floor (0.6 × 0.9 = 0.54)."""
+    items = [
+        _item(confidence=0.9, title="a"),
+        _item(confidence=0.85, title="b"),
+        _item(confidence=0.8, title="c"),
+    ]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "review")
+    assert len(result) == 3
+
+
+def test_adaptive_topk_never_drops_sole_item() -> None:
+    """A single item with very low confidence is always kept."""
+    items = [_item(confidence=0.1, title="only")]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "review")
+    assert len(result) == 1
+
+
+def test_adaptive_topk_single_item_is_never_dropped() -> None:
+    """The last remaining item is always kept even if below floor."""
+    # With 2 items: floor = 0.6 * 0.9 = 0.54. Item b = 0.1 is below floor
+    # but last_keep must never go below 0, so the leader is always retained.
+    items = [
+        _item(confidence=0.9, title="a"),
+        _item(confidence=0.1, title="b"),
+    ]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "review")
+    # "a" must survive (leader is never dropped)
+    assert any(i.title == "a" for i in result)
+    assert len(result) >= 1
+
+
+# -----------------------------------------------------------------------
+# v4.2 T3 — Memory sub-budget cap
+# -----------------------------------------------------------------------
+
+def test_memory_items_capped_at_15pct() -> None:
+    """Memory items are capped at 15% of total budget (default)."""
+    # 10 memory items × 100 tokens = 1000 tokens; 15% of 1000 = 150 tokens = 1 item
+    # 10 code items × 100 tokens = 1000 tokens
+    memory_items = [
+        _item(source_type="memory", est_tokens=100, confidence=0.8, title=f"mem_{i}")
+        for i in range(10)
+    ]
+    code_items = [
+        _item(source_type="file", est_tokens=100, confidence=0.7, title=f"code_{i}")
+        for i in range(10)
+    ]
+    ranker = ContextRanker(token_budget=1000, memory_budget_pct=0.15)
+    result = ranker.rank(memory_items + code_items, "", "review")
+    memory_count = len([i for i in result if i.source_type == "memory"])
+    assert memory_count <= 2
+
+
+def test_memory_cap_custom_pct() -> None:
+    """With memory_budget_pct=0.5, memory gets up to 50% of budget."""
+    # 10 memory items × 100 tokens; 50% of 1000 = 500 tokens = 5 items
+    memory_items = [
+        _item(source_type="memory", est_tokens=100, confidence=0.8, title=f"mem_{i}")
+        for i in range(10)
+    ]
+    code_items = [
+        _item(source_type="file", est_tokens=100, confidence=0.7, title=f"code_{i}")
+        for i in range(10)
+    ]
+    ranker = ContextRanker(token_budget=1000, memory_budget_pct=0.5)
+    result = ranker.rank(memory_items + code_items, "", "review")
+    memory_count = len([i for i in result if i.source_type == "memory"])
+    assert memory_count >= 3  # at least 3 memory items fit in 500-token cap
+
+
+def test_memory_cap_no_memory_items_noop() -> None:
+    """All code items, no memory items — code items fill budget normally."""
+    code_items = [
+        _item(source_type="file", est_tokens=100, confidence=0.7, title=f"code_{i}")
+        for i in range(10)
+    ]
+    ranker = ContextRanker(token_budget=1000, memory_budget_pct=0.15)
+    result = ranker.rank(code_items, "", "review")
+    # No memory items → code fills remaining budget (up to 1000 tokens = 10 items)
+    assert len(result) >= 5

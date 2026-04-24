@@ -122,3 +122,80 @@ outcomes:
       verify:
         cmd: bash scripts/smoke-v4.1.sh
         expected_stdout_contains: "PASS: 4/4"
+
+  - id: v4.2-memory-promotion
+    phase: v4.2
+    priority: P0
+    description: >-
+      Committed memory files surface in teammate packs; staged/branch-local
+      observations are visible only on the authoring branch.
+    dod:
+      outcome: >-
+        On a clean checkout of main, pack --use-memory only surfaces
+        observations committed to main. Staged-only observations written on
+        a feature branch do not appear in a main-branch pack.
+      threshold: >-
+        (a) After git commit of an observation file, pack --use-memory on
+        main includes at least that one hit. (b) A staged-but-uncommitted
+        observation does not appear in pack output built from a fresh main
+        checkout. (c) memory_hits_summary key present in --json output with
+        committed and staged integer values.
+      negative_case: >-
+        If git is unavailable or the observations directory is not inside a
+        git repo, all hits are treated as committed (no crash, no empty pack).
+      verify:
+        cmd: >-
+          context-router pack --use-memory --json --query "…"
+          | jq '.memory_hits_summary'
+        expected_stdout_contains: "committed"
+
+  - id: v4.2-memory-sub-budget
+    phase: v4.2
+    priority: P0
+    description: >-
+      Memory token consumption is capped at 15% of the total pack budget.
+      Configurable via memory_budget_pct in .context-router/config.yaml.
+    dod:
+      outcome: >-
+        Memory items in a pack never exceed int(total_budget * 0.15) tokens.
+        Code items fill the remaining 85%.
+      threshold: >-
+        pack_tokens_memory / pack_tokens_total <= 0.15 on every
+        release-fixture query. budget.memory_ratio in --json output is a
+        float in [0.0, 0.15].
+      negative_case: >-
+        If memory_budget_pct is set <= 0 or >= 1 in config.yaml,
+        context-router emits "warning: memory_budget_pct out of range,
+        using 0.15" to stderr and falls back to the default.
+      verify:
+        cmd: >-
+          context-router pack --use-memory --json --query "…"
+          | jq '.budget.memory_ratio'
+        expected_stdout_contains: "0."
+
+  - id: v4.2-adaptive-top-k
+    phase: v4.2
+    priority: P1
+    description: >-
+      Trailing items whose confidence is below 60% of the leader's confidence
+      are dropped in review and implement modes. Debug and handover modes
+      return all items for completeness.
+    dod:
+      outcome: >-
+        In review/implement modes, the returned item list never includes
+        trailing items with confidence < 0.6 * items[0].confidence.
+        In debug/handover modes, all budget-admitted items are returned
+        regardless of relative confidence.
+      threshold: >-
+        On the judge benchmark single-file ground-truth fixture, F1 >= 0.45
+        in review mode (up from 0.270 baseline). The synthetic Recall@20 gate
+        (scripts/eval-synthetic.sh) continues to pass.
+      negative_case: >-
+        When all items have similar confidence (max spread < 40%), no items
+        are dropped (floor never fires). When only one item remains, it is
+        always returned regardless of confidence.
+      verify:
+        cmd: >-
+          uv run pytest packages/ranking/tests/test_ranker.py
+          -k "adaptive_topk" -v
+        expected_stdout_contains: "passed"

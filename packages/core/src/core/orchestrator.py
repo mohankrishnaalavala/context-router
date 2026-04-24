@@ -1062,6 +1062,7 @@ class Orchestrator:
                 # Database connection so the hub/bridge boost doesn't
                 # open a fresh sqlite3.Connection per pack build.
                 db_connection=db.connection,
+                memory_budget_pct=config.memory_budget_pct,
             )
             # v3.2 outcome ``diff-aware-ranking-boost`` (P2): when review
             # mode has a diff to reason about — either the working-tree

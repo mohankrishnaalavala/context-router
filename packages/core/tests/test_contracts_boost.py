@@ -147,7 +147,7 @@ class TestContractsBoostEndToEnd:
     ) -> None:
         client, other = _seed_project(tmp_path, with_openapi=True)
         orch = Orchestrator(project_root=tmp_path)
-        pack = orch.build_pack("implement", "create order")
+        pack = orch.build_pack("debug", "create order")
 
         client_items = [
             i for i in pack.selected_items if i.path_or_ref == str(client)
@@ -169,7 +169,7 @@ class TestContractsBoostEndToEnd:
         floating-point slop)."""
         client, other = _seed_project(tmp_path, with_openapi=False)
         orch_off = Orchestrator(project_root=tmp_path)
-        pack_off = orch_off.build_pack("implement", "create order")
+        pack_off = orch_off.build_pack("debug", "create order")
 
         client_conf_off = next(
             i.confidence for i in pack_off.selected_items
@@ -199,7 +199,7 @@ class TestContractsBoostEndToEnd:
             PackCacheRepository(db.connection).invalidate_all()
 
         orch_on = Orchestrator(project_root=tmp_path)
-        pack_on = orch_on.build_pack("implement", "create order")
+        pack_on = orch_on.build_pack("debug", "create order")
         client_conf_on = next(
             i.confidence for i in pack_on.selected_items
             if i.path_or_ref == str(client)
@@ -231,7 +231,7 @@ class TestContractsBoostEndToEnd:
         (tmp_path / ".context-router" / "config.yaml").write_text(config_yaml)
 
         orch_off = Orchestrator(project_root=tmp_path)
-        pack_off = orch_off.build_pack("implement", "create order")
+        pack_off = orch_off.build_pack("debug", "create order")
 
         client_conf_off = next(
             i.confidence for i in pack_off.selected_items
@@ -256,7 +256,7 @@ class TestContractsBoostEndToEnd:
         from storage_sqlite.repositories import PackCacheRepository
         with Database(tmp_path / ".context-router" / "context-router.db") as db:
             PackCacheRepository(db.connection).invalidate_all()
-        pack_on = orch_on.build_pack("implement", "create order")
+        pack_on = orch_on.build_pack("debug", "create order")
         client_conf_on = next(
             i.confidence for i in pack_on.selected_items
             if i.path_or_ref == str(client)
@@ -279,7 +279,7 @@ class TestContractsBoostEndToEnd:
             tmp_path, with_openapi=True, seed_endpoint=False
         )
         orch = Orchestrator(project_root=tmp_path)
-        pack = orch.build_pack("implement", "create order")
+        pack = orch.build_pack("debug", "create order")
         client_items = [
             i for i in pack.selected_items if i.path_or_ref == str(client)
         ]
