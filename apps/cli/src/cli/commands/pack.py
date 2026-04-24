@@ -423,7 +423,7 @@ def pack(
 
             _mem_root = _Path(project_root) if project_root else _Path.cwd()
             _memory_dir = _mem_root / ".context-router" / "memory"
-            _hits = retrieve_observations(query, _memory_dir, k=8)
+            _hits = retrieve_observations(query, _memory_dir, k=8, project_root=_mem_root)
             if not _hits:
                 typer.secho(
                     f"warning: no memory observations found at {_memory_dir}",
@@ -434,11 +434,30 @@ def pack(
                 {
                     "id": h.id,
                     "excerpt": h.excerpt,
-                    "score": round(h.score, 6),
+                    "score": round(h.score, 4),
                     "files_touched": h.files_touched,
+                    "task": h.task,
+                    "provenance": h.provenance,
                 }
                 for h in _hits
             ]
+            payload["memory_hits_summary"] = {
+                "committed": sum(1 for h in _hits if h.provenance == "committed"),
+                "staged": sum(1 for h in _hits if h.provenance == "staged"),
+            }
+
+        _total_tokens = sum(
+            int(getattr(i, "est_tokens", 0) or 0) for i in result.selected_items
+        )
+        _mem_tokens = sum(
+            int(getattr(i, "est_tokens", 0) or 0) for i in result.selected_items
+            if getattr(i, "source_type", "") in {"memory", "decision"}
+        )
+        payload["budget"] = {
+            "total_tokens": _total_tokens,
+            "memory_tokens": _mem_tokens,
+            "memory_ratio": round(_mem_tokens / _total_tokens, 4) if _total_tokens > 0 else 0.0,
+        }
 
         typer.echo(_json.dumps(payload, indent=2))
         return
@@ -465,7 +484,7 @@ def pack(
 
         _mem_root = _Path(project_root) if project_root else _Path.cwd()
         _memory_dir = _mem_root / ".context-router" / "memory"
-        _hits = retrieve_observations(query, _memory_dir, k=8)
+        _hits = retrieve_observations(query, _memory_dir, k=8, project_root=_mem_root)
         if not _hits:
             typer.secho(
                 f"warning: no memory observations found at {_memory_dir}",

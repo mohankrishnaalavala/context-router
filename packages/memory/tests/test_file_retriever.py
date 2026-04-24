@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from memory.file_retriever import MemoryHit, retrieve_observations
+from memory.file_retriever import MemoryHit, _classify_memory_files, retrieve_observations
 
 
 # ---------------------------------------------------------------------------
@@ -231,3 +231,63 @@ class TestKCeiling:
             )
         result = retrieve_observations("auth session", md, k=10)
         assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# T2 — Observation provenance tests
+# ---------------------------------------------------------------------------
+
+
+class TestProvenanceDefaults:
+    """Without project_root all hits default to provenance='committed'."""
+
+    def test_retrieve_observations_provenance_defaults_committed(
+        self, tmp_path: Path
+    ) -> None:
+        md = _memory_dir(tmp_path)
+        obs_dir = md / "observations"
+        _write_obs(obs_dir, stem="2026-04-24-obs-a", summary="Fixed auth token refresh for all users")
+        _write_obs(obs_dir, stem="2026-04-24-obs-b", summary="Improved checkout dedup pipeline logic")
+
+        result = retrieve_observations("auth checkout", md, k=8)
+        assert len(result) >= 1
+        assert all(h.provenance == "committed" for h in result), (
+            f"Expected all provenance='committed', got: {[h.provenance for h in result]}"
+        )
+
+
+class TestClassifyMemoryFilesGraceful:
+    """_classify_memory_files returns {} gracefully when git is unavailable."""
+
+    def test_classify_memory_files_graceful_on_no_git(
+        self, tmp_path: Path
+    ) -> None:
+        # tmp_path is not a git repo — function must return {} without raising
+        obs_dir = tmp_path / "observations"
+        obs_dir.mkdir(parents=True)
+        (obs_dir / "2026-04-24-test.md").write_text("# test\n", encoding="utf-8")
+
+        result = _classify_memory_files(obs_dir, tmp_path)
+        assert result == {}, f"Expected empty dict, got: {result}"
+
+
+class TestProvenanceWithNonGitRoot:
+    """retrieve_observations with a non-git project_root falls back gracefully."""
+
+    def test_retrieve_observations_with_project_root_non_git(
+        self, tmp_path: Path
+    ) -> None:
+        # Use tmp_path as both the project root (not a git repo) and memory root
+        md = _memory_dir(tmp_path)
+        obs_dir = md / "observations"
+        _write_obs(obs_dir, stem="2026-04-24-obs-fallback", summary="Checkout dedup fix applied")
+
+        # non-git project_root → _classify_memory_files returns {} →
+        # all hits default to provenance="committed" and none are filtered
+        result = retrieve_observations(
+            "checkout dedup", md, k=8, project_root=tmp_path
+        )
+        assert len(result) >= 1
+        assert all(h.provenance == "committed" for h in result), (
+            f"Expected fallback to committed, got: {[h.provenance for h in result]}"
+        )

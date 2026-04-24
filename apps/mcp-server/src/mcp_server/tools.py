@@ -365,18 +365,35 @@ def get_context_pack(
             _root = Path(project_root).resolve() if project_root else Path.cwd()
             _memory_dir = _root / ".context-router" / "memory"
             try:
-                _hits = retrieve_observations(query, _memory_dir, k=8)
+                _hits = retrieve_observations(query, _memory_dir, k=8, project_root=_root)
             except Exception:  # noqa: BLE001 — memory retrieval is best-effort
                 _hits = []
             result["memory_hits"] = [
                 {
                     "id": h.id,
                     "excerpt": h.excerpt,
-                    "score": round(h.score, 6),
+                    "score": round(h.score, 4),
                     "files_touched": h.files_touched,
+                    "task": h.task,
+                    "provenance": h.provenance,
                 }
                 for h in _hits
             ]
+            result["memory_hits_summary"] = {
+                "committed": sum(1 for h in _hits if h.provenance == "committed"),
+                "staged": sum(1 for h in _hits if h.provenance == "staged"),
+            }
+
+        _total_tokens = sum(i.est_tokens for i in pack.selected_items)
+        _mem_tokens = sum(
+            i.est_tokens for i in pack.selected_items
+            if i.source_type in {"memory", "decision"}
+        )
+        result["budget"] = {
+            "total_tokens": _total_tokens,
+            "memory_tokens": _mem_tokens,
+            "memory_ratio": round(_mem_tokens / _total_tokens, 4) if _total_tokens > 0 else 0.0,
+        }
 
         return result
     except FileNotFoundError as exc:
