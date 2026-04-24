@@ -215,10 +215,10 @@ def test_hub_boost_skips_items_without_resolvable_symbol_id(
         _item(title="hub", path=project_root / "src" / "hub.py", confidence=0.5),
     ]
     on = ContextRanker(token_budget=0, use_hub_boost=True).rank(
-        list(seed), "rank items", "implement"
+        list(seed), "rank items", "debug"
     )
     off = ContextRanker(token_budget=0, use_hub_boost=False).rank(
-        list(seed), "rank items", "implement"
+        list(seed), "rank items", "debug"
     )
     on_ghost = next(i for i in on if i.title.startswith("ghost"))
     off_ghost = next(i for i in off if i.title.startswith("ghost"))

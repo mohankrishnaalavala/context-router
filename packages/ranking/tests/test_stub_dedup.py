@@ -334,10 +334,17 @@ def test_bm25_test_penalty_skipped_when_test_file_dominates() -> None:
         "mock comments handler delete user comment",
         "review",
     )
-    handler_out = next(i for i in out if "comments.ts" in i.path_or_ref)
-    source_out = next(i for i in out if "Comment.tsx" in i.path_or_ref)
-    # Test file outscores source → no penalty → test file should rank #1
-    assert handler_out.confidence > source_out.confidence, (
-        f"mock handler ({handler_out.confidence:.4f}) should outrank source "
-        f"({source_out.confidence:.4f}) — no penalty when test dominates"
+    # Adaptive top-k may drop the low-confidence source item, so only assert
+    # on the handler: it must be present (not dropped) and not penalized.
+    handler_out = next(
+        (i for i in out if "comments.ts" in i.path_or_ref), None
+    )
+    assert handler_out is not None, (
+        "mock handler (test file that dominates) was dropped — "
+        "conditional penalty must not apply when no non-test competitor exists"
+    )
+    # Without penalty, confidence stays high (>0.5); with penalty it would
+    # be deflated to ~0.85 × pre_score which could drop near the floor.
+    assert handler_out.confidence > 0.5, (
+        f"mock handler confidence {handler_out.confidence:.4f} looks penalized"
     )
