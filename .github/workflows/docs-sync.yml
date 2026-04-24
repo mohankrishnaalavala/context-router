@@ -1,0 +1,65 @@
+name: Docs Sync
+
+on:
+  push:
+    branches: [develop]
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - ".handover/**"
+      - "CHANGELOG.md"
+
+jobs:
+  docs-sync:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for loop-prevention prefix
+        id: guard
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if [[ "$COMMIT_MSG" == docs\(auto\):* ]]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python 3.12
+        if: steps.guard.outputs.skip == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install anthropic
+        if: steps.guard.outputs.skip == 'false'
+        run: pip install anthropic
+
+      - name: Run docs sync
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python scripts/docs_sync.py
+
+      - name: Commit updated docs
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          git config user.name "docs-sync[bot]"
+          git config user.email "docs-sync[bot]@users.noreply.github.com"
+          git add \
+            README.md \
+            CHANGELOG.md \
+            .handover/work/tasks.md \
+            .handover/work/milestones.md \
+            .handover/context/decisions.md \
+            docs/roadmap.md
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          git diff --cached --quiet || git commit -m "docs(auto): sync after ${SHORT_SHA}"
+          git diff --cached --quiet || git push

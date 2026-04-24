@@ -1,0 +1,2419 @@
+{
+  "schema_version": "1.0",
+  "indexed_at": "2026-04-12T22:31:17.186063+00:00",
+  "root": "/Users/mohankrishnaalavala/Documents/project_context/context-router",
+  "files": {
+    ".code-review-graph/.gitignore": {
+      "path": ".code-review-graph/.gitignore",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 4,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".context-router/config.yaml": {
+      "path": ".context-router/config.yaml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 15,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".cursor/mcp.json": {
+      "path": ".cursor/mcp.json",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 13,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".cursorrules": {
+      "path": ".cursorrules",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 39,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".githooks/pre-push": {
+      "path": ".githooks/pre-push",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 17,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".github/workflows/ci.yml": {
+      "path": ".github/workflows/ci.yml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 69,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".gitignore": {
+      "path": ".gitignore",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 211,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".mcp.json": {
+      "path": ".mcp.json",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 13,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".opencode.json": {
+      "path": ".opencode.json",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".python-version": {
+      "path": ".python-version",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 2,
+      "has_tests": false,
+      "test_file": null
+    },
+    ".windsurfrules": {
+      "path": ".windsurfrules",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 39,
+      "has_tests": false,
+      "test_file": null
+    },
+    "AGENTS.md": {
+      "path": "AGENTS.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 39,
+      "has_tests": false,
+      "test_file": null
+    },
+    "BENCHMARK_RESULTS.md": {
+      "path": "BENCHMARK_RESULTS.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 121,
+      "has_tests": false,
+      "test_file": null
+    },
+    "CLAUDE.md": {
+      "path": "CLAUDE.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 75,
+      "has_tests": false,
+      "test_file": null
+    },
+    "GEMINI.md": {
+      "path": "GEMINI.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 39,
+      "has_tests": false,
+      "test_file": null
+    },
+    "HANDOVER.md": {
+      "path": "HANDOVER.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 357,
+      "has_tests": false,
+      "test_file": null
+    },
+    "LICENSE": {
+      "path": "LICENSE",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 22,
+      "has_tests": false,
+      "test_file": null
+    },
+    "PLAN.md": {
+      "path": "PLAN.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 56,
+      "has_tests": false,
+      "test_file": null
+    },
+    "README.md": {
+      "path": "README.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 340,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/pyproject.toml": {
+      "path": "apps/cli/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 23,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/__init__.py": {
+      "path": "apps/cli/src/cli/__init__.py",
+      "purpose": "context-router CLI application.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__"
+      ],
+      "line_count": 4,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/__init__.py": {
+      "path": "apps/cli/src/cli/commands/__init__.py",
+      "purpose": "CLI command modules for context-router.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__"
+      ],
+      "line_count": 4,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/benchmark.py": {
+      "path": "apps/cli/src/cli/commands/benchmark.py",
+      "purpose": "context-router benchmark command \u2014 runs the benchmark harness.",
+      "exports": [
+        "_root_path",
+        "benchmark_run",
+        "benchmark_report"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "datetime",
+        "pathlib",
+        "typing",
+        "typer",
+        "benchmark"
+      ],
+      "line_count": 154,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/decisions.py": {
+      "path": "apps/cli/src/cli/commands/decisions.py",
+      "purpose": "context-router decisions command \u2014 manages architectural decision records.",
+      "exports": [
+        "_open_store",
+        "add",
+        "search",
+        "list_decisions"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "typing",
+        "typer",
+        "core",
+        "memory",
+        "storage_sqlite",
+        "contracts",
+        "json"
+      ],
+      "line_count": 170,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/explain.py": {
+      "path": "apps/cli/src/cli/commands/explain.py",
+      "purpose": "context-router explain command \u2014 explains the last generated context pack.",
+      "exports": [
+        "last_pack"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "typer",
+        "core"
+      ],
+      "line_count": 47,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/index.py": {
+      "path": "apps/cli/src/cli/commands/index.py",
+      "purpose": "context-router index command \u2014 scans and indexes a repository.",
+      "exports": [
+        "index",
+        "_err"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "sys",
+        "pathlib",
+        "typing",
+        "typer",
+        "contracts",
+        "core",
+        "graph_index",
+        "storage_sqlite"
+      ],
+      "line_count": 149,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/init.py": {
+      "path": "apps/cli/src/cli/commands/init.py",
+      "purpose": "context-router init command \u2014 bootstraps a project's .context-router directory and SQLite DB.",
+      "exports": [
+        "init",
+        "_err"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "sys",
+        "pathlib",
+        "typing",
+        "typer",
+        "contracts",
+        "storage_sqlite"
+      ],
+      "line_count": 80,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/mcp.py": {
+      "path": "apps/cli/src/cli/commands/mcp.py",
+      "purpose": "context-router mcp command \u2014 starts the local MCP server over stdio.",
+      "exports": [
+        "mcp"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "typer",
+        "mcp_server"
+      ],
+      "line_count": 31,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/memory.py": {
+      "path": "apps/cli/src/cli/commands/memory.py",
+      "purpose": "context-router memory command \u2014 manages durable session observations.",
+      "exports": [
+        "_open_store",
+        "add",
+        "search",
+        "stale"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "typing",
+        "typer",
+        "core",
+        "memory",
+        "storage_sqlite",
+        "json"
+      ],
+      "line_count": 146,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/pack.py": {
+      "path": "apps/cli/src/cli/commands/pack.py",
+      "purpose": "context-router pack command \u2014 generates a ranked context pack.",
+      "exports": [
+        "pack",
+        "_print_pack"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "typing",
+        "typer",
+        "pathlib",
+        "core",
+        "contracts"
+      ],
+      "line_count": 111,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/watch.py": {
+      "path": "apps/cli/src/cli/commands/watch.py",
+      "purpose": "context-router watch command \u2014 watches for file changes and re-indexes.",
+      "exports": [
+        "watch",
+        "_err"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "sys",
+        "pathlib",
+        "typing",
+        "typer",
+        "contracts",
+        "core",
+        "graph_index",
+        "storage_sqlite"
+      ],
+      "line_count": 127,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/commands/workspace.py": {
+      "path": "apps/cli/src/cli/commands/workspace.py",
+      "purpose": "context-router workspace command \u2014 manages multi-repo workspaces.",
+      "exports": [
+        "_load_or_die",
+        "_save",
+        "_root_path",
+        "workspace_init",
+        "repo_add",
+        "repo_list",
+        "link_add",
+        "workspace_pack"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "pathlib",
+        "typing",
+        "typer",
+        "workspace",
+        "core"
+      ],
+      "line_count": 295,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/src/cli/main.py": {
+      "path": "apps/cli/src/cli/main.py",
+      "purpose": "context-router CLI \u2014 main entrypoint.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "typer",
+        "cli"
+      ],
+      "line_count": 46,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/tests/test_benchmark_cli.py": {
+      "path": "apps/cli/tests/test_benchmark_cli.py",
+      "purpose": "CLI tests for 'context-router benchmark' commands.",
+      "exports": [
+        "_init_repo",
+        "_cr",
+        "TestBenchmarkRun",
+        "TestBenchmarkReport"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "subprocess",
+        "pathlib",
+        "pytest",
+        "typer",
+        "cli"
+      ],
+      "line_count": 132,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/tests/test_cli.py": {
+      "path": "apps/cli/tests/test_cli.py",
+      "purpose": "CLI integration tests using Typer's CliRunner.",
+      "exports": [
+        "TestHelp",
+        "TestInit",
+        "TestPack"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "pytest",
+        "typer",
+        "cli",
+        "json"
+      ],
+      "line_count": 121,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/cli/tests/test_workspace_cli.py": {
+      "path": "apps/cli/tests/test_workspace_cli.py",
+      "purpose": "CLI tests for 'context-router workspace' commands.",
+      "exports": [
+        "_cr",
+        "_init_repo",
+        "TestWorkspaceInit",
+        "TestRepoAdd",
+        "TestRepoList",
+        "TestLinkAdd",
+        "TestWorkspacePack"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "subprocess",
+        "sys",
+        "pathlib",
+        "pytest",
+        "typer",
+        "cli",
+        "workspace"
+      ],
+      "line_count": 224,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/mcp-server/pyproject.toml": {
+      "path": "apps/mcp-server/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 22,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/mcp-server/src/mcp_server/__init__.py": {
+      "path": "apps/mcp-server/src/mcp_server/__init__.py",
+      "purpose": "context-router MCP server (Phase 5 stub).",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__"
+      ],
+      "line_count": 4,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/mcp-server/src/mcp_server/main.py": {
+      "path": "apps/mcp-server/src/mcp_server/main.py",
+      "purpose": "MCP stdio server for context-router.",
+      "exports": [
+        "_ok",
+        "_err",
+        "_send",
+        "_handle",
+        "main"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "sys",
+        "typing",
+        "mcp_server"
+      ],
+      "line_count": 332,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/mcp-server/src/mcp_server/tools.py": {
+      "path": "apps/mcp-server/src/mcp_server/tools.py",
+      "purpose": "MCP tool handlers for context-router.",
+      "exports": [
+        "_orchestrator",
+        "build_index",
+        "update_index",
+        "get_context_pack",
+        "get_debug_pack",
+        "explain_selection",
+        "generate_handover",
+        "search_memory",
+        "get_decisions"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "pathlib",
+        "core",
+        "contracts",
+        "graph_index",
+        "storage_sqlite",
+        "memory"
+      ],
+      "line_count": 262,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/mcp-server/tests/test_main.py": {
+      "path": "apps/mcp-server/tests/test_main.py",
+      "purpose": "Tests for the MCP server JSON-RPC dispatch layer.",
+      "exports": [
+        "_handle",
+        "TestInitialize",
+        "TestPing",
+        "TestToolsList",
+        "TestToolsCall",
+        "TestNotifications",
+        "TestUnknownMethod"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "pytest",
+        "mcp_server"
+      ],
+      "line_count": 122,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/mcp-server/tests/test_stub.py": {
+      "path": "apps/mcp-server/tests/test_stub.py",
+      "purpose": "Smoke tests for mcp-server package.",
+      "exports": [
+        "test_import",
+        "test_main_is_callable"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "mcp_server"
+      ],
+      "line_count": 13,
+      "has_tests": false,
+      "test_file": null
+    },
+    "apps/mcp-server/tests/test_tools.py": {
+      "path": "apps/mcp-server/tests/test_tools.py",
+      "purpose": "Unit tests for MCP tool handlers.",
+      "exports": [
+        "_init_db",
+        "project_root",
+        "TestBuildIndex",
+        "TestUpdateIndex",
+        "TestGetContextPack",
+        "TestGetDebugPack",
+        "TestExplainSelection",
+        "TestGenerateHandover",
+        "TestSearchMemory",
+        "TestGetDecisions"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "shutil",
+        "subprocess",
+        "sys",
+        "tempfile",
+        "pathlib",
+        "pytest",
+        "mcp_server"
+      ],
+      "line_count": 184,
+      "has_tests": false,
+      "test_file": null
+    },
+    "conftest.py": {
+      "path": "conftest.py",
+      "purpose": "Root conftest.py \u2014 shared pytest fixtures for all packages and apps.",
+      "exports": [
+        "tmp_project_dir",
+        "sample_repo_descriptor"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "pytest",
+        "contracts"
+      ],
+      "line_count": 46,
+      "has_tests": false,
+      "test_file": null
+    },
+    "docs/adr/0001-use-sqlite-fts5.md": {
+      "path": "docs/adr/0001-use-sqlite-fts5.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 39,
+      "has_tests": false,
+      "test_file": null
+    },
+    "docs/adr/0002-plugin-entry-points.md": {
+      "path": "docs/adr/0002-plugin-entry-points.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 47,
+      "has_tests": false,
+      "test_file": null
+    },
+    "docs/architecture.md": {
+      "path": "docs/architecture.md",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 84,
+      "has_tests": false,
+      "test_file": null
+    },
+    "handover-chat-69dba52f-a450-8329-9d89-7dddaa4767d1.json": {
+      "path": "handover-chat-69dba52f-a450-8329-9d89-7dddaa4767d1.json",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 116,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-claude/pyproject.toml": {
+      "path": "packages/adapters-claude/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-claude/src/adapters_claude/__init__.py": {
+      "path": "packages/adapters-claude/src/adapters_claude/__init__.py",
+      "purpose": "context-router-adapters-claude: Claude Code agent adapter.",
+      "exports": [
+        "_fmt_item",
+        "ClaudeAdapter"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "contracts"
+      ],
+      "line_count": 92,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-claude/tests/test_claude_adapter.py": {
+      "path": "packages/adapters-claude/tests/test_claude_adapter.py",
+      "purpose": "Tests for ClaudeAdapter.",
+      "exports": [
+        "_pack",
+        "_item",
+        "TestClaudeAdapterProtocol",
+        "TestClaudeAdapterContent"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pytest",
+        "contracts",
+        "adapters_claude"
+      ],
+      "line_count": 97,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-claude/tests/test_stub.py": {
+      "path": "packages/adapters-claude/tests/test_stub.py",
+      "purpose": "Smoke test for adapters-claude package.",
+      "exports": [
+        "test_import",
+        "test_implements_protocol",
+        "test_returns_list"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "adapters_claude"
+      ],
+      "line_count": 25,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-codex/pyproject.toml": {
+      "path": "packages/adapters-codex/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-codex/src/adapters_codex/__init__.py": {
+      "path": "packages/adapters-codex/src/adapters_codex/__init__.py",
+      "purpose": "context-router-adapters-codex: Codex agent adapter.",
+      "exports": [
+        "_fmt_item",
+        "CodexAdapter"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "contracts"
+      ],
+      "line_count": 95,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-codex/tests/test_codex_adapter.py": {
+      "path": "packages/adapters-codex/tests/test_codex_adapter.py",
+      "purpose": "Tests for CodexAdapter.",
+      "exports": [
+        "_pack",
+        "_item",
+        "TestCodexAdapterProtocol",
+        "TestCodexAdapterContent"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "contracts",
+        "adapters_codex"
+      ],
+      "line_count": 95,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-codex/tests/test_stub.py": {
+      "path": "packages/adapters-codex/tests/test_stub.py",
+      "purpose": "Smoke test for adapters-codex package.",
+      "exports": [
+        "test_import",
+        "test_implements_protocol",
+        "test_returns_list"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "adapters_codex"
+      ],
+      "line_count": 25,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-copilot/pyproject.toml": {
+      "path": "packages/adapters-copilot/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-copilot/src/adapters_copilot/__init__.py": {
+      "path": "packages/adapters-copilot/src/adapters_copilot/__init__.py",
+      "purpose": "context-router-adapters-copilot: GitHub Copilot agent adapter.",
+      "exports": [
+        "_fmt_item",
+        "CopilotAdapter"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "contracts"
+      ],
+      "line_count": 117,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-copilot/tests/test_copilot_adapter.py": {
+      "path": "packages/adapters-copilot/tests/test_copilot_adapter.py",
+      "purpose": "Tests for CopilotAdapter.",
+      "exports": [
+        "_pack",
+        "_item",
+        "TestCopilotAdapterProtocol",
+        "TestCopilotAdapterContent"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "contracts",
+        "adapters_copilot"
+      ],
+      "line_count": 81,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/adapters-copilot/tests/test_stub.py": {
+      "path": "packages/adapters-copilot/tests/test_stub.py",
+      "purpose": "Smoke test for adapters-copilot package.",
+      "exports": [
+        "test_import",
+        "test_implements_protocol",
+        "test_returns_list"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "adapters_copilot"
+      ],
+      "line_count": 25,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/pyproject.toml": {
+      "path": "packages/benchmark/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/src/benchmark/__init__.py": {
+      "path": "packages/benchmark/src/benchmark/__init__.py",
+      "purpose": "context-router-benchmark: benchmark harness and 20-task sample suite.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "benchmark"
+      ],
+      "line_count": 19,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/src/benchmark/baselines.py": {
+      "path": "packages/benchmark/src/benchmark/baselines.py",
+      "purpose": "Baseline token estimators for benchmark comparison.",
+      "exports": [
+        "naive_tokens",
+        "keyword_tokens",
+        "graph_tokens"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "ranking",
+        "storage_sqlite",
+        "core"
+      ],
+      "line_count": 124,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/src/benchmark/harness.py": {
+      "path": "packages/benchmark/src/benchmark/harness.py",
+      "purpose": "Benchmark runner \u2014 executes task suites and records metrics.",
+      "exports": [
+        "BenchmarkRunner"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "time",
+        "uuid",
+        "pathlib",
+        "benchmark",
+        "core"
+      ],
+      "line_count": 86,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/src/benchmark/models.py": {
+      "path": "packages/benchmark/src/benchmark/models.py",
+      "purpose": "Pydantic models for the benchmark harness.",
+      "exports": [
+        "BenchmarkTask",
+        "TaskMetrics",
+        "BenchmarkReport"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "uuid",
+        "datetime",
+        "typing",
+        "pydantic"
+      ],
+      "line_count": 71,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/src/benchmark/reporters.py": {
+      "path": "packages/benchmark/src/benchmark/reporters.py",
+      "purpose": "Report generators \u2014 JSON and Markdown output for benchmark results.",
+      "exports": [
+        "to_json",
+        "to_markdown"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "datetime",
+        "benchmark"
+      ],
+      "line_count": 125,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/src/benchmark/task_suite.py": {
+      "path": "packages/benchmark/src/benchmark/task_suite.py",
+      "purpose": "Built-in 20-task benchmark suite \u2014 5 tasks per mode.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "benchmark"
+      ],
+      "line_count": 139,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/tests/test_harness.py": {
+      "path": "packages/benchmark/tests/test_harness.py",
+      "purpose": "Tests for the benchmark harness.",
+      "exports": [
+        "project_root",
+        "TestTaskSuite",
+        "TestBenchmarkRunner",
+        "TestComputeSummary"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "subprocess",
+        "pathlib",
+        "pytest",
+        "benchmark"
+      ],
+      "line_count": 144,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/tests/test_reporters.py": {
+      "path": "packages/benchmark/tests/test_reporters.py",
+      "purpose": "Tests for benchmark reporters.",
+      "exports": [
+        "_sample_report",
+        "TestToJson",
+        "TestToMarkdown"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "pytest",
+        "benchmark"
+      ],
+      "line_count": 117,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/benchmark/tests/test_stub.py": {
+      "path": "packages/benchmark/tests/test_stub.py",
+      "purpose": "Smoke test for benchmark package.",
+      "exports": [
+        "test_import"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "benchmark"
+      ],
+      "line_count": 8,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/contracts/pyproject.toml": {
+      "path": "packages/contracts/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 17,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/contracts/src/contracts/__init__.py": {
+      "path": "packages/contracts/src/contracts/__init__.py",
+      "purpose": "context-router-contracts: shared data models and plugin interfaces.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "contracts"
+      ],
+      "line_count": 51,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/contracts/src/contracts/config.py": {
+      "path": "packages/contracts/src/contracts/config.py",
+      "purpose": "Configuration models and loader for context-router.",
+      "exports": [
+        "CapabilitiesConfig",
+        "ContextRouterConfig",
+        "load_config",
+        "load_workspace_config"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "pydantic",
+        "contracts",
+        "yaml"
+      ],
+      "line_count": 98,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/contracts/src/contracts/interfaces.py": {
+      "path": "packages/contracts/src/contracts/interfaces.py",
+      "purpose": "Plugin interfaces and shared structural types for context-router.",
+      "exports": [
+        "Symbol",
+        "DependencyEdge",
+        "LanguageAnalyzer",
+        "Ranker",
+        "AgentAdapter"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "dataclasses",
+        "pathlib",
+        "typing",
+        "contracts"
+      ],
+      "line_count": 84,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/contracts/src/contracts/models.py": {
+      "path": "packages/contracts/src/contracts/models.py",
+      "purpose": "Shared Pydantic v2 data models for context-router.",
+      "exports": [
+        "_utcnow",
+        "ContextItem",
+        "ContextPack",
+        "Observation",
+        "RuntimeSignal",
+        "Decision",
+        "RepoDescriptor",
+        "WorkspaceDescriptor"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "uuid",
+        "datetime",
+        "pathlib",
+        "typing",
+        "pydantic"
+      ],
+      "line_count": 116,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/contracts/tests/test_models.py": {
+      "path": "packages/contracts/tests/test_models.py",
+      "purpose": "Smoke tests for contracts package models and config loader.",
+      "exports": [
+        "TestContextItem",
+        "TestContextPack",
+        "TestDecision",
+        "TestObservation",
+        "TestRuntimeSignal",
+        "TestRepoDescriptor",
+        "TestLoadConfig",
+        "TestProtocols"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "pathlib",
+        "pytest",
+        "contracts"
+      ],
+      "line_count": 133,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/core/pyproject.toml": {
+      "path": "packages/core/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 22,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/core/src/core/__init__.py": {
+      "path": "packages/core/src/core/__init__.py",
+      "purpose": "context-router-core: orchestration, plugin loader, and use-case coordinators.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "core"
+      ],
+      "line_count": 9,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/core/src/core/plugin_loader.py": {
+      "path": "packages/core/src/core/plugin_loader.py",
+      "purpose": "Plugin loader for context-router language analyzers.",
+      "exports": [
+        "PluginLoader"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "importlib",
+        "contracts"
+      ],
+      "line_count": 63,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/core/src/core/workspace_orchestrator.py": {
+      "path": "packages/core/src/core/workspace_orchestrator.py",
+      "purpose": "WorkspaceOrchestrator \u2014 context pack generation across multiple repos.",
+      "exports": [
+        "_boost_linked_items",
+        "_prefix_title",
+        "WorkspaceOrchestrator"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "ranking",
+        "core",
+        "workspace"
+      ],
+      "line_count": 177,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/core/tests/test_orchestrator.py": {
+      "path": "packages/core/tests/test_orchestrator.py",
+      "purpose": "Tests for Orchestrator: build_pack, last_pack, candidate classification.",
+      "exports": [
+        "_seed_db",
+        "_make_project",
+        "test_build_pack_review_returns_context_pack",
+        "test_build_pack_implement_returns_context_pack",
+        "test_build_pack_stores_query",
+        "test_build_pack_items_have_reason",
+        "test_build_pack_persists_last_pack",
+        "test_build_pack_persisted_file_is_valid_json",
+        "test_build_pack_raises_on_missing_db",
+        "test_build_pack_token_stats",
+        "test_last_pack_returns_none_when_missing",
+        "test_last_pack_roundtrip",
+        "test_find_project_root_walks_up",
+        "test_find_project_root_raises_when_absent",
+        "test_classify_for_implement"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "pathlib",
+        "pytest",
+        "contracts",
+        "core",
+        "storage_sqlite"
+      ],
+      "line_count": 177,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/core/tests/test_plugin_loader.py": {
+      "path": "packages/core/tests/test_plugin_loader.py",
+      "purpose": "Tests for the PluginLoader in packages/core.",
+      "exports": [
+        "TestPluginLoader"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pytest",
+        "core"
+      ],
+      "line_count": 39,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/core/tests/test_workspace_orchestrator.py": {
+      "path": "packages/core/tests/test_workspace_orchestrator.py",
+      "purpose": "Tests for WorkspaceOrchestrator.",
+      "exports": [
+        "_init_repo",
+        "workspace_root",
+        "TestWorkspaceOrchestratorInit",
+        "TestWorkspacePackGeneration",
+        "TestLinkBoost",
+        "TestTitlePrefix"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "subprocess",
+        "sys",
+        "pathlib",
+        "pytest",
+        "contracts",
+        "workspace",
+        "core"
+      ],
+      "line_count": 228,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/pyproject.toml": {
+      "path": "packages/graph-index/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 18,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/src/graph_index/__init__.py": {
+      "path": "packages/graph-index/src/graph_index/__init__.py",
+      "purpose": "context-router-graph-index: file scanner, symbol graph, and dependency edges.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "graph_index"
+      ],
+      "line_count": 22,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/src/graph_index/git_diff.py": {
+      "path": "packages/graph-index/src/graph_index/git_diff.py",
+      "purpose": "Git diff parser for context-router graph indexing.",
+      "exports": [
+        "ChangedFile",
+        "GitDiffParser"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "subprocess",
+        "dataclasses",
+        "pathlib"
+      ],
+      "line_count": 105,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/src/graph_index/indexer.py": {
+      "path": "packages/graph-index/src/graph_index/indexer.py",
+      "purpose": "Indexer: orchestrates file scanning, analysis, and persistence.",
+      "exports": [
+        "IndexResult",
+        "Indexer"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "time",
+        "dataclasses",
+        "pathlib",
+        "contracts",
+        "core",
+        "graph_index",
+        "storage_sqlite"
+      ],
+      "line_count": 157,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/src/graph_index/scanner.py": {
+      "path": "packages/graph-index/src/graph_index/scanner.py",
+      "purpose": "File scanner for context-router graph indexing.",
+      "exports": [
+        "FileScanner"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "fnmatch",
+        "pathlib",
+        "typing",
+        "core"
+      ],
+      "line_count": 87,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/src/graph_index/test_mapper.py": {
+      "path": "packages/graph-index/src/graph_index/test_mapper.py",
+      "purpose": "Test-file mapper for context-router graph indexing.",
+      "exports": [
+        "TestFileMapper"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib"
+      ],
+      "line_count": 86,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/src/graph_index/watcher.py": {
+      "path": "packages/graph-index/src/graph_index/watcher.py",
+      "purpose": "Watchdog-based file watcher for incremental re-indexing.",
+      "exports": [
+        "_DebounceHandler",
+        "IndexWatcher"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "sys",
+        "threading",
+        "pathlib",
+        "watchdog",
+        "contracts",
+        "graph_index"
+      ],
+      "line_count": 136,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/src/graph_index/writer.py": {
+      "path": "packages/graph-index/src/graph_index/writer.py",
+      "purpose": "Symbol and edge writer for context-router graph indexing.",
+      "exports": [
+        "SymbolWriter"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "storage_sqlite"
+      ],
+      "line_count": 102,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/tests/test_git_diff.py": {
+      "path": "packages/graph-index/tests/test_git_diff.py",
+      "purpose": "Tests for graph_index.git_diff.GitDiffParser.",
+      "exports": [
+        "test_parse_added_file",
+        "test_parse_modified_file",
+        "test_parse_deleted_file",
+        "test_parse_renamed_file",
+        "test_parse_multiple_files",
+        "test_parse_empty_string",
+        "test_parse_blank_lines_ignored",
+        "test_changed_file_defaults"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "graph_index"
+      ],
+      "line_count": 91,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/tests/test_mapper.py": {
+      "path": "packages/graph-index/tests/test_mapper.py",
+      "purpose": "Tests for graph_index.test_mapper.TestFileMapper.",
+      "exports": [
+        "test_pytest_prefix_convention",
+        "test_pytest_suffix_convention",
+        "test_junit_test_suffix_convention",
+        "test_junit_tests_suffix_convention",
+        "test_xunit_tests_suffix_convention",
+        "test_xunit_test_suffix_convention",
+        "test_unmatched_source_returns_empty_list",
+        "test_all_sources_get_entry",
+        "test_multiple_test_files_for_one_source"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "graph_index"
+      ],
+      "line_count": 98,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/tests/test_scanner.py": {
+      "path": "packages/graph-index/tests/test_scanner.py",
+      "purpose": "Tests for graph_index.scanner.FileScanner.",
+      "exports": [
+        "_make_loader",
+        "test_scanner_yields_registered_extensions",
+        "test_scanner_skips_ignore_patterns",
+        "test_scanner_skips_files_with_no_analyzer",
+        "test_scanner_skips_no_extension_files",
+        "test_scanner_yields_extension_without_dot",
+        "test_scanner_recurses_into_subdirectories"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "unittest",
+        "pytest",
+        "graph_index"
+      ],
+      "line_count": 110,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/tests/test_stub.py": {
+      "path": "packages/graph-index/tests/test_stub.py",
+      "purpose": "Smoke test for graph-index package.",
+      "exports": [
+        "test_import"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "graph_index"
+      ],
+      "line_count": 8,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/graph-index/tests/test_writer.py": {
+      "path": "packages/graph-index/tests/test_writer.py",
+      "purpose": "Tests for graph_index.writer.SymbolWriter.",
+      "exports": [
+        "_make_symbol",
+        "_make_edge",
+        "db",
+        "test_writer_stores_symbols",
+        "test_writer_stores_resolvable_edges",
+        "test_writer_skips_unresolvable_edges",
+        "test_writer_reindex_is_idempotent",
+        "test_writer_delete_by_file_cleans_up"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "pytest",
+        "contracts",
+        "graph_index",
+        "storage_sqlite"
+      ],
+      "line_count": 133,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-dotnet/pyproject.toml": {
+      "path": "packages/language-dotnet/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 21,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-dotnet/src/language_dotnet/__init__.py": {
+      "path": "packages/language-dotnet/src/language_dotnet/__init__.py",
+      "purpose": "context-router-language-dotnet: C#/.NET language analyzer plugin.",
+      "exports": [
+        "_text",
+        "_first_child_of_type",
+        "_walk",
+        "DotnetAnalyzer"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "tree_sitter_c_sharp",
+        "tree_sitter",
+        "contracts"
+      ],
+      "line_count": 173,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-dotnet/tests/test_stub.py": {
+      "path": "packages/language-dotnet/tests/test_stub.py",
+      "purpose": "Tests for language_dotnet.DotnetAnalyzer.",
+      "exports": [
+        "test_import",
+        "test_implements_protocol",
+        "test_returns_list",
+        "test_extracts_namespace",
+        "test_extracts_class",
+        "test_extracts_methods",
+        "test_extracts_using_directives",
+        "test_extracts_interface",
+        "test_line_numbers_set",
+        "test_empty_file",
+        "test_invalid_path_returns_empty"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "language_dotnet"
+      ],
+      "line_count": 129,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-java/pyproject.toml": {
+      "path": "packages/language-java/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 21,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-java/src/language_java/__init__.py": {
+      "path": "packages/language-java/src/language_java/__init__.py",
+      "purpose": "context-router-language-java: Java language analyzer plugin.",
+      "exports": [
+        "_text",
+        "_first_child_of_type",
+        "_collect_annotations",
+        "_walk",
+        "JavaAnalyzer"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "tree_sitter_java",
+        "tree_sitter",
+        "contracts"
+      ],
+      "line_count": 154,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-java/tests/test_stub.py": {
+      "path": "packages/language-java/tests/test_stub.py",
+      "purpose": "Tests for language_java.JavaAnalyzer.",
+      "exports": [
+        "test_import",
+        "test_implements_protocol",
+        "test_returns_list",
+        "test_extracts_class",
+        "test_extracts_methods",
+        "test_extracts_imports",
+        "test_line_numbers_set",
+        "test_empty_file",
+        "test_invalid_path_returns_empty"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "language_java"
+      ],
+      "line_count": 93,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-python/pyproject.toml": {
+      "path": "packages/language-python/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 21,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-python/src/language_python/__init__.py": {
+      "path": "packages/language-python/src/language_python/__init__.py",
+      "purpose": "context-router-language-python: Python language analyzer plugin.",
+      "exports": [
+        "_text",
+        "_first_child_of_type",
+        "_extract_docstring",
+        "_walk",
+        "PythonAnalyzer"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "tree_sitter_python",
+        "tree_sitter",
+        "contracts"
+      ],
+      "line_count": 184,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-python/tests/test_stub.py": {
+      "path": "packages/language-python/tests/test_stub.py",
+      "purpose": "Tests for language_python.PythonAnalyzer.",
+      "exports": [
+        "test_import",
+        "test_implements_protocol",
+        "test_returns_list",
+        "test_extracts_function",
+        "test_extracts_class",
+        "test_extracts_method",
+        "test_extracts_imports_as_edges",
+        "test_extracts_docstring",
+        "test_line_numbers_set",
+        "test_empty_file",
+        "test_invalid_path_returns_empty"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "language_python"
+      ],
+      "line_count": 118,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-yaml/pyproject.toml": {
+      "path": "packages/language-yaml/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 20,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-yaml/src/language_yaml/__init__.py": {
+      "path": "packages/language-yaml/src/language_yaml/__init__.py",
+      "purpose": "context-router-language-yaml: YAML language analyzer plugin.",
+      "exports": [
+        "YamlAnalyzer"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "typing",
+        "yaml",
+        "contracts"
+      ],
+      "line_count": 132,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/language-yaml/tests/test_stub.py": {
+      "path": "packages/language-yaml/tests/test_stub.py",
+      "purpose": "Tests for language_yaml.YamlAnalyzer.",
+      "exports": [
+        "test_import",
+        "test_implements_protocol",
+        "test_returns_list",
+        "test_k8s_resource_detection",
+        "test_github_actions_workflow_detection",
+        "test_github_actions_job_detection",
+        "test_helm_chart_detection",
+        "test_generic_yaml_returns_no_symbols",
+        "test_non_dict_yaml_returns_empty",
+        "test_invalid_yaml_returns_empty",
+        "test_invalid_path_returns_empty"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "language_yaml"
+      ],
+      "line_count": 139,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/memory/pyproject.toml": {
+      "path": "packages/memory/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/memory/src/memory/__init__.py": {
+      "path": "packages/memory/src/memory/__init__.py",
+      "purpose": "context-router-memory: observation and decision store (Phase 4).",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "memory"
+      ],
+      "line_count": 8,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/memory/src/memory/store.py": {
+      "path": "packages/memory/src/memory/store.py",
+      "purpose": "ObservationStore and DecisionStore \u2014 high-level memory access for context-router.",
+      "exports": [
+        "ObservationStore",
+        "DecisionStore"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "pathlib",
+        "contracts",
+        "storage_sqlite",
+        "datetime"
+      ],
+      "line_count": 211,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/memory/tests/test_store.py": {
+      "path": "packages/memory/tests/test_store.py",
+      "purpose": "Tests for ObservationStore and DecisionStore.",
+      "exports": [
+        "db",
+        "obs_store",
+        "dec_store",
+        "test_add_and_get_all",
+        "test_search_finds_by_keyword",
+        "test_search_no_results",
+        "test_add_from_session_json_single",
+        "test_add_from_session_json_list",
+        "test_add_from_session_json_invalid_raises",
+        "test_find_stale_all_files_missing",
+        "test_find_stale_no_files_touched_not_stale",
+        "test_add_and_get_all",
+        "test_search_finds_by_title",
+        "test_get_all_ordered_recent_first",
+        "test_by_tags_filters_correctly",
+        "test_by_tags_case_insensitive",
+        "test_by_tags_no_match"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "pathlib",
+        "pytest",
+        "contracts",
+        "memory",
+        "storage_sqlite"
+      ],
+      "line_count": 150,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/memory/tests/test_stub.py": {
+      "path": "packages/memory/tests/test_stub.py",
+      "purpose": "Smoke test for memory package.",
+      "exports": [
+        "test_import"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "memory"
+      ],
+      "line_count": 8,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/ranking/pyproject.toml": {
+      "path": "packages/ranking/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/ranking/src/ranking/__init__.py": {
+      "path": "packages/ranking/src/ranking/__init__.py",
+      "purpose": "context-router-ranking: mode-specific context ranker and token budget enforcer.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ranking"
+      ],
+      "line_count": 9,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/ranking/src/ranking/estimator.py": {
+      "path": "packages/ranking/src/ranking/estimator.py",
+      "purpose": "Token estimator for context-router.",
+      "exports": [
+        "estimate_tokens"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__"
+      ],
+      "line_count": 26,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/ranking/src/ranking/ranker.py": {
+      "path": "packages/ranking/src/ranking/ranker.py",
+      "purpose": "Context ranker: sorts and budget-enforces a list of ContextItems.",
+      "exports": [
+        "_tokenize",
+        "ContextRanker"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "re",
+        "contracts"
+      ],
+      "line_count": 164,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/ranking/tests/test_estimator.py": {
+      "path": "packages/ranking/tests/test_estimator.py",
+      "purpose": "Tests for the token estimator.",
+      "exports": [
+        "test_empty_string_returns_zero",
+        "test_short_string_returns_at_least_one",
+        "test_sixteen_chars_returns_four",
+        "test_four_chars_returns_one",
+        "test_hundred_chars",
+        "test_unicode_counts_characters",
+        "test_whitespace_only"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ranking"
+      ],
+      "line_count": 36,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/ranking/tests/test_ranker.py": {
+      "path": "packages/ranking/tests/test_ranker.py",
+      "purpose": "Tests for ContextRanker: sorting, budget enforcement, reason annotation.",
+      "exports": [
+        "_item",
+        "test_empty_input_returns_empty",
+        "test_sorts_by_confidence_descending",
+        "test_reason_populated_from_source_type",
+        "test_unknown_source_type_gets_default_reason",
+        "test_budget_trims_lowest_confidence_items",
+        "test_zero_budget_returns_all_sorted",
+        "test_budget_preserves_one_per_source_type",
+        "test_all_items_fit_within_budget",
+        "test_query_boost_raises_confidence_for_matching_item",
+        "test_query_boost_capped_at_0_95",
+        "test_tokenize_filters_short_tokens",
+        "test_original_items_not_mutated"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "contracts",
+        "ranking"
+      ],
+      "line_count": 171,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/ranking/tests/test_stub.py": {
+      "path": "packages/ranking/tests/test_stub.py",
+      "purpose": "Smoke test for ranking package.",
+      "exports": [
+        "test_import"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ranking"
+      ],
+      "line_count": 8,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/pyproject.toml": {
+      "path": "packages/runtime/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/src/runtime/__init__.py": {
+      "path": "packages/runtime/src/runtime/__init__.py",
+      "purpose": "context-router-runtime: runtime evidence parsers (Phase 3).",
+      "exports": [
+        "parse_error_file"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "runtime"
+      ],
+      "line_count": 66,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/src/runtime/parsers/__init__.py": {
+      "path": "packages/runtime/src/runtime/parsers/__init__.py",
+      "purpose": "Runtime evidence parsers for context-router.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__"
+      ],
+      "line_count": 4,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/src/runtime/parsers/dotnet.py": {
+      "path": "packages/runtime/src/runtime/parsers/dotnet.py",
+      "purpose": "dotnet test output parser \u2014 converts VSTest/dotnet test stdout into RuntimeSignals.",
+      "exports": [
+        "parse_dotnet_output",
+        "parse_dotnet_output_file"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "re",
+        "pathlib",
+        "contracts"
+      ],
+      "line_count": 88,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/src/runtime/parsers/junit_xml.py": {
+      "path": "packages/runtime/src/runtime/parsers/junit_xml.py",
+      "purpose": "JUnit XML parser \u2014 converts test failure XML into RuntimeSignal objects.",
+      "exports": [
+        "parse_junit_xml",
+        "parse_junit_xml_file",
+        "_extract_paths"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "xml",
+        "pathlib",
+        "contracts",
+        "re"
+      ],
+      "line_count": 112,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/src/runtime/parsers/log.py": {
+      "path": "packages/runtime/src/runtime/parsers/log.py",
+      "purpose": "Log file parser \u2014 extracts ERROR and WARN lines as RuntimeSignals.",
+      "exports": [
+        "parse_log",
+        "parse_log_file",
+        "_extract_paths"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "re",
+        "pathlib",
+        "contracts"
+      ],
+      "line_count": 88,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/src/runtime/parsers/stack_trace.py": {
+      "path": "packages/runtime/src/runtime/parsers/stack_trace.py",
+      "purpose": "Generic stack trace parser \u2014 Python, Java, and .NET formats.",
+      "exports": [
+        "parse_stack_trace",
+        "_block_to_signal",
+        "_extract_message",
+        "_extract_paths"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "re",
+        "pathlib",
+        "contracts"
+      ],
+      "line_count": 146,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/tests/test_parsers.py": {
+      "path": "packages/runtime/tests/test_parsers.py",
+      "purpose": "Tests for runtime evidence parsers.",
+      "exports": [
+        "test_junit_xml_one_failure",
+        "test_junit_xml_no_failures_returns_empty",
+        "test_junit_xml_testsuites_wrapper",
+        "test_junit_xml_extracts_python_path",
+        "test_junit_xml_invalid_xml_returns_empty",
+        "test_junit_xml_file",
+        "test_python_stack_trace_detected",
+        "test_python_stack_trace_paths",
+        "test_java_stack_trace_detected",
+        "test_dotnet_stack_trace_detected",
+        "test_plain_text_no_trace_returns_empty",
+        "test_log_extracts_errors",
+        "test_log_extracts_warnings",
+        "test_log_info_lines_ignored",
+        "test_log_empty_text_returns_empty",
+        "test_dotnet_output_detects_failure",
+        "test_dotnet_output_extracts_path",
+        "test_dotnet_output_no_failures_returns_empty",
+        "test_parse_error_file_xml",
+        "test_parse_error_file_log",
+        "test_parse_error_file_stack_trace_txt",
+        "test_parse_error_file_missing_returns_empty"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "pytest",
+        "contracts",
+        "runtime"
+      ],
+      "line_count": 248,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/runtime/tests/test_stub.py": {
+      "path": "packages/runtime/tests/test_stub.py",
+      "purpose": "Smoke test for runtime package.",
+      "exports": [
+        "test_import"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "runtime"
+      ],
+      "line_count": 8,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/storage-sqlite/pyproject.toml": {
+      "path": "packages/storage-sqlite/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 16,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/storage-sqlite/src/storage_sqlite/__init__.py": {
+      "path": "packages/storage-sqlite/src/storage_sqlite/__init__.py",
+      "purpose": "context-router-storage-sqlite: SQLite + FTS5 storage with repository pattern.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "storage_sqlite"
+      ],
+      "line_count": 24,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/storage-sqlite/src/storage_sqlite/database.py": {
+      "path": "packages/storage-sqlite/src/storage_sqlite/database.py",
+      "purpose": "SQLite database lifecycle management for context-router.",
+      "exports": [
+        "Database"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "sqlite3",
+        "pathlib",
+        "types",
+        "storage_sqlite"
+      ],
+      "line_count": 84,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/storage-sqlite/src/storage_sqlite/migrations/0001_initial.sql": {
+      "path": "packages/storage-sqlite/src/storage_sqlite/migrations/0001_initial.sql",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 90,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/storage-sqlite/src/storage_sqlite/migrations.py": {
+      "path": "packages/storage-sqlite/src/storage_sqlite/migrations.py",
+      "purpose": "Migration runner for the context-router SQLite schema.",
+      "exports": [
+        "MigrationRunner"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "sqlite3",
+        "pathlib"
+      ],
+      "line_count": 64,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/storage-sqlite/tests/test_database.py": {
+      "path": "packages/storage-sqlite/tests/test_database.py",
+      "purpose": "Tests for storage-sqlite: Database, MigrationRunner, and repositories.",
+      "exports": [
+        "db",
+        "TestDatabase",
+        "TestObservationRepository",
+        "TestDecisionRepository",
+        "TestRuntimeSignalRepository"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "pytest",
+        "storage_sqlite",
+        "contracts"
+      ],
+      "line_count": 107,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/workspace/pyproject.toml": {
+      "path": "packages/workspace/pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 14,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/workspace/src/workspace/__init__.py": {
+      "path": "packages/workspace/src/workspace/__init__.py",
+      "purpose": "context-router-workspace: multi-repo workspace registry and cross-repo link detection.",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "workspace"
+      ],
+      "line_count": 10,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/workspace/src/workspace/link_detector.py": {
+      "path": "packages/workspace/src/workspace/link_detector.py",
+      "purpose": "Cross-repo link auto-detection from Python import statements.",
+      "exports": [
+        "detect_links"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "re",
+        "pathlib",
+        "contracts"
+      ],
+      "line_count": 62,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/workspace/src/workspace/loader.py": {
+      "path": "packages/workspace/src/workspace/loader.py",
+      "purpose": "Workspace loader \u2014 reads/writes workspace.yaml and enriches with live git state.",
+      "exports": [
+        "_git_state",
+        "WorkspaceLoader"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "subprocess",
+        "pathlib",
+        "contracts",
+        "yaml"
+      ],
+      "line_count": 109,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/workspace/src/workspace/registry.py": {
+      "path": "packages/workspace/src/workspace/registry.py",
+      "purpose": "Repo registry \u2014 manages the list of repos in a workspace.",
+      "exports": [
+        "RepoRegistry"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "contracts",
+        "workspace"
+      ],
+      "line_count": 137,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/workspace/tests/test_stub.py": {
+      "path": "packages/workspace/tests/test_stub.py",
+      "purpose": "Smoke test for workspace package.",
+      "exports": [
+        "test_import"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "workspace"
+      ],
+      "line_count": 8,
+      "has_tests": false,
+      "test_file": null
+    },
+    "packages/workspace/tests/test_workspace.py": {
+      "path": "packages/workspace/tests/test_workspace.py",
+      "purpose": "Tests for packages/workspace.",
+      "exports": [
+        "TestWorkspaceLoader",
+        "TestRepoRegistry",
+        "TestLinkDetector"
+      ],
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "pytest",
+        "contracts",
+        "workspace"
+      ],
+      "line_count": 209,
+      "has_tests": false,
+      "test_file": null
+    },
+    "pyproject.toml": {
+      "path": "pyproject.toml",
+      "purpose": "",
+      "exports": [],
+      "imports_internal": [],
+      "imports_external": [],
+      "line_count": 74,
+      "has_tests": false,
+      "test_file": null
+    }
+  }
+}

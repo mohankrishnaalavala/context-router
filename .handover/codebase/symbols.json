@@ -1,0 +1,2942 @@
+{
+  "schema_version": "1.0",
+  "indexed_at": "2026-04-12T22:31:17.186063+00:00",
+  "symbols": [
+    {
+      "name": "_root_path",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/benchmark.py",
+      "line": 15,
+      "signature": "def _root_path(root: str) -> Path",
+      "docstring": ""
+    },
+    {
+      "name": "benchmark_run",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/benchmark.py",
+      "line": 24,
+      "signature": "def benchmark_run(...)",
+      "docstring": "Run the 20-task benchmark suite and produce a JSON + Markdown report.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 project not initialised (no DB)"
+    },
+    {
+      "name": "benchmark_report",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/benchmark.py",
+      "line": 109,
+      "signature": "def benchmark_report(...)",
+      "docstring": "Print a Markdown summary of a saved benchmark JSON report.\n\nIf --input is omitted, finds the most recent benchmark JSON in\n.context-router/.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 no report found"
+    },
+    {
+      "name": "_open_store",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/decisions.py",
+      "line": 13,
+      "signature": "def _open_store(project_root: str) -> tuple['DecisionStore', 'Database']",
+      "docstring": "Open the database and return (DecisionStore, Database).\n\nCaller must close the Database."
+    },
+    {
+      "name": "add",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/decisions.py",
+      "line": 36,
+      "signature": "def add(...)",
+      "docstring": "Add a new architectural decision record.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 database not initialised\n  2 \u2014 invalid status value"
+    },
+    {
+      "name": "search",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/decisions.py",
+      "line": 102,
+      "signature": "def search(...)",
+      "docstring": "Search stored architectural decisions by keyword.\n\nExit codes:\n  0 \u2014 success (even if no results)\n  1 \u2014 database not initialised"
+    },
+    {
+      "name": "list_decisions",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/decisions.py",
+      "line": 140,
+      "signature": "def list_decisions(...)",
+      "docstring": "List all stored architectural decisions.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 database not initialised"
+    },
+    {
+      "name": "last_pack",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/explain.py",
+      "line": 11,
+      "signature": "def last_pack(...)",
+      "docstring": "Print a human-readable rationale for the last generated context pack.\n\nEach selected item is shown with a one-sentence explanation of why it was\nincluded.  Run 'context-router pack' first to generate a pack.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 no pack found (run 'context-router pack' first)"
+    },
+    {
+      "name": "index",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/index.py",
+      "line": 22,
+      "signature": "def index(...)",
+      "docstring": "Index source files into the context-router database.\n\nScans PROJECT_ROOT for source files, runs language analyzers, and writes\nsymbols and dependency edges to the SQLite database.\n\nFor incremental indexing pass --since <git-ref> to re-index only files\nthat changed since that ref.\n\nExit codes:\n  0 \u2014 success (even with per-file errors)\n  1 \u2014 configuration / setup error\n  2 \u2014 unexpected internal error"
+    },
+    {
+      "name": "_err",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/index.py",
+      "line": 142,
+      "signature": "def _err(message: str, json_output: bool, exit_code: int) -> None",
+      "docstring": "Print an error to stderr and exit with the given code."
+    },
+    {
+      "name": "init",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/init.py",
+      "line": 19,
+      "signature": "def init(...)",
+      "docstring": "Bootstrap .context-router/ and the SQLite database in PROJECT_ROOT.\n\nCreates:\n  - .context-router/config.yaml  (default config, if not already present)\n  - .context-router/context-router.db  (SQLite database with full schema)\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 user error (bad path, permission denied)\n  2 \u2014 internal error (unexpected failure)"
+    },
+    {
+      "name": "_err",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/init.py",
+      "line": 73,
+      "signature": "def _err(message: str, json_output: bool, exit_code: int) -> None",
+      "docstring": "Print an error to stderr and exit with the given code."
+    },
+    {
+      "name": "mcp",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/mcp.py",
+      "line": 11,
+      "signature": "def mcp(...)",
+      "docstring": "Start the context-router MCP server over stdio transport.\n\nReads JSON-RPC 2.0 requests from stdin and writes responses to stdout.\nThis is the entry point for MCP-compatible AI coding agents (Claude Code,\nCopilot, Codex) to discover and call context-router tools.\n\nExample configuration for Claude Code (.mcp.json)::\n\n    {\n      \"mcpServers\": {\n        \"context-router\": {\n          \"command\": \"context-router\",\n          \"args\": [\"mcp\"]\n        }\n      }\n    }"
+    },
+    {
+      "name": "_open_store",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/memory.py",
+      "line": 13,
+      "signature": "def _open_store(project_root: str) -> tuple['ObservationStore', 'Database']",
+      "docstring": "Open the database and return (ObservationStore, Database).\n\nCaller must close the Database."
+    },
+    {
+      "name": "add",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/memory.py",
+      "line": 36,
+      "signature": "def add(...)",
+      "docstring": "Add observations from a session JSON file to durable memory.\n\nThe session file must be a JSON object or array matching the Observation\nschema (summary field is required; all others are optional).\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 file not found or database not initialised\n  2 \u2014 invalid JSON or schema"
+    },
+    {
+      "name": "search",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/memory.py",
+      "line": 79,
+      "signature": "def search(...)",
+      "docstring": "Search stored observations by keyword.\n\nExit codes:\n  0 \u2014 success (even if no results)\n  1 \u2014 database not initialised"
+    },
+    {
+      "name": "stale",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/memory.py",
+      "line": 115,
+      "signature": "def stale(...)",
+      "docstring": "List observations that reference files no longer in the index.\n\nExit codes:\n  0 \u2014 success (even if no stale observations)\n  1 \u2014 database not initialised"
+    },
+    {
+      "name": "pack",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/pack.py",
+      "line": 15,
+      "signature": "def pack(...)",
+      "docstring": "Generate a context pack for the given task MODE.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 no index found (run 'context-router index' first)\n  2 \u2014 invalid mode argument"
+    },
+    {
+      "name": "_print_pack",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/pack.py",
+      "line": 77,
+      "signature": "def _print_pack(pack: object) -> None",
+      "docstring": "Print a human-readable summary of a ContextPack."
+    },
+    {
+      "name": "watch",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/watch.py",
+      "line": 22,
+      "signature": "def watch(...)",
+      "docstring": "Watch PROJECT_ROOT for file changes and trigger incremental re-indexing.\n\nPerforms a full index on startup, then monitors the directory tree for\nchanges. Modified or created files are re-indexed; deleted files are\nremoved from the database.\n\nPress Ctrl-C to stop watching.\n\nExit codes:\n  0 \u2014 stopped cleanly (Ctrl-C)\n  1 \u2014 configuration / setup error\n  2 \u2014 unexpected internal error"
+    },
+    {
+      "name": "_err",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/watch.py",
+      "line": 120,
+      "signature": "def _err(message: str, json_output: bool, exit_code: int) -> None",
+      "docstring": "Print an error to stderr and exit with the given code."
+    },
+    {
+      "name": "_load_or_die",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/workspace.py",
+      "line": 22,
+      "signature": "def _load_or_die(root: Path)",
+      "docstring": "Load workspace or exit with code 1 if missing."
+    },
+    {
+      "name": "_save",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/workspace.py",
+      "line": 35,
+      "signature": "def _save(root: Path, ws) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "_root_path",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/workspace.py",
+      "line": 40,
+      "signature": "def _root_path(root: str) -> Path",
+      "docstring": ""
+    },
+    {
+      "name": "workspace_init",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/workspace.py",
+      "line": 49,
+      "signature": "def workspace_init(...)",
+      "docstring": "Create a new empty workspace.yaml.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 workspace.yaml already exists"
+    },
+    {
+      "name": "repo_add",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/workspace.py",
+      "line": 91,
+      "signature": "def repo_add(...)",
+      "docstring": "Add a repository to the workspace.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 workspace.yaml not found"
+    },
+    {
+      "name": "repo_list",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/workspace.py",
+      "line": 150,
+      "signature": "def repo_list(...)",
+      "docstring": "List all repos in the workspace.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 workspace.yaml not found"
+    },
+    {
+      "name": "link_add",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/workspace.py",
+      "line": 202,
+      "signature": "def link_add(...)",
+      "docstring": "Add a manual cross-repo dependency link.\n\nRecords that FROM_REPO depends on TO_REPO, boosting TO_REPO items\nin cross-repo context packs.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 workspace.yaml not found"
+    },
+    {
+      "name": "workspace_pack",
+      "type": "function",
+      "file": "apps/cli/src/cli/commands/workspace.py",
+      "line": 239,
+      "signature": "def workspace_pack(...)",
+      "docstring": "Generate a cross-repo context pack for all workspace repos.\n\nExit codes:\n  0 \u2014 success\n  1 \u2014 workspace.yaml not found or no index\n  2 \u2014 invalid mode"
+    },
+    {
+      "name": "_init_repo",
+      "type": "function",
+      "file": "apps/cli/tests/test_benchmark_cli.py",
+      "line": 17,
+      "signature": "def _init_repo(path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "_cr",
+      "type": "function",
+      "file": "apps/cli/tests/test_benchmark_cli.py",
+      "line": 24,
+      "signature": "def _cr(*args, **kwargs)",
+      "docstring": ""
+    },
+    {
+      "name": "TestBenchmarkRun",
+      "type": "class",
+      "file": "apps/cli/tests/test_benchmark_cli.py",
+      "line": 32,
+      "signature": "class TestBenchmarkRun",
+      "docstring": ""
+    },
+    {
+      "name": "TestBenchmarkReport",
+      "type": "class",
+      "file": "apps/cli/tests/test_benchmark_cli.py",
+      "line": 88,
+      "signature": "class TestBenchmarkReport",
+      "docstring": ""
+    },
+    {
+      "name": "TestHelp",
+      "type": "class",
+      "file": "apps/cli/tests/test_cli.py",
+      "line": 15,
+      "signature": "class TestHelp",
+      "docstring": ""
+    },
+    {
+      "name": "TestInit",
+      "type": "class",
+      "file": "apps/cli/tests/test_cli.py",
+      "line": 42,
+      "signature": "class TestInit",
+      "docstring": ""
+    },
+    {
+      "name": "TestPack",
+      "type": "class",
+      "file": "apps/cli/tests/test_cli.py",
+      "line": 73,
+      "signature": "class TestPack",
+      "docstring": ""
+    },
+    {
+      "name": "_cr",
+      "type": "function",
+      "file": "apps/cli/tests/test_workspace_cli.py",
+      "line": 18,
+      "signature": "def _cr(*args, **kwargs)",
+      "docstring": "Invoke the CLI with given args."
+    },
+    {
+      "name": "_init_repo",
+      "type": "function",
+      "file": "apps/cli/tests/test_workspace_cli.py",
+      "line": 23,
+      "signature": "def _init_repo(path: Path) -> None",
+      "docstring": "Create .context-router/ in path so workspace pack doesn't error."
+    },
+    {
+      "name": "TestWorkspaceInit",
+      "type": "class",
+      "file": "apps/cli/tests/test_workspace_cli.py",
+      "line": 36,
+      "signature": "class TestWorkspaceInit",
+      "docstring": ""
+    },
+    {
+      "name": "TestRepoAdd",
+      "type": "class",
+      "file": "apps/cli/tests/test_workspace_cli.py",
+      "line": 73,
+      "signature": "class TestRepoAdd",
+      "docstring": ""
+    },
+    {
+      "name": "TestRepoList",
+      "type": "class",
+      "file": "apps/cli/tests/test_workspace_cli.py",
+      "line": 117,
+      "signature": "class TestRepoList",
+      "docstring": ""
+    },
+    {
+      "name": "TestLinkAdd",
+      "type": "class",
+      "file": "apps/cli/tests/test_workspace_cli.py",
+      "line": 159,
+      "signature": "class TestLinkAdd",
+      "docstring": ""
+    },
+    {
+      "name": "TestWorkspacePack",
+      "type": "class",
+      "file": "apps/cli/tests/test_workspace_cli.py",
+      "line": 189,
+      "signature": "class TestWorkspacePack",
+      "docstring": ""
+    },
+    {
+      "name": "_ok",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/main.py",
+      "line": 212,
+      "signature": "def _ok(req_id: Any, result: Any) -> dict",
+      "docstring": ""
+    },
+    {
+      "name": "_err",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/main.py",
+      "line": 216,
+      "signature": "def _err(req_id: Any, code: int, message: str) -> dict",
+      "docstring": ""
+    },
+    {
+      "name": "_send",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/main.py",
+      "line": 220,
+      "signature": "def _send(obj: dict) -> None",
+      "docstring": "Write a single JSON-RPC response to stdout, flushed immediately."
+    },
+    {
+      "name": "_handle",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/main.py",
+      "line": 230,
+      "signature": "def _handle(request: dict) -> dict | None",
+      "docstring": "Dispatch one JSON-RPC request and return a response dict (or None for notifications)."
+    },
+    {
+      "name": "main",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/main.py",
+      "line": 298,
+      "signature": "def main() -> None",
+      "docstring": "Start the context-router MCP server over stdio transport.\n\nReads JSON-RPC 2.0 requests from stdin (one per line) and writes\nresponses to stdout.  Errors are logged to stderr so they don't\ncontaminate the JSON stream."
+    },
+    {
+      "name": "_orchestrator",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 15,
+      "signature": "def _orchestrator(project_root: str='') -> 'Orchestrator'",
+      "docstring": ""
+    },
+    {
+      "name": "build_index",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 25,
+      "signature": "def build_index(project_root: str='', repo_name: str='default') -> dict",
+      "docstring": "Full re-index of the repository.\n\nArgs:\n    project_root: Path to project root. Auto-detected if omitted.\n    repo_name: Logical repository name.\n\nReturns:\n    Dict with keys: files, symbols, edges, duration_seconds, errors."
+    },
+    {
+      "name": "update_index",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 64,
+      "signature": "def update_index(changed_files: list[str], project_root: str='', repo_name: str='default') -> dict",
+      "docstring": "Incremental re-index for a list of changed files.\n\nArgs:\n    changed_files: List of file path strings (absolute or relative to cwd).\n    project_root: Path to project root. Auto-detected if omitted.\n    repo_name: Logical repository name.\n\nReturns:\n    Dict with keys: files, symbols, edges, duration_seconds, errors."
+    },
+    {
+      "name": "get_context_pack",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 113,
+      "signature": "def get_context_pack(mode: str, query: str='', project_root: str='') -> dict",
+      "docstring": "Generate a ranked context pack.\n\nArgs:\n    mode: One of review|implement|debug|handover.\n    query: Free-text task description.\n    project_root: Project root. Auto-detected if omitted.\n\nReturns:\n    Serialised ContextPack as a dict."
+    },
+    {
+      "name": "get_debug_pack",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 137,
+      "signature": "def get_debug_pack(query: str='', error_file: str='', project_root: str='') -> dict",
+      "docstring": "Generate a debug-mode context pack, optionally parsing an error file.\n\nArgs:\n    query: Free-text description of the bug.\n    error_file: Path to a JUnit XML, stack trace, or log file.\n    project_root: Project root. Auto-detected if omitted.\n\nReturns:\n    Serialised ContextPack as a dict."
+    },
+    {
+      "name": "explain_selection",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 160,
+      "signature": "def explain_selection(project_root: str='') -> dict",
+      "docstring": "Return the explanation for the last generated context pack.\n\nArgs:\n    project_root: Project root. Auto-detected if omitted.\n\nReturns:\n    Dict with mode, total_est_tokens, and per-item explanations."
+    },
+    {
+      "name": "generate_handover",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 191,
+      "signature": "def generate_handover(query: str='', project_root: str='') -> dict",
+      "docstring": "Generate a handover context pack combining memory + decisions + changes.\n\nArgs:\n    query: Optional task description for the handover.\n    project_root: Project root. Auto-detected if omitted.\n\nReturns:\n    Serialised ContextPack as a dict."
+    },
+    {
+      "name": "search_memory",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 212,
+      "signature": "def search_memory(query: str, project_root: str='') -> dict",
+      "docstring": "Full-text search stored observations.\n\nArgs:\n    query: FTS5 query string.\n    project_root: Project root. Auto-detected if omitted.\n\nReturns:\n    Dict with a list of matching observation dicts."
+    },
+    {
+      "name": "get_decisions",
+      "type": "function",
+      "file": "apps/mcp-server/src/mcp_server/tools.py",
+      "line": 238,
+      "signature": "def get_decisions(query: str='', project_root: str='') -> dict",
+      "docstring": "Search or list stored architectural decisions.\n\nArgs:\n    query: FTS5 query string. Returns all decisions when empty.\n    project_root: Project root. Auto-detected if omitted.\n\nReturns:\n    Dict with a list of decision dicts."
+    },
+    {
+      "name": "_handle",
+      "type": "function",
+      "file": "apps/mcp-server/tests/test_main.py",
+      "line": 10,
+      "signature": "def _handle(request: dict)",
+      "docstring": "Call the internal _handle function directly."
+    },
+    {
+      "name": "TestInitialize",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_main.py",
+      "line": 20,
+      "signature": "class TestInitialize",
+      "docstring": ""
+    },
+    {
+      "name": "TestPing",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_main.py",
+      "line": 31,
+      "signature": "class TestPing",
+      "docstring": ""
+    },
+    {
+      "name": "TestToolsList",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_main.py",
+      "line": 42,
+      "signature": "class TestToolsList",
+      "docstring": ""
+    },
+    {
+      "name": "TestToolsCall",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_main.py",
+      "line": 69,
+      "signature": "class TestToolsCall",
+      "docstring": ""
+    },
+    {
+      "name": "TestNotifications",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_main.py",
+      "line": 102,
+      "signature": "class TestNotifications",
+      "docstring": ""
+    },
+    {
+      "name": "TestUnknownMethod",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_main.py",
+      "line": 117,
+      "signature": "class TestUnknownMethod",
+      "docstring": ""
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "apps/mcp-server/tests/test_stub.py",
+      "line": 6,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "test_main_is_callable",
+      "type": "function",
+      "file": "apps/mcp-server/tests/test_stub.py",
+      "line": 10,
+      "signature": "def test_main_is_callable()",
+      "docstring": ""
+    },
+    {
+      "name": "_init_db",
+      "type": "function",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 19,
+      "signature": "def _init_db(root: Path) -> None",
+      "docstring": "Run context-router init in root so the DB exists."
+    },
+    {
+      "name": "project_root",
+      "type": "function",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 29,
+      "signature": "def project_root(...)",
+      "docstring": "A temp directory with an initialised context-router database."
+    },
+    {
+      "name": "TestBuildIndex",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 43,
+      "signature": "class TestBuildIndex",
+      "docstring": ""
+    },
+    {
+      "name": "TestUpdateIndex",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 65,
+      "signature": "class TestUpdateIndex",
+      "docstring": ""
+    },
+    {
+      "name": "TestGetContextPack",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 82,
+      "signature": "class TestGetContextPack",
+      "docstring": ""
+    },
+    {
+      "name": "TestGetDebugPack",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 107,
+      "signature": "class TestGetDebugPack",
+      "docstring": ""
+    },
+    {
+      "name": "TestExplainSelection",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 130,
+      "signature": "class TestExplainSelection",
+      "docstring": ""
+    },
+    {
+      "name": "TestGenerateHandover",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 148,
+      "signature": "class TestGenerateHandover",
+      "docstring": ""
+    },
+    {
+      "name": "TestSearchMemory",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 160,
+      "signature": "class TestSearchMemory",
+      "docstring": ""
+    },
+    {
+      "name": "TestGetDecisions",
+      "type": "class",
+      "file": "apps/mcp-server/tests/test_tools.py",
+      "line": 173,
+      "signature": "class TestGetDecisions",
+      "docstring": ""
+    },
+    {
+      "name": "tmp_project_dir",
+      "type": "function",
+      "file": "conftest.py",
+      "line": 13,
+      "signature": "def tmp_project_dir(...)",
+      "docstring": "Provide a temporary directory with a minimal fake project structure.\n\nCreates:\n  tmp_path/\n    src/\n      main.py\n    tests/\n      test_main.py\n\nReturns:\n    Path to the temporary project root."
+    },
+    {
+      "name": "sample_repo_descriptor",
+      "type": "function",
+      "file": "conftest.py",
+      "line": 36,
+      "signature": "def sample_repo_descriptor(...)",
+      "docstring": "Provide a sample RepoDescriptor pointing at a temporary directory."
+    },
+    {
+      "name": "_fmt_item",
+      "type": "function",
+      "file": "packages/adapters-claude/src/adapters_claude/__init__.py",
+      "line": 35,
+      "signature": "def _fmt_item(item: ContextItem) -> str",
+      "docstring": ""
+    },
+    {
+      "name": "ClaudeAdapter",
+      "type": "class",
+      "file": "packages/adapters-claude/src/adapters_claude/__init__.py",
+      "line": 48,
+      "signature": "class ClaudeAdapter",
+      "docstring": "Agent adapter that generates task-specific prompt preambles for Claude Code.\n\nThe preamble is a Markdown-formatted system-prompt snippet that can be\nprepended to a Claude Code session to orient the model on the relevant\ncontext without overwhelming it with every file."
+    },
+    {
+      "name": "_pack",
+      "type": "function",
+      "file": "packages/adapters-claude/tests/test_claude_adapter.py",
+      "line": 12,
+      "signature": "def _pack(mode: str='review', query: str='', items: list | None=None) -> ContextPack",
+      "docstring": ""
+    },
+    {
+      "name": "_item",
+      "type": "function",
+      "file": "packages/adapters-claude/tests/test_claude_adapter.py",
+      "line": 23,
+      "signature": "def _item(source_type: str='changed_file', title: str='foo.py', excerpt: str='') -> ContextItem",
+      "docstring": ""
+    },
+    {
+      "name": "TestClaudeAdapterProtocol",
+      "type": "class",
+      "file": "packages/adapters-claude/tests/test_claude_adapter.py",
+      "line": 36,
+      "signature": "class TestClaudeAdapterProtocol",
+      "docstring": ""
+    },
+    {
+      "name": "TestClaudeAdapterContent",
+      "type": "class",
+      "file": "packages/adapters-claude/tests/test_claude_adapter.py",
+      "line": 49,
+      "signature": "class TestClaudeAdapterContent",
+      "docstring": ""
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/adapters-claude/tests/test_stub.py",
+      "line": 11,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "test_implements_protocol",
+      "type": "function",
+      "file": "packages/adapters-claude/tests/test_stub.py",
+      "line": 15,
+      "signature": "def test_implements_protocol()",
+      "docstring": ""
+    },
+    {
+      "name": "test_returns_list",
+      "type": "function",
+      "file": "packages/adapters-claude/tests/test_stub.py",
+      "line": 20,
+      "signature": "def test_returns_list()",
+      "docstring": ""
+    },
+    {
+      "name": "_fmt_item",
+      "type": "function",
+      "file": "packages/adapters-codex/src/adapters_codex/__init__.py",
+      "line": 31,
+      "signature": "def _fmt_item(item: ContextItem, index: int) -> str",
+      "docstring": ""
+    },
+    {
+      "name": "CodexAdapter",
+      "type": "class",
+      "file": "packages/adapters-codex/src/adapters_codex/__init__.py",
+      "line": 42,
+      "signature": "class CodexAdapter",
+      "docstring": "Agent adapter that generates Codex-compatible subagent task prompts.\n\nThe output is plain text with an inlined CONTEXT block, suitable for\nCodex's subagent/task prompt format where the entire context must be\nself-contained in the prompt body."
+    },
+    {
+      "name": "_pack",
+      "type": "function",
+      "file": "packages/adapters-codex/tests/test_codex_adapter.py",
+      "line": 10,
+      "signature": "def _pack(mode: str='debug', query: str='', items: list | None=None) -> ContextPack",
+      "docstring": ""
+    },
+    {
+      "name": "_item",
+      "type": "function",
+      "file": "packages/adapters-codex/tests/test_codex_adapter.py",
+      "line": 21,
+      "signature": "def _item(source_type: str='runtime_signal', title: str='test_foo.py') -> ContextItem",
+      "docstring": ""
+    },
+    {
+      "name": "TestCodexAdapterProtocol",
+      "type": "class",
+      "file": "packages/adapters-codex/tests/test_codex_adapter.py",
+      "line": 34,
+      "signature": "class TestCodexAdapterProtocol",
+      "docstring": ""
+    },
+    {
+      "name": "TestCodexAdapterContent",
+      "type": "class",
+      "file": "packages/adapters-codex/tests/test_codex_adapter.py",
+      "line": 43,
+      "signature": "class TestCodexAdapterContent",
+      "docstring": ""
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/adapters-codex/tests/test_stub.py",
+      "line": 11,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "test_implements_protocol",
+      "type": "function",
+      "file": "packages/adapters-codex/tests/test_stub.py",
+      "line": 15,
+      "signature": "def test_implements_protocol()",
+      "docstring": ""
+    },
+    {
+      "name": "test_returns_list",
+      "type": "function",
+      "file": "packages/adapters-codex/tests/test_stub.py",
+      "line": 20,
+      "signature": "def test_returns_list()",
+      "docstring": ""
+    },
+    {
+      "name": "_fmt_item",
+      "type": "function",
+      "file": "packages/adapters-copilot/src/adapters_copilot/__init__.py",
+      "line": 48,
+      "signature": "def _fmt_item(item: ContextItem) -> str",
+      "docstring": ""
+    },
+    {
+      "name": "CopilotAdapter",
+      "type": "class",
+      "file": "packages/adapters-copilot/src/adapters_copilot/__init__.py",
+      "line": 58,
+      "signature": "class CopilotAdapter",
+      "docstring": "Agent adapter that generates GitHub Copilot instructions content.\n\nCall `generate()` for the main `.github/copilot-instructions.md` content.\nThe output is a Markdown document consumable by GitHub Copilot's\nrepository-level instructions feature."
+    },
+    {
+      "name": "_pack",
+      "type": "function",
+      "file": "packages/adapters-copilot/tests/test_copilot_adapter.py",
+      "line": 10,
+      "signature": "def _pack(mode: str='review', query: str='', items: list | None=None) -> ContextPack",
+      "docstring": ""
+    },
+    {
+      "name": "_item",
+      "type": "function",
+      "file": "packages/adapters-copilot/tests/test_copilot_adapter.py",
+      "line": 21,
+      "signature": "def _item(source_type: str='changed_file', title: str='app.py') -> ContextItem",
+      "docstring": ""
+    },
+    {
+      "name": "TestCopilotAdapterProtocol",
+      "type": "class",
+      "file": "packages/adapters-copilot/tests/test_copilot_adapter.py",
+      "line": 34,
+      "signature": "class TestCopilotAdapterProtocol",
+      "docstring": ""
+    },
+    {
+      "name": "TestCopilotAdapterContent",
+      "type": "class",
+      "file": "packages/adapters-copilot/tests/test_copilot_adapter.py",
+      "line": 43,
+      "signature": "class TestCopilotAdapterContent",
+      "docstring": ""
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/adapters-copilot/tests/test_stub.py",
+      "line": 11,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "test_implements_protocol",
+      "type": "function",
+      "file": "packages/adapters-copilot/tests/test_stub.py",
+      "line": 15,
+      "signature": "def test_implements_protocol()",
+      "docstring": ""
+    },
+    {
+      "name": "test_returns_list",
+      "type": "function",
+      "file": "packages/adapters-copilot/tests/test_stub.py",
+      "line": 20,
+      "signature": "def test_returns_list()",
+      "docstring": ""
+    },
+    {
+      "name": "naive_tokens",
+      "type": "function",
+      "file": "packages/benchmark/src/benchmark/baselines.py",
+      "line": 14,
+      "signature": "def naive_tokens(project_root: Path, repo_name: str='default') -> int",
+      "docstring": "Return estimated tokens for ALL indexed symbols (no ranking, no budget).\n\nThis represents the worst-case baseline: feeding the entire codebase to\nan agent without any filtering.\n\nArgs:\n    project_root: Path to an initialised project root.\n    repo_name: Logical repository name in the DB.\n\nReturns:\n    Total estimated token count across all symbols, or 0 on error."
+    },
+    {
+      "name": "keyword_tokens",
+      "type": "function",
+      "file": "packages/benchmark/src/benchmark/baselines.py",
+      "line": 47,
+      "signature": "def keyword_tokens(project_root: Path, query: str, top_n: int=50, repo_name: str='default') -> int",
+      "docstring": "Return estimated tokens for keyword-matched symbols (top N).\n\nFilters symbols whose name, signature, or docstring contains any token\nfrom the query (case-insensitive), then takes the top ``top_n`` results.\n\nArgs:\n    project_root: Path to an initialised project root.\n    query: Free-text query to match against.\n    top_n: Maximum number of symbols to include.\n    repo_name: Logical repository name in the DB.\n\nReturns:\n    Total estimated token count for matched symbols, or 0 on error."
+    },
+    {
+      "name": "graph_tokens",
+      "type": "function",
+      "file": "packages/benchmark/src/benchmark/baselines.py",
+      "line": 100,
+      "signature": "def graph_tokens(project_root: Path, query: str, mode: str) -> int",
+      "docstring": "Return estimated tokens for context-router's ranked output (structure-aware).\n\nThis IS the context-router's own output \u2014 it serves as the \"graph\" baseline\nshowing what the tool actually produces vs. naive/keyword approaches.\n\nArgs:\n    project_root: Path to an initialised project root.\n    query: Free-text query.\n    mode: Task mode (review/implement/debug/handover).\n\nReturns:\n    Total estimated tokens for the ranked pack, or 0 on error."
+    },
+    {
+      "name": "BenchmarkRunner",
+      "type": "class",
+      "file": "packages/benchmark/src/benchmark/harness.py",
+      "line": 13,
+      "signature": "class BenchmarkRunner",
+      "docstring": "Runs benchmark tasks against an indexed project root.\n\nArgs:\n    project_root: Path to an initialised and indexed project root."
+    },
+    {
+      "name": "BenchmarkTask",
+      "type": "class",
+      "file": "packages/benchmark/src/benchmark/models.py",
+      "line": 12,
+      "signature": "class BenchmarkTask(BaseModel)",
+      "docstring": "A single benchmark task definition."
+    },
+    {
+      "name": "TaskMetrics",
+      "type": "class",
+      "file": "packages/benchmark/src/benchmark/models.py",
+      "line": 21,
+      "signature": "class TaskMetrics(BaseModel)",
+      "docstring": "Metrics captured from a single benchmark task run."
+    },
+    {
+      "name": "BenchmarkReport",
+      "type": "class",
+      "file": "packages/benchmark/src/benchmark/models.py",
+      "line": 36,
+      "signature": "class BenchmarkReport(BaseModel)",
+      "docstring": "Aggregated report from running a benchmark suite."
+    },
+    {
+      "name": "to_json",
+      "type": "function",
+      "file": "packages/benchmark/src/benchmark/reporters.py",
+      "line": 11,
+      "signature": "def to_json(report: BenchmarkReport, indent: int=2) -> str",
+      "docstring": "Serialise *report* to a JSON string.\n\nArgs:\n    report: The benchmark report to serialise.\n    indent: JSON indentation level.\n\nReturns:\n    JSON string."
+    },
+    {
+      "name": "to_markdown",
+      "type": "function",
+      "file": "packages/benchmark/src/benchmark/reporters.py",
+      "line": 24,
+      "signature": "def to_markdown(report: BenchmarkReport, naive_tok: int=0, keyword_tok: int=0) -> str",
+      "docstring": "Generate a Markdown summary document from *report*.\n\nArgs:\n    report: The benchmark report.\n    naive_tok: Baseline naive token count (all symbols, no ranking).\n    keyword_tok: Baseline keyword-match token count.\n\nReturns:\n    Markdown-formatted benchmark results string."
+    },
+    {
+      "name": "project_root",
+      "type": "function",
+      "file": "packages/benchmark/tests/test_harness.py",
+      "line": 19,
+      "signature": "def project_root(...)",
+      "docstring": "A temp project with init + index already run."
+    },
+    {
+      "name": "TestTaskSuite",
+      "type": "class",
+      "file": "packages/benchmark/tests/test_harness.py",
+      "line": 32,
+      "signature": "class TestTaskSuite",
+      "docstring": ""
+    },
+    {
+      "name": "TestBenchmarkRunner",
+      "type": "class",
+      "file": "packages/benchmark/tests/test_harness.py",
+      "line": 58,
+      "signature": "class TestBenchmarkRunner",
+      "docstring": ""
+    },
+    {
+      "name": "TestComputeSummary",
+      "type": "class",
+      "file": "packages/benchmark/tests/test_harness.py",
+      "line": 117,
+      "signature": "class TestComputeSummary",
+      "docstring": ""
+    },
+    {
+      "name": "_sample_report",
+      "type": "function",
+      "file": "packages/benchmark/tests/test_reporters.py",
+      "line": 13,
+      "signature": "def _sample_report() -> BenchmarkReport",
+      "docstring": ""
+    },
+    {
+      "name": "TestToJson",
+      "type": "class",
+      "file": "packages/benchmark/tests/test_reporters.py",
+      "line": 40,
+      "signature": "class TestToJson",
+      "docstring": ""
+    },
+    {
+      "name": "TestToMarkdown",
+      "type": "class",
+      "file": "packages/benchmark/tests/test_reporters.py",
+      "line": 67,
+      "signature": "class TestToMarkdown",
+      "docstring": ""
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/benchmark/tests/test_stub.py",
+      "line": 6,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "CapabilitiesConfig",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/config.py",
+      "line": 21,
+      "signature": "class CapabilitiesConfig(BaseModel)",
+      "docstring": "Feature flags for optional capabilities."
+    },
+    {
+      "name": "ContextRouterConfig",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/config.py",
+      "line": 27,
+      "signature": "class ContextRouterConfig(BaseModel)",
+      "docstring": "Project-level configuration for context-router."
+    },
+    {
+      "name": "load_config",
+      "type": "function",
+      "file": "packages/contracts/src/contracts/config.py",
+      "line": 38,
+      "signature": "def load_config(project_root: Path) -> ContextRouterConfig",
+      "docstring": "Load config from .context-router/config.yaml, returning defaults if absent.\n\nArgs:\n    project_root: Root directory of the project being analyzed.\n\nReturns:\n    Validated ContextRouterConfig with any overrides from disk applied."
+    },
+    {
+      "name": "load_workspace_config",
+      "type": "function",
+      "file": "packages/contracts/src/contracts/config.py",
+      "line": 60,
+      "signature": "def load_workspace_config(workspace_root: Path) -> WorkspaceDescriptor | None",
+      "docstring": "Load workspace.yaml if present, returning None if absent or invalid.\n\nArgs:\n    workspace_root: Directory containing workspace.yaml.\n\nReturns:\n    WorkspaceDescriptor or None."
+    },
+    {
+      "name": "Symbol",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/interfaces.py",
+      "line": 22,
+      "signature": "class Symbol",
+      "docstring": "A named code symbol extracted by a language analyzer."
+    },
+    {
+      "name": "DependencyEdge",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/interfaces.py",
+      "line": 36,
+      "signature": "class DependencyEdge",
+      "docstring": "A directed dependency relationship between two symbols."
+    },
+    {
+      "name": "LanguageAnalyzer",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/interfaces.py",
+      "line": 46,
+      "signature": "class LanguageAnalyzer(Protocol)",
+      "docstring": "Interface for language-specific code analyzers.\n\nEach language package (language-python, language-java, etc.) must\nprovide a class implementing this protocol and register it via the\n'context_router.language_analyzers' entry-points group."
+    },
+    {
+      "name": "Ranker",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/interfaces.py",
+      "line": 64,
+      "signature": "class Ranker(Protocol)",
+      "docstring": "Interface for mode-specific context rankers."
+    },
+    {
+      "name": "AgentAdapter",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/interfaces.py",
+      "line": 78,
+      "signature": "class AgentAdapter(Protocol)",
+      "docstring": "Interface for agent-specific output adapters."
+    },
+    {
+      "name": "_utcnow",
+      "type": "function",
+      "file": "packages/contracts/src/contracts/models.py",
+      "line": 14,
+      "signature": "def _utcnow() -> datetime",
+      "docstring": "Return the current UTC time as a timezone-aware datetime."
+    },
+    {
+      "name": "ContextItem",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/models.py",
+      "line": 21,
+      "signature": "class ContextItem(BaseModel)",
+      "docstring": "A single ranked item in a context pack.\n\nEvery item surfaced to an agent must carry a reason, confidence score,\nand estimated token count so the agent can make informed decisions about\nwhat to include in its prompt."
+    },
+    {
+      "name": "ContextPack",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/models.py",
+      "line": 42,
+      "signature": "class ContextPack(BaseModel)",
+      "docstring": "A ranked collection of context items produced for a specific task mode.\n\nThe pack records both the selected token count and the baseline (naive)\ncount so reduction percentage can be measured and reported."
+    },
+    {
+      "name": "Observation",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/models.py",
+      "line": 59,
+      "signature": "class Observation(BaseModel)",
+      "docstring": "A durable memory record capturing what happened during a coding session."
+    },
+    {
+      "name": "RuntimeSignal",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/models.py",
+      "line": 74,
+      "signature": "class RuntimeSignal(BaseModel)",
+      "docstring": "A parsed signal from runtime evidence (test failure, log error, stack trace)."
+    },
+    {
+      "name": "Decision",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/models.py",
+      "line": 86,
+      "signature": "class Decision(BaseModel)",
+      "docstring": "A durable architectural decision record (ADR) stored in project memory."
+    },
+    {
+      "name": "RepoDescriptor",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/models.py",
+      "line": 99,
+      "signature": "class RepoDescriptor(BaseModel)",
+      "docstring": "Describes a single repository in a workspace."
+    },
+    {
+      "name": "WorkspaceDescriptor",
+      "type": "class",
+      "file": "packages/contracts/src/contracts/models.py",
+      "line": 110,
+      "signature": "class WorkspaceDescriptor(BaseModel)",
+      "docstring": "Describes a multi-repo workspace."
+    },
+    {
+      "name": "TestContextItem",
+      "type": "class",
+      "file": "packages/contracts/tests/test_models.py",
+      "line": 23,
+      "signature": "class TestContextItem",
+      "docstring": ""
+    },
+    {
+      "name": "TestContextPack",
+      "type": "class",
+      "file": "packages/contracts/tests/test_models.py",
+      "line": 55,
+      "signature": "class TestContextPack",
+      "docstring": ""
+    },
+    {
+      "name": "TestDecision",
+      "type": "class",
+      "file": "packages/contracts/tests/test_models.py",
+      "line": 71,
+      "signature": "class TestDecision",
+      "docstring": ""
+    },
+    {
+      "name": "TestObservation",
+      "type": "class",
+      "file": "packages/contracts/tests/test_models.py",
+      "line": 86,
+      "signature": "class TestObservation",
+      "docstring": ""
+    },
+    {
+      "name": "TestRuntimeSignal",
+      "type": "class",
+      "file": "packages/contracts/tests/test_models.py",
+      "line": 93,
+      "signature": "class TestRuntimeSignal",
+      "docstring": ""
+    },
+    {
+      "name": "TestRepoDescriptor",
+      "type": "class",
+      "file": "packages/contracts/tests/test_models.py",
+      "line": 103,
+      "signature": "class TestRepoDescriptor",
+      "docstring": ""
+    },
+    {
+      "name": "TestLoadConfig",
+      "type": "class",
+      "file": "packages/contracts/tests/test_models.py",
+      "line": 109,
+      "signature": "class TestLoadConfig",
+      "docstring": ""
+    },
+    {
+      "name": "TestProtocols",
+      "type": "class",
+      "file": "packages/contracts/tests/test_models.py",
+      "line": 124,
+      "signature": "class TestProtocols",
+      "docstring": ""
+    },
+    {
+      "name": "PluginLoader",
+      "type": "class",
+      "file": "packages/core/src/core/plugin_loader.py",
+      "line": 20,
+      "signature": "class PluginLoader",
+      "docstring": "Discovers and registers LanguageAnalyzer plugins via entry points."
+    },
+    {
+      "name": "_boost_linked_items",
+      "type": "function",
+      "file": "packages/core/src/core/workspace_orchestrator.py",
+      "line": 30,
+      "signature": "def _boost_linked_items(items: list[ContextItem], links: dict[str, list[str]]) -> list[ContextItem]",
+      "docstring": "Return a new list where linked-repo items get a confidence boost.\n\nAn item belongs to a \"linked\" repo if its *repo* field appears as a value\nin any entry of *links*.  We boost it once regardless of how many repos\nlink to it.\n\nArgs:\n    items: Flat list of all ContextItems from all repos.\n    links: The ``WorkspaceDescriptor.links`` dict.\n\nReturns:\n    New list with updated confidence scores (originals not mutated)."
+    },
+    {
+      "name": "_prefix_title",
+      "type": "function",
+      "file": "packages/core/src/core/workspace_orchestrator.py",
+      "line": 63,
+      "signature": "def _prefix_title(item: ContextItem, repo_name: str) -> ContextItem",
+      "docstring": "Return a copy of *item* with its title prefixed by [repo_name]."
+    },
+    {
+      "name": "WorkspaceOrchestrator",
+      "type": "class",
+      "file": "packages/core/src/core/workspace_orchestrator.py",
+      "line": 70,
+      "signature": "class WorkspaceOrchestrator",
+      "docstring": "Generates context packs across all repos declared in workspace.yaml.\n\nArgs:\n    workspace_root: Directory containing workspace.yaml.  When ``None``,\n        auto-detected by walking up from ``Path.cwd()``."
+    },
+    {
+      "name": "_seed_db",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 19,
+      "signature": "def _seed_db(db_path: Path) -> None",
+      "docstring": "Create a minimal SQLite database seeded with one symbol."
+    },
+    {
+      "name": "_make_project",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 39,
+      "signature": "def _make_project(tmp_path: Path) -> Path",
+      "docstring": "Create a minimal project layout under tmp_path and return root."
+    },
+    {
+      "name": "test_build_pack_review_returns_context_pack",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 52,
+      "signature": "def test_build_pack_review_returns_context_pack(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_build_pack_implement_returns_context_pack",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 60,
+      "signature": "def test_build_pack_implement_returns_context_pack(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_build_pack_stores_query",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 68,
+      "signature": "def test_build_pack_stores_query(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_build_pack_items_have_reason",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 74,
+      "signature": "def test_build_pack_items_have_reason(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_build_pack_persists_last_pack",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 81,
+      "signature": "def test_build_pack_persists_last_pack(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_build_pack_persisted_file_is_valid_json",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 87,
+      "signature": "def test_build_pack_persisted_file_is_valid_json(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_build_pack_raises_on_missing_db",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 95,
+      "signature": "def test_build_pack_raises_on_missing_db(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_build_pack_token_stats",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 102,
+      "signature": "def test_build_pack_token_stats(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_last_pack_returns_none_when_missing",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 114,
+      "signature": "def test_last_pack_returns_none_when_missing(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_last_pack_roundtrip",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 120,
+      "signature": "def test_last_pack_roundtrip(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_find_project_root_walks_up",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 134,
+      "signature": "def test_find_project_root_walks_up(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_find_project_root_raises_when_absent",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 143,
+      "signature": "def test_find_project_root_raises_when_absent(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_classify_for_implement",
+      "type": "function",
+      "file": "packages/core/tests/test_orchestrator.py",
+      "line": 171,
+      "signature": "def test_classify_for_implement(...)",
+      "docstring": ""
+    },
+    {
+      "name": "TestPluginLoader",
+      "type": "class",
+      "file": "packages/core/tests/test_plugin_loader.py",
+      "line": 10,
+      "signature": "class TestPluginLoader",
+      "docstring": ""
+    },
+    {
+      "name": "_init_repo",
+      "type": "function",
+      "file": "packages/core/tests/test_workspace_orchestrator.py",
+      "line": 15,
+      "signature": "def _init_repo(path: Path) -> None",
+      "docstring": "Run context-router init in a temp directory so the DB exists."
+    },
+    {
+      "name": "workspace_root",
+      "type": "function",
+      "file": "packages/core/tests/test_workspace_orchestrator.py",
+      "line": 25,
+      "signature": "def workspace_root(...)",
+      "docstring": "A temp directory with workspace.yaml referencing two initialised repos."
+    },
+    {
+      "name": "TestWorkspaceOrchestratorInit",
+      "type": "class",
+      "file": "packages/core/tests/test_workspace_orchestrator.py",
+      "line": 51,
+      "signature": "class TestWorkspaceOrchestratorInit",
+      "docstring": ""
+    },
+    {
+      "name": "TestWorkspacePackGeneration",
+      "type": "class",
+      "file": "packages/core/tests/test_workspace_orchestrator.py",
+      "line": 66,
+      "signature": "class TestWorkspacePackGeneration",
+      "docstring": ""
+    },
+    {
+      "name": "TestLinkBoost",
+      "type": "class",
+      "file": "packages/core/tests/test_workspace_orchestrator.py",
+      "line": 131,
+      "signature": "class TestLinkBoost",
+      "docstring": ""
+    },
+    {
+      "name": "TestTitlePrefix",
+      "type": "class",
+      "file": "packages/core/tests/test_workspace_orchestrator.py",
+      "line": 200,
+      "signature": "class TestTitlePrefix",
+      "docstring": ""
+    },
+    {
+      "name": "ChangedFile",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/git_diff.py",
+      "line": 16,
+      "signature": "class ChangedFile",
+      "docstring": "Represents a single file change from a git diff."
+    },
+    {
+      "name": "GitDiffParser",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/git_diff.py",
+      "line": 25,
+      "signature": "class GitDiffParser",
+      "docstring": "Parses git diff --name-status output into ChangedFile objects."
+    },
+    {
+      "name": "IndexResult",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/indexer.py",
+      "line": 24,
+      "signature": "class IndexResult",
+      "docstring": "Summary of a completed indexing run."
+    },
+    {
+      "name": "Indexer",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/indexer.py",
+      "line": 34,
+      "signature": "class Indexer",
+      "docstring": "Orchestrates full and incremental repository indexing.\n\nUsage:\n    with Database(db_path) as db:\n        loader = PluginLoader()\n        loader.discover()\n        indexer = Indexer(db, loader, config, \"my-repo\")\n        result = indexer.run(Path(\"/path/to/repo\"))"
+    },
+    {
+      "name": "FileScanner",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/scanner.py",
+      "line": 16,
+      "signature": "class FileScanner",
+      "docstring": "Walks a repository directory and yields indexable source files.\n\nOnly yields files whose extension has a registered LanguageAnalyzer\nin the plugin registry. Skips files matching any ignore pattern."
+    },
+    {
+      "name": "TestFileMapper",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/test_mapper.py",
+      "line": 12,
+      "signature": "class TestFileMapper",
+      "docstring": "Matches source files to their test files by naming convention.\n\nSupported conventions (checked in order):\n  - pytest:  test_foo.py  \u2194  foo.py\n  - pytest:  foo_test.py  \u2194  foo.py\n  - JUnit:   FooTest.java \u2194  Foo.java\n  - JUnit:   FooTests.java \u2194  Foo.java\n  - xUnit:   FooTests.cs  \u2194  Foo.cs\n  - xUnit:   FooTest.cs   \u2194  Foo.cs"
+    },
+    {
+      "name": "_DebounceHandler",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/watcher.py",
+      "line": 25,
+      "signature": "class _DebounceHandler(FileSystemEventHandler)",
+      "docstring": "File-system event handler that debounces rapid save events."
+    },
+    {
+      "name": "IndexWatcher",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/watcher.py",
+      "line": 85,
+      "signature": "class IndexWatcher",
+      "docstring": "Monitors a repository directory and triggers incremental re-indexing."
+    },
+    {
+      "name": "SymbolWriter",
+      "type": "class",
+      "file": "packages/graph-index/src/graph_index/writer.py",
+      "line": 15,
+      "signature": "class SymbolWriter",
+      "docstring": "Writes Symbol and DependencyEdge objects to the SQLite graph store.\n\nTwo-pass strategy:\n  Pass 1 \u2014 insert all Symbol rows, build name \u2192 rowid lookup map.\n  Pass 2 \u2014 resolve each DependencyEdge against the map and insert.\n  Edges whose endpoints cannot be resolved are silently skipped (they\n  likely reference symbols in other files; cross-file resolution is a\n  Phase 2 concern)."
+    },
+    {
+      "name": "test_parse_added_file",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_git_diff.py",
+      "line": 18,
+      "signature": "def test_parse_added_file() -> None",
+      "docstring": "Added file is parsed with status 'added'."
+    },
+    {
+      "name": "test_parse_modified_file",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_git_diff.py",
+      "line": 29,
+      "signature": "def test_parse_modified_file() -> None",
+      "docstring": "Modified file is parsed with status 'modified'."
+    },
+    {
+      "name": "test_parse_deleted_file",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_git_diff.py",
+      "line": 39,
+      "signature": "def test_parse_deleted_file() -> None",
+      "docstring": "Deleted file is parsed with status 'deleted'."
+    },
+    {
+      "name": "test_parse_renamed_file",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_git_diff.py",
+      "line": 49,
+      "signature": "def test_parse_renamed_file() -> None",
+      "docstring": "Renamed file is parsed with new path and old_path populated."
+    },
+    {
+      "name": "test_parse_multiple_files",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_git_diff.py",
+      "line": 60,
+      "signature": "def test_parse_multiple_files() -> None",
+      "docstring": "Multiple changes are all parsed correctly."
+    },
+    {
+      "name": "test_parse_empty_string",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_git_diff.py",
+      "line": 73,
+      "signature": "def test_parse_empty_string() -> None",
+      "docstring": "Empty input returns empty list."
+    },
+    {
+      "name": "test_parse_blank_lines_ignored",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_git_diff.py",
+      "line": 79,
+      "signature": "def test_parse_blank_lines_ignored() -> None",
+      "docstring": "Blank lines in diff output are ignored."
+    },
+    {
+      "name": "test_changed_file_defaults",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_git_diff.py",
+      "line": 86,
+      "signature": "def test_changed_file_defaults() -> None",
+      "docstring": "ChangedFile has sensible defaults."
+    },
+    {
+      "name": "test_pytest_prefix_convention",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 10,
+      "signature": "def test_pytest_prefix_convention() -> None",
+      "docstring": "test_foo.py maps to foo.py (pytest prefix convention)."
+    },
+    {
+      "name": "test_pytest_suffix_convention",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 20,
+      "signature": "def test_pytest_suffix_convention() -> None",
+      "docstring": "foo_test.py maps to foo.py (pytest suffix convention)."
+    },
+    {
+      "name": "test_junit_test_suffix_convention",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 30,
+      "signature": "def test_junit_test_suffix_convention() -> None",
+      "docstring": "FooTest.java maps to Foo.java (JUnit convention)."
+    },
+    {
+      "name": "test_junit_tests_suffix_convention",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 40,
+      "signature": "def test_junit_tests_suffix_convention() -> None",
+      "docstring": "FooTests.java maps to Foo.java (JUnit plural convention)."
+    },
+    {
+      "name": "test_xunit_tests_suffix_convention",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 50,
+      "signature": "def test_xunit_tests_suffix_convention() -> None",
+      "docstring": "FooTests.cs maps to Foo.cs (xUnit convention)."
+    },
+    {
+      "name": "test_xunit_test_suffix_convention",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 60,
+      "signature": "def test_xunit_test_suffix_convention() -> None",
+      "docstring": "FooTest.cs maps to Foo.cs (xUnit single convention)."
+    },
+    {
+      "name": "test_unmatched_source_returns_empty_list",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 70,
+      "signature": "def test_unmatched_source_returns_empty_list() -> None",
+      "docstring": "Source files with no matching test files map to empty list."
+    },
+    {
+      "name": "test_all_sources_get_entry",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 80,
+      "signature": "def test_all_sources_get_entry() -> None",
+      "docstring": "Every source file gets an entry in the result dict."
+    },
+    {
+      "name": "test_multiple_test_files_for_one_source",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_mapper.py",
+      "line": 90,
+      "signature": "def test_multiple_test_files_for_one_source() -> None",
+      "docstring": "A source file can match multiple test files (prefix and suffix)."
+    },
+    {
+      "name": "_make_loader",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_scanner.py",
+      "line": 13,
+      "signature": "def _make_loader(extensions: list[str]) -> MagicMock",
+      "docstring": "Return a mock PluginLoader that claims to have analyzers for given extensions."
+    },
+    {
+      "name": "test_scanner_yields_registered_extensions",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_scanner.py",
+      "line": 20,
+      "signature": "def test_scanner_yields_registered_extensions(tmp_path: Path) -> None",
+      "docstring": "Scanner yields files whose extensions have a registered analyzer."
+    },
+    {
+      "name": "test_scanner_skips_ignore_patterns",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_scanner.py",
+      "line": 35,
+      "signature": "def test_scanner_skips_ignore_patterns(tmp_path: Path) -> None",
+      "docstring": "Scanner skips files and directories matching ignore patterns."
+    },
+    {
+      "name": "test_scanner_skips_files_with_no_analyzer",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_scanner.py",
+      "line": 58,
+      "signature": "def test_scanner_skips_files_with_no_analyzer(tmp_path: Path) -> None",
+      "docstring": "Scanner skips files whose extension has no registered analyzer."
+    },
+    {
+      "name": "test_scanner_skips_no_extension_files",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_scanner.py",
+      "line": 73,
+      "signature": "def test_scanner_skips_no_extension_files(tmp_path: Path) -> None",
+      "docstring": "Scanner skips files with no extension even if loader would accept empty string."
+    },
+    {
+      "name": "test_scanner_yields_extension_without_dot",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_scanner.py",
+      "line": 86,
+      "signature": "def test_scanner_yields_extension_without_dot(tmp_path: Path) -> None",
+      "docstring": "Scanner yields extensions without leading dot."
+    },
+    {
+      "name": "test_scanner_recurses_into_subdirectories",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_scanner.py",
+      "line": 99,
+      "signature": "def test_scanner_recurses_into_subdirectories(tmp_path: Path) -> None",
+      "docstring": "Scanner finds files in nested subdirectories."
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_stub.py",
+      "line": 6,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "_make_symbol",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_writer.py",
+      "line": 15,
+      "signature": "def _make_symbol(name: str, kind: str, file: Path) -> Symbol",
+      "docstring": ""
+    },
+    {
+      "name": "_make_edge",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_writer.py",
+      "line": 27,
+      "signature": "def _make_edge(from_sym: str, to_sym: str) -> DependencyEdge",
+      "docstring": ""
+    },
+    {
+      "name": "db",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_writer.py",
+      "line": 32,
+      "signature": "def db(...)",
+      "docstring": "Return an initialised in-memory Database."
+    },
+    {
+      "name": "test_writer_stores_symbols",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_writer.py",
+      "line": 40,
+      "signature": "def test_writer_stores_symbols(db: Database, tmp_path: Path) -> None",
+      "docstring": "SymbolWriter persists Symbol objects to the DB."
+    },
+    {
+      "name": "test_writer_stores_resolvable_edges",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_writer.py",
+      "line": 63,
+      "signature": "def test_writer_stores_resolvable_edges(db: Database, tmp_path: Path) -> None",
+      "docstring": "SymbolWriter stores edges when both endpoints are in the same file."
+    },
+    {
+      "name": "test_writer_skips_unresolvable_edges",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_writer.py",
+      "line": 83,
+      "signature": "def test_writer_skips_unresolvable_edges(db: Database, tmp_path: Path) -> None",
+      "docstring": "SymbolWriter silently skips edges whose endpoints are in other files."
+    },
+    {
+      "name": "test_writer_reindex_is_idempotent",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_writer.py",
+      "line": 103,
+      "signature": "def test_writer_reindex_is_idempotent(db: Database, tmp_path: Path) -> None",
+      "docstring": "Calling write_file_results twice for same file gives same final count."
+    },
+    {
+      "name": "test_writer_delete_by_file_cleans_up",
+      "type": "function",
+      "file": "packages/graph-index/tests/test_writer.py",
+      "line": 119,
+      "signature": "def test_writer_delete_by_file_cleans_up(db: Database, tmp_path: Path) -> None",
+      "docstring": "delete_by_file removes symbols written by the writer."
+    },
+    {
+      "name": "_text",
+      "type": "function",
+      "file": "packages/language-dotnet/src/language_dotnet/__init__.py",
+      "line": 25,
+      "signature": "def _text(node: Node) -> str",
+      "docstring": "Return the decoded text of a tree-sitter node."
+    },
+    {
+      "name": "_first_child_of_type",
+      "type": "function",
+      "file": "packages/language-dotnet/src/language_dotnet/__init__.py",
+      "line": 30,
+      "signature": "def _first_child_of_type(node: Node, *types: str) -> Node | None",
+      "docstring": "Return the first direct child whose type is in types."
+    },
+    {
+      "name": "_walk",
+      "type": "function",
+      "file": "packages/language-dotnet/src/language_dotnet/__init__.py",
+      "line": 38,
+      "signature": "def _walk(node: Node, results: list[Symbol | DependencyEdge], file: Path) -> None",
+      "docstring": "Recursively walk the C# AST and collect symbols."
+    },
+    {
+      "name": "DotnetAnalyzer",
+      "type": "class",
+      "file": "packages/language-dotnet/src/language_dotnet/__init__.py",
+      "line": 148,
+      "signature": "class DotnetAnalyzer",
+      "docstring": "Language analyzer for C# source files.\n\nRegistered under the 'context_router.language_analyzers' entry-points\ngroup with key 'cs'. Extracts namespaces, classes, methods, and usings."
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 46,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "test_implements_protocol",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 50,
+      "signature": "def test_implements_protocol()",
+      "docstring": ""
+    },
+    {
+      "name": "test_returns_list",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 54,
+      "signature": "def test_returns_list(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_namespace",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 59,
+      "signature": "def test_extracts_namespace(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_class",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 69,
+      "signature": "def test_extracts_class(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_methods",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 79,
+      "signature": "def test_extracts_methods(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_using_directives",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 90,
+      "signature": "def test_extracts_using_directives(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_interface",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 99,
+      "signature": "def test_extracts_interface(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_line_numbers_set",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 109,
+      "signature": "def test_line_numbers_set(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_empty_file",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 119,
+      "signature": "def test_empty_file(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_invalid_path_returns_empty",
+      "type": "function",
+      "file": "packages/language-dotnet/tests/test_stub.py",
+      "line": 126,
+      "signature": "def test_invalid_path_returns_empty()",
+      "docstring": ""
+    },
+    {
+      "name": "_text",
+      "type": "function",
+      "file": "packages/language-java/src/language_java/__init__.py",
+      "line": 26,
+      "signature": "def _text(node: Node) -> str",
+      "docstring": "Return the decoded text of a tree-sitter node."
+    },
+    {
+      "name": "_first_child_of_type",
+      "type": "function",
+      "file": "packages/language-java/src/language_java/__init__.py",
+      "line": 31,
+      "signature": "def _first_child_of_type(node: Node, *types: str) -> Node | None",
+      "docstring": "Return the first direct child whose type is in types."
+    },
+    {
+      "name": "_collect_annotations",
+      "type": "function",
+      "file": "packages/language-java/src/language_java/__init__.py",
+      "line": 39,
+      "signature": "def _collect_annotations(node: Node) -> list[str]",
+      "docstring": "Collect annotation names from the siblings before a declaration node."
+    },
+    {
+      "name": "_walk",
+      "type": "function",
+      "file": "packages/language-java/src/language_java/__init__.py",
+      "line": 56,
+      "signature": "def _walk(node: Node, results: list[Symbol | DependencyEdge], file: Path) -> None",
+      "docstring": "Recursively walk the Java AST and collect symbols."
+    },
+    {
+      "name": "JavaAnalyzer",
+      "type": "class",
+      "file": "packages/language-java/src/language_java/__init__.py",
+      "line": 129,
+      "signature": "class JavaAnalyzer",
+      "docstring": "Language analyzer for Java source files.\n\nRegistered under the 'context_router.language_analyzers' entry-points\ngroup with key 'java'. Extracts classes, methods, and import edges."
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 30,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "test_implements_protocol",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 34,
+      "signature": "def test_implements_protocol()",
+      "docstring": ""
+    },
+    {
+      "name": "test_returns_list",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 38,
+      "signature": "def test_returns_list(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_class",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 43,
+      "signature": "def test_extracts_class(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_methods",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 53,
+      "signature": "def test_extracts_methods(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_imports",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 64,
+      "signature": "def test_extracts_imports(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_line_numbers_set",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 73,
+      "signature": "def test_line_numbers_set(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_empty_file",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 83,
+      "signature": "def test_empty_file(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_invalid_path_returns_empty",
+      "type": "function",
+      "file": "packages/language-java/tests/test_stub.py",
+      "line": 90,
+      "signature": "def test_invalid_path_returns_empty()",
+      "docstring": ""
+    },
+    {
+      "name": "_text",
+      "type": "function",
+      "file": "packages/language-python/src/language_python/__init__.py",
+      "line": 20,
+      "signature": "def _text(node: Node) -> str",
+      "docstring": "Return the decoded text of a tree-sitter node."
+    },
+    {
+      "name": "_first_child_of_type",
+      "type": "function",
+      "file": "packages/language-python/src/language_python/__init__.py",
+      "line": 25,
+      "signature": "def _first_child_of_type(node: Node, *types: str) -> Node | None",
+      "docstring": "Return the first direct child whose type is in types, or None."
+    },
+    {
+      "name": "_extract_docstring",
+      "type": "function",
+      "file": "packages/language-python/src/language_python/__init__.py",
+      "line": 33,
+      "signature": "def _extract_docstring(body_node: Node) -> str",
+      "docstring": "Extract the docstring from a function/class body block, if present."
+    },
+    {
+      "name": "_walk",
+      "type": "function",
+      "file": "packages/language-python/src/language_python/__init__.py",
+      "line": 48,
+      "signature": "def _walk(node: Node, results: list[Symbol | DependencyEdge], file: Path) -> None",
+      "docstring": "Recursively walk the AST and collect symbols and edges."
+    },
+    {
+      "name": "PythonAnalyzer",
+      "type": "class",
+      "file": "packages/language-python/src/language_python/__init__.py",
+      "line": 159,
+      "signature": "class PythonAnalyzer",
+      "docstring": "Language analyzer for Python source files.\n\nRegistered under the 'context_router.language_analyzers' entry-points\ngroup with key 'py'. Extracts functions, classes, imports, and edges."
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 26,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "test_implements_protocol",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 30,
+      "signature": "def test_implements_protocol()",
+      "docstring": ""
+    },
+    {
+      "name": "test_returns_list",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 34,
+      "signature": "def test_returns_list(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_function",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 39,
+      "signature": "def test_extracts_function(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_class",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 49,
+      "signature": "def test_extracts_class(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_method",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 59,
+      "signature": "def test_extracts_method(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_extracts_imports_as_edges",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 69,
+      "signature": "def test_extracts_imports_as_edges(tmp_path: Path)",
+      "docstring": "Imports are now emitted as DependencyEdge, not as Symbol(kind='import')."
+    },
+    {
+      "name": "test_extracts_docstring",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 87,
+      "signature": "def test_extracts_docstring(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_line_numbers_set",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 97,
+      "signature": "def test_line_numbers_set(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_empty_file",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 108,
+      "signature": "def test_empty_file(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_invalid_path_returns_empty",
+      "type": "function",
+      "file": "packages/language-python/tests/test_stub.py",
+      "line": 115,
+      "signature": "def test_invalid_path_returns_empty()",
+      "docstring": ""
+    },
+    {
+      "name": "YamlAnalyzer",
+      "type": "class",
+      "file": "packages/language-yaml/src/language_yaml/__init__.py",
+      "line": 25,
+      "signature": "class YamlAnalyzer",
+      "docstring": "Language analyzer for YAML files.\n\nRegistered under the 'context_router.language_analyzers' entry-points\ngroup with key 'yaml'. Uses PyYAML for parsing since YAML is structured\ndata rather than code \u2014 Tree-sitter adds no value here."
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 54,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "test_implements_protocol",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 58,
+      "signature": "def test_implements_protocol()",
+      "docstring": ""
+    },
+    {
+      "name": "test_returns_list",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 62,
+      "signature": "def test_returns_list(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_k8s_resource_detection",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 67,
+      "signature": "def test_k8s_resource_detection(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_github_actions_workflow_detection",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 77,
+      "signature": "def test_github_actions_workflow_detection(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_github_actions_job_detection",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 87,
+      "signature": "def test_github_actions_job_detection(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_helm_chart_detection",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 98,
+      "signature": "def test_helm_chart_detection(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_generic_yaml_returns_no_symbols",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 110,
+      "signature": "def test_generic_yaml_returns_no_symbols(tmp_path: Path)",
+      "docstring": "Generic YAML files (not k8s/helm/GHA) no longer emit yaml_key noise."
+    },
+    {
+      "name": "test_non_dict_yaml_returns_empty",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 122,
+      "signature": "def test_non_dict_yaml_returns_empty(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_invalid_yaml_returns_empty",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 129,
+      "signature": "def test_invalid_yaml_returns_empty(tmp_path: Path)",
+      "docstring": ""
+    },
+    {
+      "name": "test_invalid_path_returns_empty",
+      "type": "function",
+      "file": "packages/language-yaml/tests/test_stub.py",
+      "line": 136,
+      "signature": "def test_invalid_path_returns_empty()",
+      "docstring": ""
+    },
+    {
+      "name": "ObservationStore",
+      "type": "class",
+      "file": "packages/memory/src/memory/store.py",
+      "line": 21,
+      "signature": "class ObservationStore",
+      "docstring": "High-level wrapper around ObservationRepository.\n\nArgs:\n    db: An open and initialised Database instance."
+    },
+    {
+      "name": "DecisionStore",
+      "type": "class",
+      "file": "packages/memory/src/memory/store.py",
+      "line": 141,
+      "signature": "class DecisionStore",
+      "docstring": "High-level wrapper around DecisionRepository.\n\nArgs:\n    db: An open and initialised Database instance."
+    },
+    {
+      "name": "db",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 20,
+      "signature": "def db(...)",
+      "docstring": "Return an open, initialised Database in a temp directory."
+    },
+    {
+      "name": "obs_store",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 28,
+      "signature": "def obs_store(...)",
+      "docstring": ""
+    },
+    {
+      "name": "dec_store",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 33,
+      "signature": "def dec_store(...)",
+      "docstring": ""
+    },
+    {
+      "name": "test_add_and_get_all",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 41,
+      "signature": "def test_add_and_get_all(obs_store: ObservationStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_search_finds_by_keyword",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 49,
+      "signature": "def test_search_finds_by_keyword(obs_store: ObservationStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_search_no_results",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 57,
+      "signature": "def test_search_no_results(obs_store: ObservationStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_add_from_session_json_single",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 63,
+      "signature": "def test_add_from_session_json_single(obs_store: ObservationStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_add_from_session_json_list",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 69,
+      "signature": "def test_add_from_session_json_list(obs_store: ObservationStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_add_from_session_json_invalid_raises",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 78,
+      "signature": "def test_add_from_session_json_invalid_raises(obs_store: ObservationStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_find_stale_all_files_missing",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 83,
+      "signature": "def test_find_stale_all_files_missing(obs_store: ObservationStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_find_stale_no_files_touched_not_stale",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 93,
+      "signature": "def test_find_stale_no_files_touched_not_stale(obs_store: ObservationStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_add_and_get_all",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 104,
+      "signature": "def test_add_and_get_all(dec_store: DecisionStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_search_finds_by_title",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 112,
+      "signature": "def test_search_finds_by_title(dec_store: DecisionStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_get_all_ordered_recent_first",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 120,
+      "signature": "def test_get_all_ordered_recent_first(dec_store: DecisionStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_by_tags_filters_correctly",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 130,
+      "signature": "def test_by_tags_filters_correctly(dec_store: DecisionStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_by_tags_case_insensitive",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 141,
+      "signature": "def test_by_tags_case_insensitive(dec_store: DecisionStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_by_tags_no_match",
+      "type": "function",
+      "file": "packages/memory/tests/test_store.py",
+      "line": 147,
+      "signature": "def test_by_tags_no_match(dec_store: DecisionStore) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/memory/tests/test_stub.py",
+      "line": 6,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "estimate_tokens",
+      "type": "function",
+      "file": "packages/ranking/src/ranking/estimator.py",
+      "line": 11,
+      "signature": "def estimate_tokens(text: str) -> int",
+      "docstring": "Estimate the number of tokens in *text*.\n\nUses a character-based heuristic: 1 token \u2248 4 characters.  Returns at\nleast 1 for any non-empty string, and 0 for an empty string.\n\nArgs:\n    text: The text to estimate.\n\nReturns:\n    Estimated token count (always \u2265 0)."
+    },
+    {
+      "name": "_tokenize",
+      "type": "function",
+      "file": "packages/ranking/src/ranking/ranker.py",
+      "line": 46,
+      "signature": "def _tokenize(text: str) -> set[str]",
+      "docstring": "Return lowercase tokens from *text* that are at least _MIN_TOKEN_LEN chars."
+    },
+    {
+      "name": "ContextRanker",
+      "type": "class",
+      "file": "packages/ranking/src/ranking/ranker.py",
+      "line": 51,
+      "signature": "class ContextRanker",
+      "docstring": "Sorts and trims ContextItems to fit within a token budget.\n\nImplements the ``Ranker`` protocol defined in ``contracts.interfaces``.\n\nArgs:\n    token_budget: Maximum total estimated tokens for the output pack.\n        Pass 0 to disable budget enforcement (return all items sorted)."
+    },
+    {
+      "name": "test_empty_string_returns_zero",
+      "type": "function",
+      "file": "packages/ranking/tests/test_estimator.py",
+      "line": 8,
+      "signature": "def test_empty_string_returns_zero() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_short_string_returns_at_least_one",
+      "type": "function",
+      "file": "packages/ranking/tests/test_estimator.py",
+      "line": 12,
+      "signature": "def test_short_string_returns_at_least_one() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_sixteen_chars_returns_four",
+      "type": "function",
+      "file": "packages/ranking/tests/test_estimator.py",
+      "line": 16,
+      "signature": "def test_sixteen_chars_returns_four() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_four_chars_returns_one",
+      "type": "function",
+      "file": "packages/ranking/tests/test_estimator.py",
+      "line": 20,
+      "signature": "def test_four_chars_returns_one() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_hundred_chars",
+      "type": "function",
+      "file": "packages/ranking/tests/test_estimator.py",
+      "line": 24,
+      "signature": "def test_hundred_chars() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_unicode_counts_characters",
+      "type": "function",
+      "file": "packages/ranking/tests/test_estimator.py",
+      "line": 28,
+      "signature": "def test_unicode_counts_characters() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_whitespace_only",
+      "type": "function",
+      "file": "packages/ranking/tests/test_estimator.py",
+      "line": 34,
+      "signature": "def test_whitespace_only() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "_item",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 9,
+      "signature": "def _item(*, source_type: str='file', confidence: float=0.5, est_tokens: int=100, title: str='sym') -> ContextItem",
+      "docstring": ""
+    },
+    {
+      "name": "test_empty_input_returns_empty",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 32,
+      "signature": "def test_empty_input_returns_empty() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_sorts_by_confidence_descending",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 37,
+      "signature": "def test_sorts_by_confidence_descending() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_reason_populated_from_source_type",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 48,
+      "signature": "def test_reason_populated_from_source_type() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_unknown_source_type_gets_default_reason",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 54,
+      "signature": "def test_unknown_source_type_gets_default_reason() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_budget_trims_lowest_confidence_items",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 64,
+      "signature": "def test_budget_trims_lowest_confidence_items() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_zero_budget_returns_all_sorted",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 78,
+      "signature": "def test_zero_budget_returns_all_sorted() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_budget_preserves_one_per_source_type",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 85,
+      "signature": "def test_budget_preserves_one_per_source_type() -> None",
+      "docstring": "Even if budget is tiny, at least one item per source_type survives."
+    },
+    {
+      "name": "test_all_items_fit_within_budget",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 97,
+      "signature": "def test_all_items_fit_within_budget() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_query_boost_raises_confidence_for_matching_item",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 103,
+      "signature": "def test_query_boost_raises_confidence_for_matching_item() -> None",
+      "docstring": "Items whose title/excerpt contain query tokens get a confidence boost."
+    },
+    {
+      "name": "test_query_boost_capped_at_0_95",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 126,
+      "signature": "def test_query_boost_capped_at_0_95() -> None",
+      "docstring": "Confidence is never boosted above 0.95."
+    },
+    {
+      "name": "test_tokenize_filters_short_tokens",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 146,
+      "signature": "def test_tokenize_filters_short_tokens() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_original_items_not_mutated",
+      "type": "function",
+      "file": "packages/ranking/tests/test_ranker.py",
+      "line": 156,
+      "signature": "def test_original_items_not_mutated() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/ranking/tests/test_stub.py",
+      "line": 6,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "parse_error_file",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/__init__.py",
+      "line": 18,
+      "signature": "def parse_error_file(path: Path) -> list[RuntimeSignal]",
+      "docstring": "Auto-detect format and parse *path* into RuntimeSignals.\n\nDetection rules (by file extension):\n- ``.xml`` \u2192 JUnit XML\n- ``.log`` \u2192 log parser + stack trace parser\n- Everything else \u2192 stack trace + log parser combined\n\nArgs:\n    path: Path to the error file.\n\nReturns:\n    List of RuntimeSignal objects.  Empty list if the file cannot be parsed."
+    },
+    {
+      "name": "parse_dotnet_output",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/dotnet.py",
+      "line": 27,
+      "signature": "def parse_dotnet_output(text: str) -> list[RuntimeSignal]",
+      "docstring": "Parse ``dotnet test`` stdout into RuntimeSignal objects.\n\nEach failed test becomes one RuntimeSignal.\n\nArgs:\n    text: Full stdout from a ``dotnet test`` run.\n\nReturns:\n    List of RuntimeSignal objects."
+    },
+    {
+      "name": "parse_dotnet_output_file",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/dotnet.py",
+      "line": 75,
+      "signature": "def parse_dotnet_output_file(path: Path) -> list[RuntimeSignal]",
+      "docstring": "Parse a saved dotnet test output file.\n\nArgs:\n    path: Path to the text file.\n\nReturns:\n    List of RuntimeSignal objects."
+    },
+    {
+      "name": "parse_junit_xml",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/junit_xml.py",
+      "line": 21,
+      "signature": "def parse_junit_xml(xml_text: str) -> list[RuntimeSignal]",
+      "docstring": "Parse JUnit XML report text into RuntimeSignal objects.\n\nOnly failed test cases produce signals.  Each failure or error element\nbecomes one RuntimeSignal with ``source=\"junit\"``.\n\nArgs:\n    xml_text: Raw XML string from a JUnit-compatible test report.\n\nReturns:\n    List of RuntimeSignal objects, one per failed test case."
+    },
+    {
+      "name": "parse_junit_xml_file",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/junit_xml.py",
+      "line": 69,
+      "signature": "def parse_junit_xml_file(path: Path) -> list[RuntimeSignal]",
+      "docstring": "Parse a JUnit XML file and return RuntimeSignals.\n\nArgs:\n    path: Path to the XML file.\n\nReturns:\n    List of RuntimeSignal objects."
+    },
+    {
+      "name": "_extract_paths",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/junit_xml.py",
+      "line": 84,
+      "signature": "def _extract_paths(stack_lines: list[str]) -> list[Path]",
+      "docstring": "Extract file paths mentioned in a stack trace.\n\nLooks for lines of the form:\n  File \"path/to/file.py\", line N  (Python)\n  at com.example.Foo(Foo.java:42)  (Java \u2014 extracts .java filename)\n  at Foo.cs:42                     (.NET)\n\nArgs:\n    stack_lines: Lines from a stack trace.\n\nReturns:\n    List of Path objects (may be relative)."
+    },
+    {
+      "name": "parse_log",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/log.py",
+      "line": 25,
+      "signature": "def parse_log(text: str) -> list[RuntimeSignal]",
+      "docstring": "Parse a log text and return one RuntimeSignal per ERROR/WARN line.\n\nLines that contain ERROR, WARN, WARNING, CRITICAL, FATAL, or SEVERE are\neach converted to a RuntimeSignal.  Severity mapping:\n\n  ERROR / CRITICAL / FATAL / SEVERE \u2192 \"error\"\n  WARN / WARNING \u2192 \"warning\"\n\nArgs:\n    text: Raw log text.\n\nReturns:\n    List of RuntimeSignal objects, one per matching line."
+    },
+    {
+      "name": "parse_log_file",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/log.py",
+      "line": 65,
+      "signature": "def parse_log_file(path: Path) -> list[RuntimeSignal]",
+      "docstring": "Parse a log file and return RuntimeSignals.\n\nArgs:\n    path: Path to the log file.\n\nReturns:\n    List of RuntimeSignal objects."
+    },
+    {
+      "name": "_extract_paths",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/log.py",
+      "line": 80,
+      "signature": "def _extract_paths(line: str) -> list[Path]",
+      "docstring": "Extract file paths referenced in a log line."
+    },
+    {
+      "name": "parse_stack_trace",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/stack_trace.py",
+      "line": 46,
+      "signature": "def parse_stack_trace(text: str) -> list[RuntimeSignal]",
+      "docstring": "Parse free-form text containing stack traces into RuntimeSignals.\n\nDetects Python, Java, and .NET stack trace blocks.  Each distinct\nblock becomes one RuntimeSignal.\n\nArgs:\n    text: Raw text (error output, log file snippet, etc.).\n\nReturns:\n    List of RuntimeSignal objects, one per detected stack trace block."
+    },
+    {
+      "name": "_block_to_signal",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/stack_trace.py",
+      "line": 95,
+      "signature": "def _block_to_signal(lines: list[str]) -> RuntimeSignal | None",
+      "docstring": "Convert a block of lines into a RuntimeSignal if it looks like a trace."
+    },
+    {
+      "name": "_extract_message",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/stack_trace.py",
+      "line": 117,
+      "signature": "def _extract_message(text: str) -> tuple[str, str]",
+      "docstring": "Return (message, source_label) from stack trace text."
+    },
+    {
+      "name": "_extract_paths",
+      "type": "function",
+      "file": "packages/runtime/src/runtime/parsers/stack_trace.py",
+      "line": 132,
+      "signature": "def _extract_paths(lines: list[str]) -> list[Path]",
+      "docstring": "Extract referenced file paths from stack trace lines."
+    },
+    {
+      "name": "test_junit_xml_one_failure",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 56,
+      "signature": "def test_junit_xml_one_failure() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_junit_xml_no_failures_returns_empty",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 63,
+      "signature": "def test_junit_xml_no_failures_returns_empty() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_junit_xml_testsuites_wrapper",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 67,
+      "signature": "def test_junit_xml_testsuites_wrapper() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_junit_xml_extracts_python_path",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 72,
+      "signature": "def test_junit_xml_extracts_python_path() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_junit_xml_invalid_xml_returns_empty",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 77,
+      "signature": "def test_junit_xml_invalid_xml_returns_empty() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_junit_xml_file",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 81,
+      "signature": "def test_junit_xml_file(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_python_stack_trace_detected",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 115,
+      "signature": "def test_python_stack_trace_detected() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_python_stack_trace_paths",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 122,
+      "signature": "def test_python_stack_trace_paths() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_java_stack_trace_detected",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 128,
+      "signature": "def test_java_stack_trace_detected() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_dotnet_stack_trace_detected",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 134,
+      "signature": "def test_dotnet_stack_trace_detected() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_plain_text_no_trace_returns_empty",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 142,
+      "signature": "def test_plain_text_no_trace_returns_empty() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_log_extracts_errors",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 160,
+      "signature": "def test_log_extracts_errors() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_log_extracts_warnings",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 166,
+      "signature": "def test_log_extracts_warnings() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_log_info_lines_ignored",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 172,
+      "signature": "def test_log_info_lines_ignored() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_log_empty_text_returns_empty",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 177,
+      "signature": "def test_log_empty_text_returns_empty() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_dotnet_output_detects_failure",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 205,
+      "signature": "def test_dotnet_output_detects_failure() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_dotnet_output_extracts_path",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 211,
+      "signature": "def test_dotnet_output_extracts_path() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_dotnet_output_no_failures_returns_empty",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 216,
+      "signature": "def test_dotnet_output_no_failures_returns_empty() -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_parse_error_file_xml",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 224,
+      "signature": "def test_parse_error_file_xml(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_parse_error_file_log",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 231,
+      "signature": "def test_parse_error_file_log(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_parse_error_file_stack_trace_txt",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 238,
+      "signature": "def test_parse_error_file_stack_trace_txt(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_parse_error_file_missing_returns_empty",
+      "type": "function",
+      "file": "packages/runtime/tests/test_parsers.py",
+      "line": 245,
+      "signature": "def test_parse_error_file_missing_returns_empty(tmp_path: Path) -> None",
+      "docstring": ""
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/runtime/tests/test_stub.py",
+      "line": 6,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "Database",
+      "type": "class",
+      "file": "packages/storage-sqlite/src/storage_sqlite/database.py",
+      "line": 19,
+      "signature": "class Database",
+      "docstring": "Manages connection lifecycle and schema initialization for context-router's SQLite DB."
+    },
+    {
+      "name": "MigrationRunner",
+      "type": "class",
+      "file": "packages/storage-sqlite/src/storage_sqlite/migrations.py",
+      "line": 13,
+      "signature": "class MigrationRunner",
+      "docstring": "Applies SQL migration files in lexicographic order, skipping already-applied ones."
+    },
+    {
+      "name": "db",
+      "type": "function",
+      "file": "packages/storage-sqlite/tests/test_database.py",
+      "line": 19,
+      "signature": "def db(...)",
+      "docstring": "Provide an initialized Database for each test."
+    },
+    {
+      "name": "TestDatabase",
+      "type": "class",
+      "file": "packages/storage-sqlite/tests/test_database.py",
+      "line": 26,
+      "signature": "class TestDatabase",
+      "docstring": ""
+    },
+    {
+      "name": "TestObservationRepository",
+      "type": "class",
+      "file": "packages/storage-sqlite/tests/test_database.py",
+      "line": 50,
+      "signature": "class TestObservationRepository",
+      "docstring": ""
+    },
+    {
+      "name": "TestDecisionRepository",
+      "type": "class",
+      "file": "packages/storage-sqlite/tests/test_database.py",
+      "line": 68,
+      "signature": "class TestDecisionRepository",
+      "docstring": ""
+    },
+    {
+      "name": "TestRuntimeSignalRepository",
+      "type": "class",
+      "file": "packages/storage-sqlite/tests/test_database.py",
+      "line": 96,
+      "signature": "class TestRuntimeSignalRepository",
+      "docstring": ""
+    },
+    {
+      "name": "detect_links",
+      "type": "function",
+      "file": "packages/workspace/src/workspace/link_detector.py",
+      "line": 17,
+      "signature": "def detect_links(repos: list[RepoDescriptor]) -> dict[str, list[str]]",
+      "docstring": "Auto-detect cross-repo links by scanning Python import statements.\n\nFor each pair of repos (A, B): if any .py file in repo A contains\n``import <B-name>`` or ``from <B-name>`` (where <B-name> is B's repo\nname with hyphens replaced by underscores), then A \u2192 B is recorded as\na link.\n\nArgs:\n    repos: List of repo descriptors to scan.\n\nReturns:\n    Dict ``{repo_name: [linked_repo_name, ...]}``.  Only repos with\n    at least one detected link appear as keys."
+    },
+    {
+      "name": "_git_state",
+      "type": "function",
+      "file": "packages/workspace/src/workspace/loader.py",
+      "line": 14,
+      "signature": "def _git_state(path: Path) -> tuple[str, str, bool]",
+      "docstring": "Return (branch, sha, dirty) for a git repo at *path*.\n\nReturns (\"\", \"\", False) if the directory is not a git repo or git is not\navailable \u2014 callers should treat this as \"unknown state, not dirty\"."
+    },
+    {
+      "name": "WorkspaceLoader",
+      "type": "class",
+      "file": "packages/workspace/src/workspace/loader.py",
+      "line": 44,
+      "signature": "class WorkspaceLoader",
+      "docstring": "Loads and saves workspace.yaml, enriching repo entries with live git state."
+    },
+    {
+      "name": "RepoRegistry",
+      "type": "class",
+      "file": "packages/workspace/src/workspace/registry.py",
+      "line": 12,
+      "signature": "class RepoRegistry",
+      "docstring": "In-memory registry of repositories in a workspace.\n\nProvides add/remove/list operations and can refresh live git state.\nAll mutations are reflected in the underlying WorkspaceDescriptor but are\nNOT automatically persisted \u2014 callers must call\n``WorkspaceLoader.save(root, registry.to_descriptor())`` explicitly."
+    },
+    {
+      "name": "test_import",
+      "type": "function",
+      "file": "packages/workspace/tests/test_stub.py",
+      "line": 6,
+      "signature": "def test_import()",
+      "docstring": ""
+    },
+    {
+      "name": "TestWorkspaceLoader",
+      "type": "class",
+      "file": "packages/workspace/tests/test_workspace.py",
+      "line": 17,
+      "signature": "class TestWorkspaceLoader",
+      "docstring": ""
+    },
+    {
+      "name": "TestRepoRegistry",
+      "type": "class",
+      "file": "packages/workspace/tests/test_workspace.py",
+      "line": 68,
+      "signature": "class TestRepoRegistry",
+      "docstring": ""
+    },
+    {
+      "name": "TestLinkDetector",
+      "type": "class",
+      "file": "packages/workspace/tests/test_workspace.py",
+      "line": 156,
+      "signature": "class TestLinkDetector",
+      "docstring": ""
+    }
+  ]
+}

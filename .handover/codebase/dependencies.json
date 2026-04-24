@@ -1,0 +1,1295 @@
+{
+  "schema_version": "1.0",
+  "indexed_at": "2026-04-12T22:31:17.186063+00:00",
+  "graph": {
+    ".code-review-graph/.gitignore": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".context-router/config.yaml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".cursor/mcp.json": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".cursorrules": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".githooks/pre-push": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".github/workflows/ci.yml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".gitignore": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".mcp.json": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".opencode.json": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".python-version": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    ".windsurfrules": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "AGENTS.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "BENCHMARK_RESULTS.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "CLAUDE.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "GEMINI.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "HANDOVER.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "LICENSE": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "PLAN.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "README.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/benchmark.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/decisions.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/explain.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/index.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/init.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/mcp.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/memory.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/pack.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/watch.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/commands/workspace.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/src/cli/main.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/tests/test_benchmark_cli.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/tests/test_cli.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/cli/tests/test_workspace_cli.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/mcp-server/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/mcp-server/src/mcp_server/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/mcp-server/src/mcp_server/main.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/mcp-server/src/mcp_server/tools.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/mcp-server/tests/test_main.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/mcp-server/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "apps/mcp-server/tests/test_tools.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "conftest.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "docs/adr/0001-use-sqlite-fts5.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "docs/adr/0002-plugin-entry-points.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "docs/architecture.md": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "handover-chat-69dba52f-a450-8329-9d89-7dddaa4767d1.json": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-claude/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-claude/src/adapters_claude/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-claude/tests/test_claude_adapter.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-claude/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-codex/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-codex/src/adapters_codex/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-codex/tests/test_codex_adapter.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-codex/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-copilot/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-copilot/src/adapters_copilot/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-copilot/tests/test_copilot_adapter.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/adapters-copilot/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/src/benchmark/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/src/benchmark/baselines.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/src/benchmark/harness.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/src/benchmark/models.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/src/benchmark/reporters.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/src/benchmark/task_suite.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/tests/test_harness.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/tests/test_reporters.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/benchmark/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/contracts/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/contracts/src/contracts/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/contracts/src/contracts/config.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/contracts/src/contracts/interfaces.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/contracts/src/contracts/models.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/contracts/tests/test_models.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/core/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/core/src/core/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/core/src/core/plugin_loader.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/core/src/core/workspace_orchestrator.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/core/tests/test_orchestrator.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/core/tests/test_plugin_loader.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/core/tests/test_workspace_orchestrator.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/src/graph_index/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/src/graph_index/git_diff.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/src/graph_index/indexer.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/src/graph_index/scanner.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/src/graph_index/test_mapper.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/src/graph_index/watcher.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/src/graph_index/writer.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/tests/test_git_diff.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/tests/test_mapper.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/tests/test_scanner.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/graph-index/tests/test_writer.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-dotnet/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-dotnet/src/language_dotnet/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-dotnet/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-java/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-java/src/language_java/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-java/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-python/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-python/src/language_python/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-python/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-yaml/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-yaml/src/language_yaml/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/language-yaml/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/memory/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/memory/src/memory/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/memory/src/memory/store.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/memory/tests/test_store.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/memory/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/ranking/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/ranking/src/ranking/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/ranking/src/ranking/estimator.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/ranking/src/ranking/ranker.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/ranking/tests/test_estimator.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/ranking/tests/test_ranker.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/ranking/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/src/runtime/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/src/runtime/parsers/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/src/runtime/parsers/dotnet.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/src/runtime/parsers/junit_xml.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/src/runtime/parsers/log.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/src/runtime/parsers/stack_trace.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/tests/test_parsers.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/runtime/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/storage-sqlite/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/storage-sqlite/src/storage_sqlite/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/storage-sqlite/src/storage_sqlite/database.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/storage-sqlite/src/storage_sqlite/migrations/0001_initial.sql": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/storage-sqlite/src/storage_sqlite/migrations.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/storage-sqlite/tests/test_database.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/workspace/pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/workspace/src/workspace/__init__.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/workspace/src/workspace/link_detector.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/workspace/src/workspace/loader.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/workspace/src/workspace/registry.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/workspace/tests/test_stub.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "packages/workspace/tests/test_workspace.py": {
+      "depends_on": [],
+      "depended_on_by": []
+    },
+    "pyproject.toml": {
+      "depends_on": [],
+      "depended_on_by": []
+    }
+  },
+  "change_impact": {
+    ".code-review-graph/.gitignore": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".context-router/config.yaml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".cursor/mcp.json": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".cursorrules": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".githooks/pre-push": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".github/workflows/ci.yml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".gitignore": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".mcp.json": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".opencode.json": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".python-version": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    ".windsurfrules": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "AGENTS.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "BENCHMARK_RESULTS.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "CLAUDE.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "GEMINI.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "HANDOVER.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "LICENSE": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "PLAN.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "README.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/benchmark.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/decisions.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/explain.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/index.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/init.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/mcp.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/memory.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/pack.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/watch.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/commands/workspace.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/src/cli/main.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/tests/test_benchmark_cli.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/tests/test_cli.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/cli/tests/test_workspace_cli.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/mcp-server/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/mcp-server/src/mcp_server/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/mcp-server/src/mcp_server/main.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/mcp-server/src/mcp_server/tools.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/mcp-server/tests/test_main.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/mcp-server/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "apps/mcp-server/tests/test_tools.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "conftest.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "docs/adr/0001-use-sqlite-fts5.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "docs/adr/0002-plugin-entry-points.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "docs/architecture.md": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "handover-chat-69dba52f-a450-8329-9d89-7dddaa4767d1.json": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-claude/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-claude/src/adapters_claude/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-claude/tests/test_claude_adapter.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-claude/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-codex/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-codex/src/adapters_codex/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-codex/tests/test_codex_adapter.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-codex/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-copilot/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-copilot/src/adapters_copilot/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-copilot/tests/test_copilot_adapter.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/adapters-copilot/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/src/benchmark/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/src/benchmark/baselines.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/src/benchmark/harness.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/src/benchmark/models.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/src/benchmark/reporters.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/src/benchmark/task_suite.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/tests/test_harness.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/tests/test_reporters.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/benchmark/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/contracts/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/contracts/src/contracts/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/contracts/src/contracts/config.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/contracts/src/contracts/interfaces.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/contracts/src/contracts/models.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/contracts/tests/test_models.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/core/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/core/src/core/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/core/src/core/plugin_loader.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/core/src/core/workspace_orchestrator.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/core/tests/test_orchestrator.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/core/tests/test_plugin_loader.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/core/tests/test_workspace_orchestrator.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/src/graph_index/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/src/graph_index/git_diff.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/src/graph_index/indexer.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/src/graph_index/scanner.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/src/graph_index/test_mapper.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/src/graph_index/watcher.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/src/graph_index/writer.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/tests/test_git_diff.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/tests/test_mapper.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/tests/test_scanner.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/graph-index/tests/test_writer.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-dotnet/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-dotnet/src/language_dotnet/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-dotnet/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-java/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-java/src/language_java/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-java/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-python/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-python/src/language_python/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-python/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-yaml/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-yaml/src/language_yaml/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/language-yaml/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/memory/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/memory/src/memory/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/memory/src/memory/store.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/memory/tests/test_store.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/memory/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/ranking/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/ranking/src/ranking/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/ranking/src/ranking/estimator.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/ranking/src/ranking/ranker.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/ranking/tests/test_estimator.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/ranking/tests/test_ranker.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/ranking/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/src/runtime/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/src/runtime/parsers/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/src/runtime/parsers/dotnet.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/src/runtime/parsers/junit_xml.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/src/runtime/parsers/log.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/src/runtime/parsers/stack_trace.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/tests/test_parsers.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/runtime/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/storage-sqlite/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/storage-sqlite/src/storage_sqlite/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/storage-sqlite/src/storage_sqlite/database.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/storage-sqlite/src/storage_sqlite/migrations/0001_initial.sql": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/storage-sqlite/src/storage_sqlite/migrations.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/storage-sqlite/tests/test_database.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/workspace/pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/workspace/src/workspace/__init__.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/workspace/src/workspace/link_detector.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/workspace/src/workspace/loader.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/workspace/src/workspace/registry.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/workspace/tests/test_stub.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "packages/workspace/tests/test_workspace.py": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    },
+    "pyproject.toml": {
+      "direct_dependents": [],
+      "affected_tests": [],
+      "risk": "low"
+    }
+  }
+}
