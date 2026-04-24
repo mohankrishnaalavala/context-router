@@ -172,7 +172,10 @@ _TEST_PATH_RE = re.compile(
     r"|(^|[\\/])[^/\\]+[Ss]pec\.[a-zA-Z]",
 )
 
-_AUX_PATH_RE = re.compile(r"(^|[\\/])scripts?[\\/]", re.IGNORECASE)
+_AUX_PATH_RE = re.compile(
+    r"(^|[\\/])(?:scripts?|docs_src|examples?|fixtures|stubs|mocks)[\\/]",
+    re.IGNORECASE,
+)
 
 
 def _is_test_or_script_path(path: str) -> bool:
@@ -318,8 +321,10 @@ _REASON: dict[str, str] = {
 
 _DEFAULT_REASON = "Included in context pack"
 
-# Adaptive top-k constants (v4.2 T3)
+# Adaptive top-k constants (v4.2 T3; plateau rule added v4.3 C2)
 _ADAPTIVE_TOPK_FLOOR_RATIO: float = 0.6
+_ADAPTIVE_TOPK_PLATEAU_DELTA: float = 0.02   # max step between consecutive plateau items
+_ADAPTIVE_TOPK_ABS_FLOOR: float = 0.45       # plateau items must be below this threshold
 _ADAPTIVE_TOPK_MODES: frozenset[str] = frozenset({"review", "implement"})
 
 
@@ -565,19 +570,40 @@ class ContextRanker:
     def _apply_adaptive_top_k(
         self, items: list[ContextItem], mode: str
     ) -> list[ContextItem]:
-        """Drop trailing items whose confidence is below FLOOR_RATIO × leader's confidence.
+        """Drop low-signal trailing items in review/implement modes.
 
-        Only active in review/implement modes (where precision matters more than
-        completeness). A no-op in debug/handover modes and when fewer than 2 items
-        are present.
+        Two rules run independently; the more aggressive cut wins:
+
+        Rule 1 (floor ratio): drop trailing items below
+          FLOOR_RATIO × leader_confidence. Catches outlier stragglers
+          when the leader has a clearly dominant score.
+
+        Rule 2 (plateau): drop from the first index i where
+          items[i].confidence < ABS_FLOOR AND
+          items[i-1].confidence - items[i].confidence < PLATEAU_DELTA.
+          Catches flat tails where scores cluster just below ABS_FLOOR
+          (common on single-file-GT tasks with tight BM25 distributions).
+
+        A no-op in debug/handover modes and when fewer than 2 items present.
         """
         if len(items) < 2 or mode not in _ADAPTIVE_TOPK_MODES:
             return items
+
+        # Rule 1: floor ratio
         floor = _ADAPTIVE_TOPK_FLOOR_RATIO * items[0].confidence
-        # Keep the longest prefix where every item is above the floor.
         last_keep = len(items) - 1
         while last_keep > 0 and items[last_keep].confidence < floor:
             last_keep -= 1
+
+        # Rule 2: plateau cut — find first entry into a flat low-confidence plateau
+        for i in range(1, len(items)):
+            if (
+                items[i].confidence < _ADAPTIVE_TOPK_ABS_FLOOR
+                and items[i - 1].confidence - items[i].confidence < _ADAPTIVE_TOPK_PLATEAU_DELTA
+            ):
+                last_keep = min(last_keep, i - 1)
+                break
+
         return items[: last_keep + 1]
 
     def _apply_semantic_boost(self, items: list[ContextItem], query: str) -> list[ContextItem]:
@@ -847,8 +873,9 @@ class ContextRanker:
             default=0.0,
         )
 
-        # Pass 2: build result, applying the 0.85× penalty to test/script
-        # files only when a non-test competitor scores at least as well.
+        # Pass 2: build result, applying the 0.85× penalty to test/script/aux
+        # files when max_non_test_conf >= their pre-score (i.e. at least one
+        # non-auxiliary competitor ranks as high or higher).
         # In debug mode the penalty never fires (test failures are primary
         # evidence there).
         result = []

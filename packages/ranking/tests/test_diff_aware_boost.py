@@ -190,7 +190,7 @@ def test_boost_bumps_matching_item_by_015(
     ranked = ranker.rank(
         list(items),
         query="review",
-        mode="review",
+        mode="debug",  # debug mode: isolates diff-boost from adaptive top-k pruning
         diff_spec="HEAD",
         project_root=root,
         boosted_items_sink=sink,
@@ -253,7 +253,7 @@ def test_boost_no_op_when_path_not_in_diff(
     ranked = ranker.rank(
         list(items),
         query="review",
-        mode="review",
+        mode="debug",  # isolate diff-boost signal from adaptive top-k pruning
         diff_spec="HEAD",
         project_root=root,
         boosted_items_sink=sink,
