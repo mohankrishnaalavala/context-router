@@ -10,13 +10,43 @@
 | Architecture & packages | [.handover/context/architecture.md](.handover/context/architecture.md) |
 | Decisions (ADRs) | [.handover/context/decisions.md](.handover/context/decisions.md) |
 | Milestones & release status | [.handover/work/milestones.md](.handover/work/milestones.md) |
-| Current spec | [.handover/work/spec.md](.handover/work/spec.md) |
-| Open tasks | [.handover/work/tasks.md](.handover/work/tasks.md) |
+| **Current design spec** | [docs/design/README.md](docs/design/README.md) → pick the active release |
+| Open tasks (v4.3) | [.handover/work/tasks.md](.handover/work/tasks.md) |
+| Roadmap | [docs/roadmap.md](docs/roadmap.md) |
 | Coding standards | [.handover/standards/coding-standards.md](.handover/standards/coding-standards.md) |
 | Constraints & non-goals | [.handover/context/constraints.md](.handover/context/constraints.md) |
 | Open risks | [.handover/context/risks.md](.handover/context/risks.md) |
 
-**Starting a new session?** Run `get_context_pack(mode="handover")` first, then open the matching prompt in `.handover/prompts/`.
+## Where docs live — one rule
+
+| Type | Location | Who writes it |
+|---|---|---|
+| Design spec (what + why, per release) | `docs/design/<version>-<feature>.md` | Before any code |
+| DoD + CI gate | `docs/release/v4-outcomes.yaml` | Alongside design spec |
+| Formal ADRs | `docs/adr/` + `.handover/context/decisions.md` | At decision time |
+| User guides | `docs/guides/` | At feature ship |
+| Session memory | `.context-router/memory/observations/` via `save_observation` | After each session |
+| Benchmark / eval reports | `docs/benchmarks/`, `docs/eval/` | After eval runs |
+
+**Do not create docs outside these locations.** If a doc type doesn't fit, add it here first.
+
+## Session workflow
+
+**Starting a session** — always two calls before opening any file:
+```
+get_context_pack(mode="handover")          ← ranked files for resuming
+search_memory(query="<current topic>")     ← last session observations
+```
+
+**Ending a session** — always before clearing chat:
+```python
+save_observation(summary="...", task_type="implement", files_touched=[...])
+```
+Then: `git add .context-router/memory/observations/ && git commit -m "chore(memory): ..."`.
+
+**You can and should clear the chat between features.** `save_observation` + the two start calls recovers full context in ~500 tokens. Long chats waste tokens; committed observations do not.
+
+**Starting a new session?** Open `.handover/prompts/continue.md` for the full sequence.
 
 ---
 
