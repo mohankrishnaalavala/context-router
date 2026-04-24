@@ -20,8 +20,8 @@ def _build_pack_real(q, project_root: Path, workspace_roots: list[Path]) -> Pack
 
     orch = Orchestrator(project_root=project_root)
     pack = orch.build_pack(mode="implement", query=q.q)
-    files = [item.path_or_ref for item in pack.items if item.path_or_ref]
-    tokens = sum(item.est_tokens for item in pack.items)
+    files = [item.path_or_ref for item in pack.selected_items if item.path_or_ref]
+    tokens = sum(item.est_tokens for item in pack.selected_items)
     return PackResult(files=files, tokens=tokens)
 
 

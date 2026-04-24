@@ -1,0 +1,18 @@
+openapi: 3.0.0
+info: { title: synthetic-backend, version: 0.1.0 }
+paths:
+  /checkout:
+    post: { operationId: createCheckout }
+  /checkout/{id}:
+    get: { operationId: getCheckout }
+  /pricing:
+    get: { operationId: listPricing }
+  /pricing/{sku}:
+    get: { operationId: getPricing }
+  /users:
+    get: { operationId: listUsers }
+    post: { operationId: createUser }
+  /users/{id}:
+    get: { operationId: getUser }
+  /users/{id}/roles:
+    put: { operationId: setUserRoles }

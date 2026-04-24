@@ -1,0 +1,10 @@
+{"id": "Q01", "q": "add rate limiting to checkout", "gold": ["backend/src/checkout.py", "frontend/src/pages/Checkout.tsx"], "repos": ["backend", "frontend"]}
+{"id": "Q02", "q": "show pricing by sku", "gold": ["backend/src/pricing.py", "frontend/src/pages/Pricing.tsx"], "repos": ["backend", "frontend"]}
+{"id": "Q03", "q": "create a user", "gold": ["backend/src/users.py", "frontend/src/pages/Users.tsx"], "repos": ["backend", "frontend"]}
+{"id": "Q04", "q": "fetch checkout by id", "gold": ["backend/src/checkout.py"], "repos": ["backend"]}
+{"id": "Q05", "q": "list pricing catalog", "gold": ["backend/src/pricing.py", "frontend/src/api/client.ts"], "repos": ["backend", "frontend"]}
+{"id": "Q06", "q": "set user roles", "gold": ["backend/src/users.py", "frontend/src/pages/Users.tsx"], "repos": ["backend", "frontend"]}
+{"id": "Q07", "q": "get user profile", "gold": ["backend/src/users.py"], "repos": ["backend"]}
+{"id": "Q08", "q": "frontend calls backend checkout api", "gold": ["frontend/src/api/client.ts", "backend/src/checkout.py"], "repos": ["frontend", "backend"]}
+{"id": "Q09", "q": "add a new pricing sku", "gold": ["backend/src/pricing.py"], "repos": ["backend"]}
+{"id": "Q10", "q": "list users page", "gold": ["frontend/src/pages/Users.tsx", "backend/src/users.py"], "repos": ["frontend", "backend"]}
