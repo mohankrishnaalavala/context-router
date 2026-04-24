@@ -9,6 +9,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.1.0] — 2026-04-24
+
+### Added
+- `save_observation` now dual-writes: SQLite (primary) + git-tracked Markdown file under `.context-router/memory/observations/{date}-{slug}.md` with YAML frontmatter.
+- Write gate: rejects observations with `summary < 60 chars` or empty `files_touched`, printing an explicit stderr warning instead of silently no-oping.
+- `pack --use-memory` / MCP `get_context_pack use_memory: true` — injects up to 8 BM25+recency-ranked memory hits into every context pack, exposed as `memory_hits` in JSON output.
+- `memory show <id>` — look up a saved observation by exact or prefix ID.
+- `memory migrate-from-sqlite` — backfill all existing SQLite observations into git-tracked `.md` files.
+- `NOTICE` file (Apache 2.0 attribution).
+
+### Fixed
+- **Ranking regression (file-level dedup):** `_dedup_by_file()` now collapses multiple symbols from the same file into the highest-confidence representative before budget enforcement, preventing duplicate `path_or_ref` entries from filling the top-k window.
+- **BM25 CamelCase tokenization:** `_tokenize()` splits `OAuth2PasswordBearer` → `{"oauth2", "password", "bearer"}` so camel-case symbol names match query terms correctly.
+- **Test-file ranking:** source files score 1.18× higher than test/script files in `review` and `implement` modes via a 0.85× confidence penalty on test paths (no penalty in `debug` mode).
+
+### Changed
+- License changed from MIT to Apache 2.0.
+- BM25 corpus now includes the file basename alongside title and excerpt for better filename-query matching.
+
+---
+
 ## [4.0.0] — 2026-04-23
 
 ### Added
