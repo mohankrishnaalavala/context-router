@@ -271,7 +271,9 @@ def capture(
       1 — database not initialised
     """
     from contracts.models import Observation
+    from core.orchestrator import _find_project_root
     from memory.capture import capture_observation
+    from memory.file_writer import MemoryFileWriter
 
     files_list = [f for f in files.split() if f] if files else []
 
@@ -289,12 +291,34 @@ def capture(
     finally:
         db.close()
 
+    # Also write a git-tracked .md file when the observation passes the write
+    # gate (summary >= 60 chars, files_touched non-empty, task_type != scratch).
+    # This mirrors the MCP save_observation behaviour so the two surfaces stay
+    # consistent.  A failed write gate is NOT a hard error — it just means the
+    # observation lives only in SQLite (e.g. it was too short).
+    # Pre-check the gate so the writer never emits its own stderr warning
+    # during `capture`; callers that only want the SQLite record (e.g. very
+    # short summaries) are not surprised by unexpected stderr output.
+    md_path: str | None = None
+    if row_id is not None:
+        root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+        memory_dir = root / ".context-router" / "memory"
+        writer = MemoryFileWriter(memory_dir)
+        if not writer._check_gate(obs):
+            file_result = writer.write_observation(obs)
+            if file_result.written:
+                writer.update_index()
+                md_path = str(file_result.path)
+
     if json_output:
         import json
         if row_id is None:
             typer.echo(json.dumps({"captured": False, "reason": "duplicate"}))
         else:
-            typer.echo(json.dumps({"captured": True, "id": row_id}))
+            result: dict = {"captured": True, "id": row_id}
+            if md_path:
+                result["file"] = md_path
+            typer.echo(json.dumps(result))
     else:
         if row_id is None:
             typer.echo("Skipped: duplicate observation (same task type + summary).")
