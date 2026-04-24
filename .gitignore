@@ -224,3 +224,9 @@ docs/benchmarks/
 internal_docs/ship-check/
 internal_docs/*
 .context-router/
+
+# v4.0 evaluation fixtures: cloned sources are derived, not tracked.
+tests/fixtures/workspaces/real/*/
+!tests/fixtures/workspaces/real/*/queries.jsonl
+!tests/fixtures/workspaces/real/README.md
+!tests/fixtures/workspaces/real/.gitkeep
