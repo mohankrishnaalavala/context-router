@@ -1,0 +1,21 @@
+[project]
+name = "context-router-language-rust"
+version = "4.4.0"
+requires-python = ">=3.12"
+description = "Rust language analyzer plugin for context-router"
+license = {text = "Apache-2.0"}
+dependencies = [
+    "context-router-contracts",
+    "tree-sitter>=0.21",
+    "tree-sitter-rust>=0.21",
+]
+
+[project.entry-points."context_router.language_analyzers"]
+rs = "language_rust:RustAnalyzer"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/language_rust"]

@@ -35,10 +35,13 @@ context-router-contracts-extractor = { workspace = true }
 context-router-benchmark = { workspace = true }
 context-router-evaluation = { workspace = true }
 context-router-language-python = { workspace = true }
+context-router-language-go = { workspace = true }
 context-router-language-java = { workspace = true }
 context-router-language-dotnet = { workspace = true }
 context-router-language-yaml = { workspace = true }
 context-router-language-typescript = { workspace = true }
+context-router-language-rust = { workspace = true }
+context-router-language-php = { workspace = true }
 context-router-adapters-claude = { workspace = true }
 context-router-adapters-copilot = { workspace = true }
 context-router-adapters-codex = { workspace = true }
@@ -62,10 +65,13 @@ members = [
     "packages/benchmark",
     "packages/evaluation",
     "packages/language-python",
+    "packages/language-go",
     "packages/language-java",
     "packages/language-dotnet",
     "packages/language-yaml",
     "packages/language-typescript",
+    "packages/language-rust",
+    "packages/language-php",
     "packages/adapters-claude",
     "packages/adapters-copilot",
     "packages/adapters-codex",
