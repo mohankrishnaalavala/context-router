@@ -9,6 +9,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.3.0] — 2026-04-25
+
+### Added
+- **Staleness detection (`memory stale`):** observations whose `files_touched` paths are absent from git HEAD are listed with severity (`missing_file`, `renamed`, `dormant`). New `ObservationStalenessChecker` uses batched `git ls-files` + `git log --follow` for rename detection. `MemoryHit` gains `stale`, `staleness_reason`, `source_repo` fields (backwards-compatible defaults).
+- **`memory prune --stale`:** removes or archives hard-stale observations. Flags: `--dry-run`, `--archive` (move to `.context-router/memory/archived/`), `--severity` (filter by `missing_file` or `renamed`).
+- **Stale hit surfacing in packs:** `pack --use-memory --json` now includes `"stale": true` and `"staleness_reason"` on affected `memory_hits` entries, plus a `stderr` warning per stale hit.
+- **Stale index warning:** `get_context_pack` emits `WARN: index is behind HEAD by N commits` when the graph-index is older than the latest commit.
+- **Memory federation (`--workspace`):** `memory search --workspace` and `memory list --workspace` query committed observations from all repos declared in `workspace.yaml`, labeled with `source_repo`. MCP `search_memory` gains an optional `workspace: bool` param (default `false`, no breaking change). `memory_hits_summary` gains a `federated` count.
+- **Ranking quality (Phase C):** `_AUX_PATH_RE` extended to cover `docs_src/`, `examples/`, `fixtures/`, `stubs/`, `mocks/` paths — fastapi T1 regression fixed. Plateau-based Rule 2 added to adaptive top-k: drops trailing items that cluster below `ABS_FLOOR=0.45` with step < `PLATEAU_DELTA=0.02`. Guard prevents misfiring on zero-confidence clusters.
+- `scripts/smoke-v4.3.sh` — 6-gate smoke test (C-1, C-2, A-1, A-2, A-3, B-1).
+- 4 DoD entries in `docs/release/v4-outcomes.yaml` (`v4.3-adaptive-topk-gradient`, `v4.3-fastapi-t1-recovery`, `v4.3-stale-detection`, `v4.3-memory-federation`).
+
+---
+
 ## [4.2.0] — 2026-04-24
 
 ### Added
