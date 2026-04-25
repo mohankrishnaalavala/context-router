@@ -376,12 +376,16 @@ def get_context_pack(
                     "files_touched": h.files_touched,
                     "task": h.task,
                     "provenance": h.provenance,
+                    "source_repo": h.source_repo,
+                    "stale": h.stale,
+                    "staleness_reason": h.staleness_reason,
                 }
                 for h in _hits
             ]
             result["memory_hits_summary"] = {
                 "committed": sum(1 for h in _hits if h.provenance == "committed"),
                 "staged": sum(1 for h in _hits if h.provenance == "staged"),
+                "federated": sum(1 for h in _hits if h.source_repo != "local"),
             }
 
         _total_tokens = sum(i.est_tokens for i in pack.selected_items)
@@ -394,6 +398,31 @@ def get_context_pack(
             "memory_tokens": _mem_tokens,
             "memory_ratio": round(_mem_tokens / _total_tokens, 4) if _total_tokens > 0 else 0.0,
         }
+
+        # Stale index warning: emit to stderr if graph-index is behind HEAD
+        _stale_warn = project_root or ""
+        try:
+            import subprocess, sys as _sys
+            _pr = Path(_stale_warn).resolve() if _stale_warn else Path.cwd()
+            _idx = _pr / ".context-router" / "graph-index.json"
+            if _idx.exists():
+                _idx_mtime = _idx.stat().st_mtime
+                _head_ts_str = subprocess.run(
+                    ["git", "log", "-1", "--format=%ct"],
+                    cwd=str(_pr), capture_output=True, text=True, timeout=5,
+                ).stdout.strip()
+                if _head_ts_str and float(_head_ts_str) > _idx_mtime:
+                    _n = subprocess.run(
+                        ["git", "rev-list", "--count", "HEAD"],
+                        cwd=str(_pr), capture_output=True, text=True, timeout=5,
+                    ).stdout.strip()
+                    print(
+                        f"WARN: index is behind HEAD by {_n} commits"
+                        " — run `context-router index` to refresh",
+                        file=_sys.stderr,
+                    )
+        except Exception:  # noqa: BLE001
+            pass
 
         return result
     except FileNotFoundError as exc:
@@ -879,30 +908,67 @@ def save_decision(
     return {"saved": True, "id": decision_id}
 
 
-def search_memory(query: str, project_root: str = "") -> dict:
+def search_memory(query: str, project_root: str = "", workspace: bool = False) -> dict:
     """Full-text search stored observations.
 
     Args:
         query: FTS5 query string.
         project_root: Project root. Auto-detected if omitted.
+        workspace: When True, search memory across all workspace repos (committed
+            observations only). Results include ``source_repo`` labels.
+            Emits a stderr warning and falls back to single-repo mode when no
+            workspace.yaml is found.
 
     Returns:
         Dict with a list of matching observation dicts.
     """
     from core.orchestrator import _find_project_root
-    from memory.store import ObservationStore
-    from storage_sqlite.database import Database
+    from memory.file_retriever import retrieve_observations
 
     root = Path(project_root) if project_root else _find_project_root(Path.cwd())
-    db_path = root / ".context-router" / "context-router.db"
-    if not db_path.exists():
-        return {"error": "Database not found. Run init first.", "results": []}
+    memory_dir = root / ".context-router" / "memory"
 
-    with Database(db_path) as db:
-        store = ObservationStore(db)
-        results = store.search(query)
+    fed_roots = None
+    if workspace:
+        try:
+            from workspace.loader import WorkspaceLoader
+            import sys
+            ws = WorkspaceLoader.load(root)
+            if ws is None:
+                print(
+                    "WARN: --workspace has no effect; no workspace.yaml found",
+                    file=sys.stderr,
+                )
+            else:
+                fed_roots = [
+                    (repo.name, repo.path)
+                    for repo in ws.repos
+                    if Path(repo.path).resolve() != root.resolve()
+                ]
+        except Exception:  # noqa: BLE001
+            pass
 
-    return {"results": [r.model_dump(mode="json") for r in results]}
+    try:
+        hits = retrieve_observations(query, memory_dir, k=20, project_root=root, federated_roots=fed_roots)
+    except Exception:  # noqa: BLE001
+        hits = []
+
+    return {
+        "results": [
+            {
+                "id": h.id,
+                "excerpt": h.excerpt,
+                "score": round(h.score, 4),
+                "files_touched": h.files_touched,
+                "task": h.task,
+                "provenance": h.provenance,
+                "source_repo": h.source_repo,
+                "stale": h.stale,
+                "staleness_reason": h.staleness_reason,
+            }
+            for h in hits
+        ]
+    }
 
 
 def record_feedback(

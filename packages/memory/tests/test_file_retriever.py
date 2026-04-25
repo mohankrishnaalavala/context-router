@@ -291,3 +291,222 @@ class TestProvenanceWithNonGitRoot:
         assert all(h.provenance == "committed" for h in result), (
             f"Expected fallback to committed, got: {[h.provenance for h in result]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# v4.3 Phase A — Staleness detection
+# ---------------------------------------------------------------------------
+
+def _git(*args: str, cwd: Path) -> None:
+    import subprocess
+    subprocess.run(["git", *args], cwd=str(cwd), check=True, capture_output=True)
+
+
+def _init_repo(root: Path) -> None:
+    root.mkdir(parents=True, exist_ok=True)
+    _git("init", "-q", "-b", "main", cwd=root)
+    _git("config", "user.email", "t@t.t", cwd=root)
+    _git("config", "user.name", "T", cwd=root)
+    _git("config", "commit.gpgsign", "false", cwd=root)
+
+
+class TestStalenessFields:
+    """MemoryHit carries stale / staleness_reason / source_repo with safe defaults."""
+
+    def test_memhit_defaults(self) -> None:
+        h = MemoryHit(
+            id="x", path=Path("/tmp/x.md"), excerpt="e", score=1.0
+        )
+        assert h.stale is False
+        assert h.staleness_reason is None
+        assert h.source_repo == "local"
+
+
+class TestStalenessChecker:
+    """ObservationStalenessChecker detects missing_file and dormant."""
+
+    def test_missing_file_detected(self, tmp_path: Path) -> None:
+        from memory.staleness import ObservationStalenessChecker
+        _init_repo(tmp_path)
+        (tmp_path / "present.py").write_text("x")
+        _git("add", "-A", cwd=tmp_path)
+        _git("commit", "-q", "-m", "init", cwd=tmp_path)
+
+        checker = ObservationStalenessChecker()
+        is_stale, reason = checker.check(["missing_file.py"], tmp_path)
+        assert is_stale is True
+        assert "missing_file" in reason
+
+    def test_present_file_not_stale(self, tmp_path: Path) -> None:
+        from memory.staleness import ObservationStalenessChecker
+        _init_repo(tmp_path)
+        (tmp_path / "existing.py").write_text("x")
+        _git("add", "-A", cwd=tmp_path)
+        _git("commit", "-q", "-m", "init", cwd=tmp_path)
+
+        checker = ObservationStalenessChecker()
+        is_stale, reason = checker.check(["existing.py"], tmp_path)
+        assert is_stale is False
+
+    def test_empty_files_not_stale(self, tmp_path: Path) -> None:
+        from memory.staleness import ObservationStalenessChecker
+        checker = ObservationStalenessChecker()
+        is_stale, reason = checker.check([], tmp_path)
+        assert is_stale is False
+        assert reason == ""
+
+    def test_dormant_check_informational(self, tmp_path: Path) -> None:
+        from memory.staleness import ObservationStalenessChecker
+        from datetime import datetime, timezone, timedelta
+        _init_repo(tmp_path)
+        (tmp_path / "ok.py").write_text("x")
+        _git("add", "-A", cwd=tmp_path)
+        _git("commit", "-q", "-m", "init", cwd=tmp_path)
+
+        old_date = datetime.now(tz=timezone.utc) - timedelta(days=100)
+        checker = ObservationStalenessChecker()
+        is_stale, reason = checker.check(["ok.py"], tmp_path, created_at=old_date)
+        # dormant is informational: file is present, so is_stale=False
+        assert is_stale is False
+        assert "dormant" in reason
+
+
+class TestStalenessWiredIntoRetriever:
+    """retrieve_observations sets hit.stale=True when a referenced file is deleted."""
+
+    def test_stale_hit_flagged(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "to_delete.py").write_text("x")
+        md_dir = _memory_dir(tmp_path)
+        obs_dir = md_dir / "observations"
+        _write_obs(obs_dir, "2026-01-01-stale", "Stale obs",
+                   files_touched=["src/to_delete.py"])
+        _git("add", "-A", cwd=tmp_path)
+        _git("commit", "-q", "-m", "init", cwd=tmp_path)
+
+        # Delete the file and commit
+        (tmp_path / "src" / "to_delete.py").unlink()
+        _git("add", "-A", cwd=tmp_path)
+        _git("commit", "-q", "-m", "remove", cwd=tmp_path)
+
+        hits = retrieve_observations("stale", md_dir, k=5, project_root=tmp_path)
+        assert len(hits) >= 1
+        stale_hits = [h for h in hits if h.stale]
+        assert len(stale_hits) >= 1
+        assert stale_hits[0].staleness_reason is not None
+        assert "missing_file" in stale_hits[0].staleness_reason
+
+    def test_non_stale_hit_not_flagged(self, tmp_path: Path) -> None:
+        _init_repo(tmp_path)
+        (tmp_path / "src").mkdir()
+        (tmp_path / "src" / "present.py").write_text("x")
+        md_dir = _memory_dir(tmp_path)
+        obs_dir = md_dir / "observations"
+        _write_obs(obs_dir, "2026-01-01-fresh", "Fresh obs",
+                   files_touched=["src/present.py"])
+        _git("add", "-A", cwd=tmp_path)
+        _git("commit", "-q", "-m", "init", cwd=tmp_path)
+
+        hits = retrieve_observations("fresh", md_dir, k=5, project_root=tmp_path)
+        assert all(not h.stale for h in hits)
+
+
+# ---------------------------------------------------------------------------
+# v4.3 Phase B — Memory federation
+# ---------------------------------------------------------------------------
+
+class TestFederation:
+    """retrieve_observations with federated_roots returns cross-repo hits."""
+
+    def test_federated_committed_obs_included(self, tmp_path: Path) -> None:
+        local_root = tmp_path / "local"
+        sibling_root = tmp_path / "sibling"
+        _init_repo(local_root)
+        _init_repo(sibling_root)
+
+        # Local observation
+        local_md = _memory_dir(local_root)
+        local_obs = local_md / "observations"
+        _write_obs(local_obs, "2026-04-01-local", "Local checkout fix",
+                   files_touched=["src/local.py"])
+        _git("add", "-A", cwd=local_root)
+        _git("commit", "-q", "-m", "init", cwd=local_root)
+
+        # Sibling observation (committed)
+        sib_md = _memory_dir(sibling_root)
+        sib_obs = sib_md / "observations"
+        _write_obs(sib_obs, "2026-04-01-sib", "Sibling checkout fix",
+                   files_touched=["src/sib.py"])
+        _git("add", "-A", cwd=sibling_root)
+        _git("commit", "-q", "-m", "init", cwd=sibling_root)
+
+        hits = retrieve_observations(
+            "checkout",
+            local_md,
+            k=10,
+            project_root=local_root,
+            federated_roots=[("sibling", sibling_root)],
+        )
+        source_repos = {h.source_repo for h in hits}
+        assert "local" in source_repos
+        assert "sibling" in source_repos
+
+    def test_federated_staged_obs_excluded(self, tmp_path: Path) -> None:
+        local_root = tmp_path / "local"
+        sibling_root = tmp_path / "sibling"
+        _init_repo(local_root)
+        _init_repo(sibling_root)
+
+        local_md = _memory_dir(local_root)
+        local_obs = local_md / "observations"
+        _write_obs(local_obs, "2026-04-01-local", "Local auth fix",
+                   files_touched=["src/local.py"])
+        _git("add", "-A", cwd=local_root)
+        _git("commit", "-q", "-m", "init", cwd=local_root)
+
+        # Sibling has a staged (uncommitted) observation
+        sib_md = _memory_dir(sibling_root)
+        sib_obs = sib_md / "observations"
+        # Make an initial commit so the repo is valid, but do NOT commit the obs
+        (sibling_root / "README.md").write_text("hi")
+        _git("add", "README.md", cwd=sibling_root)
+        _git("commit", "-q", "-m", "init", cwd=sibling_root)
+        _write_obs(sib_obs, "2026-04-01-staged", "Staged-only obs",
+                   files_touched=["src/sib.py"])
+        # Stage the obs file but do not commit
+        _git("add", "-A", cwd=sibling_root)
+
+        hits = retrieve_observations(
+            "auth",
+            local_md,
+            k=10,
+            project_root=local_root,
+            federated_roots=[("sibling", sibling_root)],
+        )
+        sibling_hits = [h for h in hits if h.source_repo == "sibling"]
+        assert sibling_hits == [], f"Staged-only obs must not federate: {sibling_hits}"
+
+    def test_missing_sibling_warns_and_continues(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        local_root = tmp_path / "local"
+        _init_repo(local_root)
+        local_md = _memory_dir(local_root)
+        local_obs = local_md / "observations"
+        _write_obs(local_obs, "2026-04-01-local", "Local impl fix")
+        _git("add", "-A", cwd=local_root)
+        _git("commit", "-q", "-m", "init", cwd=local_root)
+
+        hits = retrieve_observations(
+            "impl",
+            local_md,
+            k=10,
+            project_root=local_root,
+            federated_roots=[("missing-repo", tmp_path / "does_not_exist")],
+        )
+        # Local hits still returned
+        assert len(hits) >= 1
+        assert all(h.source_repo == "local" for h in hits)
+        captured = capsys.readouterr()
+        assert "missing-repo" in captured.err
