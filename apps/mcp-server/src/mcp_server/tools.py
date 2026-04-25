@@ -914,61 +914,81 @@ def search_memory(query: str, project_root: str = "", workspace: bool = False) -
     Args:
         query: FTS5 query string.
         project_root: Project root. Auto-detected if omitted.
-        workspace: When True, search memory across all workspace repos (committed
-            observations only). Results include ``source_repo`` labels.
-            Emits a stderr warning and falls back to single-repo mode when no
-            workspace.yaml is found.
+        workspace: When True, additionally search committed observations from all
+            workspace repos (file-based BM25+recency, labeled with source_repo).
+            Emits a stderr warning and omits federation when no workspace.yaml found.
+            Local search always uses the SQLite store.
 
     Returns:
         Dict with a list of matching observation dicts.
     """
+    import sys
     from core.orchestrator import _find_project_root
-    from memory.file_retriever import retrieve_observations
+    from memory.store import ObservationStore
+    from storage_sqlite.database import Database
 
     root = Path(project_root) if project_root else _find_project_root(Path.cwd())
-    memory_dir = root / ".context-router" / "memory"
+    db_path = root / ".context-router" / "context-router.db"
+    if not db_path.exists():
+        return {"error": "Database not found. Run init first.", "results": []}
 
-    fed_roots = None
-    if workspace:
-        try:
-            from workspace.loader import WorkspaceLoader
-            import sys
-            ws = WorkspaceLoader.load(root)
-            if ws is None:
-                print(
-                    "WARN: --workspace has no effect; no workspace.yaml found",
-                    file=sys.stderr,
-                )
-            else:
-                fed_roots = [
-                    (repo.name, repo.path)
-                    for repo in ws.repos
-                    if Path(repo.path).resolve() != root.resolve()
-                ]
-        except Exception:  # noqa: BLE001
-            pass
+    with Database(db_path) as db:
+        store = ObservationStore(db)
+        results = store.search(query)
 
+    local_results = [
+        {**r.model_dump(mode="json"), "source_repo": "local"}
+        for r in results
+    ]
+
+    if not workspace:
+        return {"results": local_results}
+
+    # Federation: committed observations from sibling repos via file-based BM25+recency
+    fed_results: list[dict] = []
     try:
-        hits = retrieve_observations(query, memory_dir, k=20, project_root=root, federated_roots=fed_roots)
-    except Exception:  # noqa: BLE001
-        hits = []
+        from workspace.loader import WorkspaceLoader
+        from memory.file_retriever import retrieve_observations
 
-    return {
-        "results": [
-            {
-                "id": h.id,
-                "excerpt": h.excerpt,
-                "score": round(h.score, 4),
-                "files_touched": h.files_touched,
-                "task": h.task,
-                "provenance": h.provenance,
-                "source_repo": h.source_repo,
-                "stale": h.stale,
-                "staleness_reason": h.staleness_reason,
-            }
-            for h in hits
-        ]
-    }
+        ws = WorkspaceLoader.load(root)
+        if ws is None:
+            print(
+                "WARN: --workspace has no effect; no workspace.yaml found",
+                file=sys.stderr,
+            )
+        else:
+            fed_roots = [
+                (repo.name, repo.path)
+                for repo in ws.repos
+                if Path(repo.path).resolve() != root.resolve()
+            ]
+            if fed_roots:
+                memory_dir = root / ".context-router" / "memory"
+                # Retrieve with federated_roots — local hits come from .md files too,
+                # but we only use the federated hits (source_repo != "local")
+                hits = retrieve_observations(
+                    query, memory_dir, k=20, project_root=root,
+                    federated_roots=fed_roots,
+                )
+                fed_results = [
+                    {
+                        "id": h.id,
+                        "excerpt": h.excerpt,
+                        "score": round(h.score, 4),
+                        "files_touched": h.files_touched,
+                        "task": h.task,
+                        "provenance": h.provenance,
+                        "source_repo": h.source_repo,
+                        "stale": h.stale,
+                        "staleness_reason": h.staleness_reason,
+                    }
+                    for h in hits
+                    if h.source_repo != "local"
+                ]
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {"results": local_results + fed_results}
 
 
 def record_feedback(
