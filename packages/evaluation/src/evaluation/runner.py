@@ -31,6 +31,8 @@ class EvalReport:
     token_efficiency: float
     n_queries: int
     k: int
+    downstream_read_tokens_avg: float = 0.0
+    downstream_read_tokens_total: int = 0
 
 
 BuildPack = Callable[[Query, Path, list[Path]], PackResult]

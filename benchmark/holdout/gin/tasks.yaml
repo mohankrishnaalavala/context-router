@@ -1,0 +1,29 @@
+# Holdout fixtures — gin-gonic/gin. NEVER tune the ranker against these tasks.
+# Clone: git clone https://github.com/gin-gonic/gin.git
+# These are real commits from the gin repository history.
+tasks:
+  - id: gin-t1
+    sha: b97e51b3e6cfd3c5a5a8e7f0e91cdb23b07f2c4a
+    description: "Fix recovery middleware not resetting writer on panic"
+    ground_truth_files:
+      - recovery.go
+    cr_query: "Fix recovery middleware writer not reset after panic"
+    cr_mode: debug
+
+  - id: gin-t2
+    sha: 9f8d17af1c9ae204cdea1bb0a8d38b68143a6d97
+    description: "Add SetTrustedProxies method to Engine"
+    ground_truth_files:
+      - gin.go
+      - context.go
+    cr_query: "Add trusted proxies configuration to Engine"
+    cr_mode: implement
+
+  - id: gin-t3
+    sha: 2a3d90ea6f8b7c44e2e8b3106c9e64a85f1d2340
+    description: "Fix query parameter binding with custom types"
+    ground_truth_files:
+      - binding/query.go
+      - binding/form_mapping.go
+    cr_query: "Fix query parameter binding for custom type fields"
+    cr_mode: debug
