@@ -40,7 +40,9 @@ context-router-language-java = { workspace = true }
 context-router-language-dotnet = { workspace = true }
 context-router-language-yaml = { workspace = true }
 context-router-language-typescript = { workspace = true }
+context-router-language-sql = { workspace = true }
 context-router-language-rust = { workspace = true }
+context-router-language-ruby = { workspace = true }
 context-router-language-php = { workspace = true }
 context-router-adapters-claude = { workspace = true }
 context-router-adapters-copilot = { workspace = true }
@@ -70,7 +72,9 @@ members = [
     "packages/language-dotnet",
     "packages/language-yaml",
     "packages/language-typescript",
+    "packages/language-sql",
     "packages/language-rust",
+    "packages/language-ruby",
     "packages/language-php",
     "packages/adapters-claude",
     "packages/adapters-copilot",
@@ -100,4 +104,5 @@ ignore_missing_imports = true
 dev = [
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
+    "tree-sitter-ruby>=0.23.1",
 ]
