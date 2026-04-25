@@ -578,11 +578,12 @@ class ContextRanker:
           FLOOR_RATIO × leader_confidence. Catches outlier stragglers
           when the leader has a clearly dominant score.
 
-        Rule 2 (plateau): drop from the first index i where
-          items[i].confidence < ABS_FLOOR AND
+        Rule 2 (plateau): when leader.confidence > ABS_FLOOR, drop from the
+          first index i where items[i].confidence < ABS_FLOOR AND
           items[i-1].confidence - items[i].confidence < PLATEAU_DELTA.
-          Catches flat tails where scores cluster just below ABS_FLOOR
-          (common on single-file-GT tasks with tight BM25 distributions).
+          Catches flat tails that cluster just below ABS_FLOOR.
+          Guard prevents misfiring when all items have near-zero confidence
+          (empty query / no BM25 signal).
 
         A no-op in debug/handover modes and when fewer than 2 items present.
         """
@@ -595,14 +596,16 @@ class ContextRanker:
         while last_keep > 0 and items[last_keep].confidence < floor:
             last_keep -= 1
 
-        # Rule 2: plateau cut — find first entry into a flat low-confidence plateau
-        for i in range(1, len(items)):
-            if (
-                items[i].confidence < _ADAPTIVE_TOPK_ABS_FLOOR
-                and items[i - 1].confidence - items[i].confidence < _ADAPTIVE_TOPK_PLATEAU_DELTA
-            ):
-                last_keep = min(last_keep, i - 1)
-                break
+        # Rule 2: plateau cut — only when the leader has meaningful confidence.
+        # Guard prevents firing when all items are near-zero (no BM25 signal).
+        if items[0].confidence > _ADAPTIVE_TOPK_ABS_FLOOR:
+            for i in range(1, len(items)):
+                if (
+                    items[i].confidence < _ADAPTIVE_TOPK_ABS_FLOOR
+                    and items[i - 1].confidence - items[i].confidence < _ADAPTIVE_TOPK_PLATEAU_DELTA
+                ):
+                    last_keep = min(last_keep, i - 1)
+                    break
 
         return items[: last_keep + 1]
 
