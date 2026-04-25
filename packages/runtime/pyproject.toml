@@ -1,6 +1,6 @@
 [project]
 name = "context-router-runtime"
-version = "4.2.0"
+version = "4.3.0"
 requires-python = ">=3.12"
 description = "Stack trace, test failure, and log parsers for context-router (Phase 3)"
 license = {text = "Apache-2.0"}
