@@ -199,3 +199,103 @@ outcomes:
           uv run pytest packages/ranking/tests/test_ranker.py
           -k "adaptive_topk" -v
         expected_stdout_contains: "passed"
+
+  # ---------------------------------------------------------------------------
+  # v4.3 outcomes
+  # ---------------------------------------------------------------------------
+
+  - id: v4.3-adaptive-topk-gradient
+    phase: v4.3
+    priority: P0
+    description: >-
+      Plateau-based second cut in adaptive top-k. When consecutive items have
+      confidence within PLATEAU_DELTA (0.02) of each other AND all are below
+      ABS_FLOOR (0.45), trailing plateau items are dropped.
+    dod:
+      outcome: >-
+        Adaptive top-k fires on tight-cluster tasks that Rule 1 (0.6× floor)
+        previously missed. On the 12-task benchmark, adaptive top-k fires on
+        >= 6 tasks (up from 3). Avg F1 >= 0.450. Avg tokens <= 2,100.
+      threshold: >-
+        test_adaptive_topk_plateau_rule_fires passes: items [0.52, 0.44, 0.43, 0.42, 0.41]
+        with ABS_FLOOR=0.45 → only first two kept.
+        test_adaptive_topk_plateau_rule_noop_above_abs_floor passes: items all >= ABS_FLOOR
+        → no cut.
+      negative_case: >-
+        When items span a wide range (leader 0.80, trailer 0.45), Rule 1 fires
+        instead of Rule 2. No double-cut. Items above ABS_FLOOR are never dropped
+        by the plateau rule.
+      verify:
+        cmd: uv run pytest packages/ranking/tests/test_ranker.py -k "plateau" -v
+        expected_stdout_contains: "passed"
+
+  - id: v4.3-fastapi-t1-recovery
+    phase: v4.3
+    priority: P1
+    description: >-
+      Extend _AUX_PATH_RE to cover docs_src/, examples/, fixtures/, stubs/, mocks/
+      paths so tutorial files receive the 0.85x auxiliary-file penalty.
+    dod:
+      outcome: >-
+        fastapi T1 (oauth2 docstring): GT file (fastapi/security/oauth2.py) appears
+        in top-5. docs_src/security/tutorial003*.py ranks below oauth2.py.
+      threshold: >-
+        _is_test_or_script_path('docs_src/security/tutorial003_py310.py') returns True.
+        _is_test_or_script_path('examples/auth.py') returns True.
+        _is_test_or_script_path('src/main.py') returns False.
+      negative_case: >-
+        Canonical source files (fastapi/security/oauth2.py, src/core/ranker.py) are
+        NOT matched by _AUX_PATH_RE and receive no penalty.
+      verify:
+        cmd: uv run pytest packages/ranking/tests/test_ranker.py -k "aux_path_re" -v
+        expected_stdout_contains: "passed"
+
+  - id: v4.3-stale-detection
+    phase: v4.3
+    priority: P0
+    description: >-
+      Git-based staleness detection for memory observations. Observations whose
+      files_touched paths are absent from HEAD are flagged as stale. CLI commands
+      surface severity and allow pruning.
+    dod:
+      outcome: >-
+        `memory stale` lists observations whose files_touched paths are absent from
+        HEAD. Stale hits in pack output carry "stale": true and emit a stderr warning.
+        `memory prune --stale` removes them and prints a count.
+      threshold: >-
+        On a fixture where one observation points at a deleted file:
+        (a) `memory stale` lists that observation with severity missing_file.
+        (b) `pack --use-memory --json` includes "stale": true on that hit.
+        (c) `memory prune --stale` removes it; subsequent `memory stale` returns empty.
+      negative_case: >-
+        When git is unavailable, `memory stale` exits non-zero with
+        "git is required for staleness detection" on stderr. Pack still builds.
+      verify:
+        cmd: bash scripts/smoke-v4.3.sh
+        expected_stdout_contains: "PASS: stale-detection"
+
+  - id: v4.3-memory-federation
+    phase: v4.3
+    priority: P0
+    description: >-
+      Cross-repo memory federation via workspace.yaml. search_memory --workspace
+      queries memory from all workspace repos. Federated hits carry source_repo labels.
+    dod:
+      outcome: >-
+        search_memory --workspace returns hits from all workspace repos labeled with
+        source_repo. pack --use-memory --workspace injects federated hits.
+        memory_hits_summary includes a "federated" count.
+      threshold: >-
+        On the synthetic workspace fixture with observations in both backend and
+        frontend repos (committed):
+        (a) search_memory --workspace --query "checkout" returns at least one hit
+            from each repo.
+        (b) pack --use-memory --json shows memory_hits_summary.federated > 0.
+        (c) Staged-only observations from sibling repos do NOT appear in results.
+      negative_case: >-
+        When --workspace is passed without a workspace.yaml,
+        "WARN: --workspace has no effect; no workspace.yaml found" is emitted to
+        stderr and the command proceeds in single-repo mode.
+      verify:
+        cmd: bash scripts/smoke-v4.3.sh
+        expected_stdout_contains: "PASS: memory-federation"

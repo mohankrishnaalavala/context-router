@@ -33,6 +33,9 @@ class MemoryHit:
     files_touched: list[str] = field(default_factory=list)
     task: str = ""
     provenance: str = "committed"
+    stale: bool = False
+    staleness_reason: str | None = None
+    source_repo: str = "local"
 
 
 # ---------------------------------------------------------------------------
@@ -178,18 +181,19 @@ def retrieve_observations(
     memory_dir: Path,
     k: int = 8,
     project_root: Path | None = None,
+    federated_roots: "list[tuple[str, Path]] | None" = None,
 ) -> list[MemoryHit]:
     """Return top-k observations from ``memory_dir/observations/`` ranked by BM25 + recency.
 
     Algorithm:
-    1. Scan all ``.md`` files in ``memory_dir/observations/``.
+    1. Scan all ``.md`` files in ``memory_dir/observations/`` (plus any federated repos).
     2. Parse YAML frontmatter and body from each file.
-    3. Score with SQLite FTS5 BM25 over ``(id, body)`` text.
+    3. Score with SQLite FTS5 BM25 over ``(id, body)`` text across all sources combined.
     4. Multiply BM25 score by a recency boost: ``1 / (1 + days**0.5)``.
     5. Sort descending by final score and return the top-k hits.
-    6. If no ``.md`` files exist, return ``[]``.
-    7. If the query contains no valid FTS5 tokens, fall back to recency-only
-       sorting (all docs ranked purely by recency boost).
+    6. Check staleness of top-k hits via git ls-files; set hit.stale when a path is missing.
+    7. If no ``.md`` files exist, return ``[]``.
+    8. If the query contains no valid FTS5 tokens, fall back to recency-only sorting.
 
     Args:
         query: Free-text query string.
@@ -199,21 +203,30 @@ def retrieve_observations(
             each hit's provenance via git (committed/staged/branch_local).
             When omitted, all hits default to ``provenance="committed"``.
             On the main branch, branch_local and staged hits are filtered out.
+        federated_roots: Optional list of ``(repo_name, repo_root)`` tuples for
+            cross-repo memory federation. Only **committed** observations are
+            included from sibling repos. Each federated hit carries
+            ``source_repo=repo_name``.
 
     Returns:
         List of :class:`MemoryHit` objects, most relevant first.
     """
+    import sys
+
     obs_dir = memory_dir / "observations"
     if not obs_dir.exists():
         return []
 
     md_files = sorted(obs_dir.glob("*.md"))
-    if not md_files:
+    if not md_files and not federated_roots:
         return []
 
     # --- Parse all files ---------------------------------------------------
-    # docs: list of (stem, created_at, files_touched, task, body_text)
-    docs: list[tuple[str, datetime, list[str], str, str]] = []
+    # Each record: (fts_key, stem, created_at, files_touched, task, body_text, source_repo, obs_dir)
+    # fts_key is unique across all sources; stem is the original file stem.
+    DocRecord = tuple[str, str, datetime, list[str], str, str, str, Path]
+    docs: list[DocRecord] = []
+
     for md_path in md_files:
         fm, body = _parse_md(md_path)
         created_at = _parse_created_at(fm)
@@ -222,7 +235,55 @@ def retrieve_observations(
         if isinstance(raw_ft, list):
             files_touched = [str(f) for f in raw_ft]
         task = str(fm.get("task", ""))
-        docs.append((md_path.stem, created_at, files_touched, task, body))
+        docs.append((md_path.stem, md_path.stem, created_at, files_touched, task, body, "local", obs_dir))
+
+    # --- Collect federated observations (committed at HEAD only) ---
+    # Use git ls-tree HEAD rather than git ls-files so that staged-but-uncommitted
+    # observations in sibling repos are never federated (design spec §4.4).
+    if federated_roots:
+        import subprocess as _subproc
+        for repo_name, sibling_root in federated_roots:
+            sibling_obs_dir = sibling_root / ".context-router" / "memory" / "observations"
+            if not sibling_obs_dir.is_dir():
+                print(
+                    f"WARN: repo {repo_name} has no memory; skipping federation",
+                    file=sys.stderr,
+                )
+                continue
+            try:
+                _lsres = _subproc.run(
+                    ["git", "ls-tree", "-r", "HEAD", "--name-only"],
+                    cwd=str(sibling_root),
+                    capture_output=True, text=True, timeout=5,
+                )
+                if _lsres.returncode != 0:
+                    print(
+                        f"WARN: repo {repo_name} memory unreadable; skipping federation",
+                        file=sys.stderr,
+                    )
+                    continue
+                committed_at_head: set[str] = set(_lsres.stdout.splitlines())
+            except Exception:  # noqa: BLE001
+                print(
+                    f"WARN: repo {repo_name} memory unreadable; skipping federation",
+                    file=sys.stderr,
+                )
+                continue
+            for md_path in sorted(sibling_obs_dir.glob("*.md")):
+                rel_path = str(md_path.relative_to(sibling_root))
+                if rel_path not in committed_at_head:
+                    continue  # staged-only or branch_local — must not federate
+                fm, body = _parse_md(md_path)
+                created_at = _parse_created_at(fm)
+                raw_ft2 = fm.get("files_touched", [])
+                ft2: list[str] = [str(f) for f in raw_ft2] if isinstance(raw_ft2, list) else []
+                task2 = str(fm.get("task", ""))
+                # Use prefixed key to guarantee uniqueness across repos
+                fts_key = f"fed__{repo_name}__{md_path.stem}"
+                docs.append((fts_key, md_path.stem, created_at, ft2, task2, body, repo_name, sibling_obs_dir))
+
+    if not docs:
+        return []
 
     # --- BM25 via SQLite FTS5 in-memory ------------------------------------
     conn = sqlite3.connect(":memory:")
@@ -231,10 +292,9 @@ def retrieve_observations(
         "(id UNINDEXED, body, tokenize='porter ascii')"
     )
     rows = []
-    for stem, _created_at, _files_touched, _task, body_text in docs:
-        # body for FTS: combine stem + body so id tokens also score
-        fts_body = stem + " " + body_text
-        rows.append((stem, fts_body))
+    for fts_key, _stem, _created_at, _files_touched, _task, body_text, _src, _obs_dir in docs:
+        fts_body = fts_key + " " + body_text
+        rows.append((fts_key, fts_body))
     conn.executemany("INSERT INTO docs (id, body) VALUES (?, ?)", rows)
 
     # Attempt BM25 query; fall back to recency-only on FTS syntax errors.
@@ -242,9 +302,6 @@ def retrieve_observations(
     use_bm25 = True
     if query and query.strip():
         try:
-            # Sanitise the query: FTS5 MATCH requires at least one valid token.
-            # Escape special chars minimally: wrap in double quotes to treat as
-            # a phrase, which handles most non-token input gracefully.
             safe_query = query.strip()
             cursor = conn.execute(
                 "SELECT id, bm25(docs) FROM docs WHERE docs MATCH ? ORDER BY bm25(docs)",
@@ -252,10 +309,8 @@ def retrieve_observations(
             )
             for row in cursor.fetchall():
                 doc_id, raw_score = row
-                # bm25() returns negative values; negate for positive "higher = better"
                 bm25_scores[doc_id] = -float(raw_score)
         except sqlite3.OperationalError:
-            # Query contained FTS5 syntax not recognized — fall back to recency
             use_bm25 = False
     else:
         use_bm25 = False
@@ -263,45 +318,35 @@ def retrieve_observations(
     conn.close()
 
     # --- Combine BM25 + recency boost and sort -----------------------------
-    # When use_bm25 is True, matched docs always outrank non-matched docs.
-    # We achieve this by placing matched doc scores in the range [1.0, +inf)
-    # and non-matched doc scores in the range [0.0, 1.0), so the two groups
-    # never interleave regardless of recency.
+    # Matched docs score in [1.0, +inf); unmatched score in (0, 1.0).
     hits: list[MemoryHit] = []
-    for stem, created_at, files_touched, task, body_text in docs:
-        boost = _recency_boost(created_at)  # in (0, 1]
+    for fts_key, stem, created_at, files_touched, task, body_text, source_repo, hit_obs_dir in docs:
+        boost = _recency_boost(created_at)
 
         if use_bm25:
-            raw = bm25_scores.get(stem, 0.0)
-            if raw > 0.0:
-                # Matched: score is 1 + (bm25 * boost). Always >= 1.0.
-                score = 1.0 + raw * boost
-            else:
-                # Not matched: score is recency boost alone, in (0, 1).
-                # These always rank below any matched doc.
-                score = boost
+            raw = bm25_scores.get(fts_key, 0.0)
+            score = (1.0 + raw * boost) if raw > 0.0 else boost
         else:
             score = boost
 
-        # Excerpt: first 200 chars of the body (strip leading whitespace/blank lines)
         body_stripped = body_text.lstrip()
         excerpt = body_stripped[:200].rstrip()
 
         hits.append(
             MemoryHit(
                 id=stem,
-                path=obs_dir / f"{stem}.md",
+                path=hit_obs_dir / f"{stem}.md",
                 excerpt=excerpt,
                 score=score,
                 files_touched=files_touched,
                 task=task,
+                source_repo=source_repo,
             )
         )
 
-    # Classify provenance and optionally filter to committed-only on main branch
+    # --- Classify local provenance and filter on main branch ---
     if project_root is not None:
         prov_map = _classify_memory_files(obs_dir, project_root)
-        # Determine if we're on main branch
         on_main = False
         try:
             import subprocess
@@ -315,15 +360,32 @@ def retrieve_observations(
 
         filtered_hits = []
         for hit in hits:
-            prov = prov_map.get(hit.id, "committed")  # default committed when not in map
-            hit = MemoryHit(
-                id=hit.id, path=hit.path, excerpt=hit.excerpt, score=hit.score,
-                files_touched=hit.files_touched, task=hit.task, provenance=prov,
-            )
-            if on_main and prov != "committed":
-                continue  # filter branch-local/staged on main checkout
+            if hit.source_repo == "local":
+                prov = prov_map.get(hit.id, "committed")
+                hit.provenance = prov
+                if on_main and prov != "committed":
+                    continue
+            # Federated hits are already committed-only (filtered above)
             filtered_hits.append(hit)
         hits = filtered_hits
 
     hits.sort(key=lambda h: h.score, reverse=True)
-    return hits[:k]
+    top_hits = hits[:k]
+
+    # --- Staleness check on top-k hits ---
+    if project_root is not None and top_hits:
+        from memory.staleness import ObservationStalenessChecker
+        checker = ObservationStalenessChecker()
+        all_files = [f for hit in top_hits for f in hit.files_touched]
+        checker.check_batch(all_files, project_root)
+        for hit in top_hits:
+            is_stale, reason = checker.check(hit.files_touched, project_root)
+            if is_stale:
+                hit.stale = True
+                hit.staleness_reason = reason
+                print(
+                    f"WARN: memory hit {hit.id} may be stale ({reason})",
+                    file=sys.stderr,
+                )
+
+    return top_hits

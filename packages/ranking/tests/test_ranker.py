@@ -3,7 +3,15 @@
 from __future__ import annotations
 
 from contracts.models import ContextItem
-from ranking.ranker import ContextRanker, _REASON, _BM25Scorer, _tokenize
+from ranking.ranker import (
+    ContextRanker,
+    _REASON,
+    _BM25Scorer,
+    _tokenize,
+    _is_test_or_script_path,
+    _ADAPTIVE_TOPK_PLATEAU_DELTA,
+    _ADAPTIVE_TOPK_ABS_FLOOR,
+)
 
 
 def _item(
@@ -533,6 +541,68 @@ def test_adaptive_topk_single_item_is_never_dropped() -> None:
     # "a" must survive (leader is never dropped)
     assert any(i.title == "a" for i in result)
     assert len(result) >= 1
+
+
+# -----------------------------------------------------------------------
+# v4.3 Phase C — Aux path coverage + plateau rule
+# -----------------------------------------------------------------------
+
+def test_aux_path_re_covers_docs_src() -> None:
+    assert _is_test_or_script_path("docs_src/security/tutorial003_py310.py")
+    assert _is_test_or_script_path("docs_src/tutorial003_an_py310.py")
+
+
+def test_aux_path_re_covers_auxiliary_dirs() -> None:
+    for path in [
+        "examples/auth_example.py",
+        "example/config.py",
+        "fixtures/mock_data.py",
+        "stubs/stub_api.py",
+        "mocks/mock_handler.py",
+    ]:
+        assert _is_test_or_script_path(path), f"expected auxiliary: {path}"
+    # canonical source paths must NOT be flagged
+    for path in ["fastapi/security/oauth2.py", "src/auth/token.py", "lib/utils.py"]:
+        assert not _is_test_or_script_path(path), f"should not be auxiliary: {path}"
+
+
+def test_adaptive_topk_plateau_rule_fires() -> None:
+    """Plateau rule drops from the first pair whose step < DELTA and conf < ABS_FLOOR.
+
+    With [0.52, 0.44, 0.43, 0.42, 0.41]:
+    - pair (a->b): step=0.08 >= DELTA — not a plateau entry
+    - pair (b->c): step=0.01 < DELTA AND c=0.43 < ABS_FLOOR — plateau starts here
+    Rule fires at i=2 -> last_keep=min(4,1)=1 -> keeps [a, b], drops c/d/e.
+    """
+    items = [
+        _item(confidence=0.52, title="a"),
+        _item(confidence=0.44, title="b"),
+        _item(confidence=0.43, title="c"),
+        _item(confidence=0.42, title="d"),
+        _item(confidence=0.41, title="e"),
+    ]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "review")
+    titles = [i.title for i in result]
+    assert "a" in titles
+    assert "b" in titles, "b is kept — plateau fires at the b->c transition"
+    assert "c" not in titles, "c and beyond are cut as plateau"
+    assert "d" not in titles
+    assert "e" not in titles
+
+
+def test_adaptive_topk_plateau_rule_noop_above_abs_floor() -> None:
+    """Plateau rule must not fire when items are at or above ABS_FLOOR."""
+    items = [
+        _item(confidence=0.52, title="a"),
+        _item(confidence=0.50, title="b"),
+        _item(confidence=0.49, title="c"),
+        _item(confidence=0.48, title="d"),
+        _item(confidence=0.47, title="e"),
+    ]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "review")
+    assert len(result) == 5, "all items above ABS_FLOOR — nothing should be cut"
 
 
 # -----------------------------------------------------------------------

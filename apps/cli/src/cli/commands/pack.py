@@ -438,12 +438,16 @@ def pack(
                     "files_touched": h.files_touched,
                     "task": h.task,
                     "provenance": h.provenance,
+                    "source_repo": h.source_repo,
+                    "stale": h.stale,
+                    "staleness_reason": h.staleness_reason,
                 }
                 for h in _hits
             ]
             payload["memory_hits_summary"] = {
                 "committed": sum(1 for h in _hits if h.provenance == "committed"),
                 "staged": sum(1 for h in _hits if h.provenance == "staged"),
+                "federated": sum(1 for h in _hits if h.source_repo != "local"),
             }
 
         _total_tokens = sum(

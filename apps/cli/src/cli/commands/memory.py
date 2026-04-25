@@ -96,32 +96,103 @@ def search(
         typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
     ] = "",
     json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        bool,
+        typer.Option("--workspace", help="Search across all workspace repos (committed observations only)."),
+    ] = False,
 ) -> None:
     """Search stored observations by keyword.
+
+    With --workspace, searches memory from all repos declared in workspace.yaml.
+    Results are labeled with source_repo. Only committed observations federate.
 
     Exit codes:
       0 — success (even if no results)
       1 — database not initialised
     """
-    store, db = _open_store(project_root)
-    try:
-        results = store.search(query)
-    finally:
-        db.close()
+    from core.orchestrator import _find_project_root
+    from memory.file_retriever import retrieve_observations
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    memory_dir = root / ".context-router" / "memory"
+
+    fed_roots = _load_federated_roots(project_root) if workspace else []
+    hits = retrieve_observations(query, memory_dir, k=20, project_root=root, federated_roots=fed_roots or None)
 
     if json_output:
         import json
-        typer.echo(json.dumps([r.model_dump(mode="json") for r in results], indent=2))
+        typer.echo(json.dumps(
+            [
+                {
+                    "id": h.id,
+                    "excerpt": h.excerpt,
+                    "score": round(h.score, 4),
+                    "files_touched": h.files_touched,
+                    "task": h.task,
+                    "provenance": h.provenance,
+                    "source_repo": h.source_repo,
+                    "stale": h.stale,
+                    "staleness_reason": h.staleness_reason,
+                }
+                for h in hits
+            ],
+            indent=2,
+        ))
         return
 
-    if not results:
+    if not hits:
         typer.echo("No observations found.")
         return
 
-    for obs in results:
-        typer.echo(f"  [{obs.task_type or 'general'}] {obs.summary}")
-        if obs.fix_summary:
-            typer.echo(f"    Fix: {obs.fix_summary}")
+    for h in hits:
+        repo_tag = f" [{h.source_repo}]" if h.source_repo != "local" else ""
+        stale_tag = " [STALE]" if h.stale else ""
+        typer.echo(f"  [{h.task or 'general'}]{repo_tag}{stale_tag} {h.excerpt[:80]}")
+
+
+def _find_memory_dir(project_root: str) -> Path:
+    """Resolve .context-router/memory from project_root or cwd."""
+    from core.orchestrator import _find_project_root
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    return root / ".context-router" / "memory"
+
+
+def _load_federated_roots(project_root: str) -> "list[tuple[str, Path]]":
+    """Return [(name, path), ...] for sibling repos from workspace.yaml.
+
+    Emits a stderr warning and returns [] when workspace.yaml is missing.
+    """
+    from core.orchestrator import _find_project_root
+    from workspace.loader import WorkspaceLoader
+
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    ws = WorkspaceLoader.load(root)
+    if ws is None:
+        typer.echo("WARN: --workspace has no effect; no workspace.yaml found", err=True)
+        return []
+    return [(repo.name, repo.path) for repo in ws.repos if Path(repo.path).resolve() != root.resolve()]
+
+
+def _require_git(project_root: str) -> Path:
+    """Return the repo root or exit 1 with a message if git is unavailable."""
+    import subprocess
+    from core.orchestrator import _find_project_root
+    root = Path(project_root) if project_root else _find_project_root(Path.cwd())
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            typer.echo("git is required for staleness detection", err=True)
+            raise typer.Exit(1)
+    except FileNotFoundError:
+        typer.echo("git is required for staleness detection", err=True)
+        raise typer.Exit(1)
+    return root
 
 
 @memory_app.command("stale")
@@ -132,30 +203,176 @@ def stale(
     ] = "",
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    """List observations that reference files no longer in the index.
+    """List observations whose files_touched paths are absent from git HEAD.
+
+    Checks each observation's files_touched list against git ls-files. Reports
+    missing_file (hard stale), renamed (path changed), or dormant (>90d old,
+    never surfaced in a pack).
 
     Exit codes:
       0 — success (even if no stale observations)
-      1 — database not initialised
+      1 — git unavailable or not a git repository
     """
-    store, db = _open_store(project_root)
-    try:
-        stale_obs = store.find_stale()
-    finally:
-        db.close()
+    import json as _json
+    from datetime import datetime, timezone
+    from memory.staleness import ObservationStalenessChecker
 
-    if json_output:
-        import json
-        typer.echo(json.dumps([o.model_dump(mode="json") for o in stale_obs], indent=2))
+    root = _require_git(project_root)
+    memory_dir = root / ".context-router" / "memory"
+    obs_dir = memory_dir / "observations"
+
+    if not obs_dir.exists():
+        if json_output:
+            typer.echo(_json.dumps([]))
+        else:
+            typer.echo("No observations found.")
         return
 
-    if not stale_obs:
+    from memory.file_retriever import _parse_md, _parse_created_at
+
+    checker = ObservationStalenessChecker()
+    stale_results: list[dict] = []
+    now = datetime.now(tz=timezone.utc)
+
+    md_files = sorted(obs_dir.glob("*.md"))
+    # Pre-populate cache with all files_touched across all observations
+    all_files: list[str] = []
+    parsed: list[tuple[Path, dict, str]] = []
+    for md_path in md_files:
+        fm, body = _parse_md(md_path)
+        parsed.append((md_path, fm, body))
+        raw_ft = fm.get("files_touched", [])
+        if isinstance(raw_ft, list):
+            all_files.extend(str(f) for f in raw_ft)
+    checker.check_batch(all_files, root)
+
+    for md_path, fm, _body in parsed:
+        created_at = _parse_created_at(fm)
+        raw_ft = fm.get("files_touched", [])
+        files_touched: list[str] = [str(f) for f in raw_ft] if isinstance(raw_ft, list) else []
+        is_stale, reason = checker.check(files_touched, root, created_at)
+        if is_stale or (reason and reason.startswith("dormant")):
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            age_days = (now - created_at).days
+            severity = reason.split(":")[0] if reason else "unknown"
+            path_hint = reason.split(": ", 1)[1] if ": " in reason else ""
+            stale_results.append({
+                "id": md_path.stem,
+                "severity": severity,
+                "path": path_hint,
+                "age_days": age_days,
+                "is_stale": is_stale,
+            })
+
+    if json_output:
+        typer.echo(_json.dumps(stale_results, indent=2))
+        return
+
+    if not stale_results:
         typer.echo("No stale observations found.")
         return
 
-    typer.echo(f"{len(stale_obs)} stale observation(s) (files no longer indexed):")
-    for obs in stale_obs:
-        typer.echo(f"  {obs.summary[:80]}")
+    typer.echo(f"{len(stale_results)} stale observation(s):")
+    for r in stale_results:
+        marker = "[STALE]" if r["is_stale"] else "[dormant]"
+        typer.echo(f"  {marker} {r['id']}  severity={r['severity']}  path={r['path']}  age={r['age_days']}d")
+
+
+@memory_app.command("prune")
+def prune(
+    stale_flag: Annotated[
+        bool,
+        typer.Option("--stale", help="Remove observations with missing_file or renamed severity."),
+    ] = False,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="Preview what would be removed without deleting."),
+    ] = False,
+    archive: Annotated[
+        bool,
+        typer.Option("--archive", help="Move to .context-router/memory/archived/ instead of deleting."),
+    ] = False,
+    severity: Annotated[
+        str,
+        typer.Option("--severity", help="Filter by severity: missing_file or renamed."),
+    ] = "",
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
+) -> None:
+    """Remove or archive stale observations.
+
+    --stale removes observations whose files_touched paths are absent from HEAD.
+    Only hard-stale severities (missing_file, renamed) are removed; dormant
+    observations are never auto-removed.
+
+    Exit codes:
+      0 — success
+      1 — git unavailable or not a git repository
+    """
+    import shutil
+    from memory.staleness import ObservationStalenessChecker
+    from memory.file_retriever import _parse_md, _parse_created_at
+
+    if not stale_flag:
+        typer.echo("WARN: --stale has no effect without any stale observations", err=True)
+        return
+
+    root = _require_git(project_root)
+    memory_dir = root / ".context-router" / "memory"
+    obs_dir = memory_dir / "observations"
+    archive_dir = memory_dir / "archived"
+
+    if not obs_dir.exists():
+        typer.echo("No observations found.")
+        return
+
+    checker = ObservationStalenessChecker()
+    md_files = sorted(obs_dir.glob("*.md"))
+    all_files: list[str] = []
+    parsed: list[tuple[Path, dict]] = []
+    for md_path in md_files:
+        fm, _body = _parse_md(md_path)
+        parsed.append((md_path, fm))
+        raw_ft = fm.get("files_touched", [])
+        if isinstance(raw_ft, list):
+            all_files.extend(str(f) for f in raw_ft)
+    checker.check_batch(all_files, root)
+
+    to_remove: list[Path] = []
+    for md_path, fm in parsed:
+        created_at = _parse_created_at(fm)
+        raw_ft = fm.get("files_touched", [])
+        files_touched: list[str] = [str(f) for f in raw_ft] if isinstance(raw_ft, list) else []
+        is_stale, reason = checker.check(files_touched, root, created_at)
+        if not is_stale:
+            continue
+        sev = reason.split(":")[0] if reason else "unknown"
+        if severity and sev != severity:
+            continue
+        to_remove.append(md_path)
+
+    if not to_remove:
+        typer.echo("WARN: --stale has no effect without any stale observations", err=True)
+        return
+
+    if dry_run:
+        typer.echo(f"Would remove {len(to_remove)} observation(s):")
+        for p in to_remove:
+            typer.echo(f"  {p.stem}")
+        return
+
+    if archive:
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        for p in to_remove:
+            shutil.move(str(p), str(archive_dir / p.name))
+        typer.echo(f"Archived {len(to_remove)} observation(s) to {archive_dir}.")
+    else:
+        for p in to_remove:
+            p.unlink()
+        typer.echo(f"Removed {len(to_remove)} stale observation(s).")
 
 
 @memory_app.command("list")
@@ -173,6 +390,10 @@ def list_memory(
         typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
     ] = "",
     json_output: Annotated[bool, typer.Option("--json")] = False,
+    workspace: Annotated[
+        bool,
+        typer.Option("--workspace", help="List observations from all workspace repos (grouped by source_repo)."),
+    ] = False,
 ) -> None:
     """List stored observations sorted by freshness, confidence, or recency.
 
@@ -180,11 +401,44 @@ def list_memory(
     confidence — raw stored confidence_score
     recent     — most recently created first
 
+    With --workspace, includes observations from all workspace repos, grouped by source_repo.
+    Only committed observations are shown from sibling repos.
+
     Exit codes:
       0 — success
       1 — database not initialised
     """
     from memory.freshness import effective_confidence
+    from memory.file_retriever import _parse_md, _parse_created_at
+
+    # --- Workspace: enumerate sibling .md files (committed only) ---
+    fed_roots = _load_federated_roots(project_root) if workspace else []
+    fed_hits: list[dict] = []
+    if fed_roots:
+        from memory.file_retriever import _classify_memory_files
+        for repo_name, sibling_root in fed_roots:
+            sibling_obs_dir = Path(sibling_root) / ".context-router" / "memory" / "observations"
+            if not sibling_obs_dir.is_dir():
+                typer.echo(f"WARN: repo {repo_name} has no memory; skipping", err=True)
+                continue
+            try:
+                prov_map = _classify_memory_files(sibling_obs_dir, Path(sibling_root))
+            except Exception:  # noqa: BLE001
+                typer.echo(f"WARN: repo {repo_name} memory unreadable; skipping", err=True)
+                continue
+            for md_path in sorted(sibling_obs_dir.glob("*.md")):
+                if prov_map.get(md_path.stem, "committed") != "committed":
+                    continue
+                fm, body = _parse_md(md_path)
+                created_at = _parse_created_at(fm)
+                body_stripped = body.lstrip()
+                fed_hits.append({
+                    "id": md_path.stem,
+                    "source_repo": repo_name,
+                    "summary": body_stripped[:80],
+                    "task": str(fm.get("task", "")),
+                    "created_at": str(created_at.date()),
+                })
 
     store, db = _open_store(project_root)
     try:
@@ -201,16 +455,14 @@ def list_memory(
 
     if json_output:
         import json
-        typer.echo(json.dumps(
-            [
-                {**r.model_dump(mode="json"), "effective_confidence": round(effective_confidence(r), 4)}
-                for r in observations
-            ],
-            indent=2,
-        ))
+        local_out = [
+            {**r.model_dump(mode="json"), "effective_confidence": round(effective_confidence(r), 4), "source_repo": "local"}
+            for r in observations
+        ]
+        typer.echo(json.dumps({"local": local_out, "federated": fed_hits}, indent=2))
         return
 
-    if not observations:
+    if not observations and not fed_hits:
         typer.echo("No observations found.")
         return
 
@@ -218,9 +470,14 @@ def list_memory(
         eff = round(effective_confidence(obs), 3)
         age_days = (import_datetime() - obs.timestamp).days
         typer.echo(
-            f"  [{obs.task_type or 'general'}] {obs.summary[:70]}"
+            f"  [local] [{obs.task_type or 'general'}] {obs.summary[:70]}"
             f"  (eff={eff}, age={age_days}d)"
         )
+
+    if fed_hits:
+        typer.echo(f"\n--- Federated observations ({len(fed_hits)} across {len(fed_roots)} repos) ---")
+        for h in fed_hits[:limit]:
+            typer.echo(f"  [{h['source_repo']}] [{h['task'] or 'general'}] {h['summary']}")
 
 
 def import_datetime() -> "datetime":
