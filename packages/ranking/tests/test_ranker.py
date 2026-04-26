@@ -691,9 +691,10 @@ def test_source_file_boost_ranks_module_above_test() -> None:
     ranker = ContextRanker(token_budget=0)
     result = ranker.rank([source_item, test_item], "oauth2 form docstrings", "implement")
     paths = [i.path_or_ref for i in result]
-    assert paths.index("fastapi/security/oauth2.py") < paths.index(
-        "tests/test_security_oauth2.py"
-    ), f"Expected oauth2.py before test file, got order: {paths}"
+    # oauth2.py must be in results and ranked first.
+    # The test file may be cut by Rule 1 when the source file ranks strongly.
+    assert "fastapi/security/oauth2.py" in paths, f"oauth2.py missing from results: {paths}"
+    assert paths[0] == "fastapi/security/oauth2.py", f"Expected oauth2.py first, got: {paths}"
 
 
 # -----------------------------------------------------------------------
