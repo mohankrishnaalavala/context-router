@@ -1,0 +1,40 @@
+{
+  "version": "4.3.0",
+  "recorded_at": "2026-04-25",
+  "note": "Baseline recorded before v4.4 ranker changes (C1 source-file boost, C2 semantic re-rank). Used as regression floor for C2 gate.",
+  "tuning_set": {
+    "description": "12 tasks across fastapi, bulletproof-react, eShopOnWeb, spring-petclinic",
+    "n_tasks": 12,
+    "gt_in_top_5": 9,
+    "gt_at_rank_1": 9,
+    "avg_recall": 0.708,
+    "avg_precision": 0.307,
+    "avg_f1": 0.394,
+    "avg_pack_tokens": 1577,
+    "known_failures": [
+      {
+        "task": "fastapi T1",
+        "query": "Fix typo for client_secret in OAuth2 form docstrings",
+        "ground_truth": "fastapi/security/oauth2.py",
+        "issue": "oauth2.py missing from top-5; test files outrank source file"
+      },
+      {
+        "task": "spring-petclinic T3",
+        "query": "Fix Integer comparison with ==",
+        "ground_truth": ["PetController.java", "VetController.java"],
+        "issue": "PetController.java cut by adaptive top-k Rule 2 at conf=0.395 (below ABS_FLOOR=0.45)"
+      }
+    ]
+  },
+  "holdout_set": {
+    "description": "12 tasks across gin-gonic/gin, rails/rails, actix-web/actix-web, django/django",
+    "status": "not_yet_measured",
+    "note": "Requires cloning external repos at fixture SHAs. Run benchmark/holdout/ harness to populate."
+  },
+  "comparison": {
+    "v330_avg_f1": 0.577,
+    "v330_avg_pack_tokens": 2158,
+    "code_review_graph_avg_f1": 0.683,
+    "code_review_graph_avg_pack_tokens": 1507
+  }
+}
