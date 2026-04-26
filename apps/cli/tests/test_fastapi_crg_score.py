@@ -7,13 +7,17 @@ from pathlib import Path
 
 
 def _load_score_module():
-    score_path = Path(__file__).resolve().parents[1] / "eval" / "fastapi-crg" / "score.py"
-    sys.path.insert(0, str(score_path.parent))
+    score_path = Path(__file__).resolve().parents[3] / "eval" / "fastapi-crg" / "score.py"
     spec = importlib.util.spec_from_file_location("fastapi_crg_score", score_path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    old_path = sys.path[:]
+    sys.path.insert(0, str(score_path.parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path[:] = old_path
     return module
 
 

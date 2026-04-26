@@ -14,7 +14,8 @@ For each task in ``fixtures/tasks.yaml`` we read the matching
 The output is written to ``<output-dir>/summary.md`` in the same shape as
 ``/Users/mohankrishnaalavala/Documents/project_context/fastapi/.eval_results/judge_summary.md``.
 
-Exits 0 on success. Non-zero only if inputs are missing / unreadable.
+Exits 0 on success, 3 when ``--gate`` fails, or 1 when inputs are missing /
+unreadable.
 """
 
 from __future__ import annotations
