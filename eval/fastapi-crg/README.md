@@ -17,6 +17,7 @@ After scoring runs, whether or not the gate passes, `./output/` contains:
 | `cr_task1.json` … `cr_task3.json` | `context-router pack --json` | one per fixture |
 | `crg_task1.json` … `crg_task3.json` | `code-review-graph detect-changes` | one per fixture |
 | `summary.md` | `score.py` | aggregate precision / recall / F1 / token reduction |
+| `diagnostics.json` | `score.py` | missing/extra files, source-type counts, aggregate parity metrics |
 
 ## Prerequisites
 
