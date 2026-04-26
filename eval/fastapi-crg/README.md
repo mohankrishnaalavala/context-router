@@ -10,7 +10,7 @@ commit state, saves the raw JSON outputs, and scores the results into a
 
 ## What you get
 
-After a successful run, `./output/` contains:
+After scoring runs, whether or not the gate passes, `./output/` contains:
 
 | File | Source | Notes |
 |---|---|---|

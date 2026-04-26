@@ -6,7 +6,7 @@ Fixture: `eval/fastapi-crg/fixtures/tasks.yaml`
 Repo: `/Users/mohankrishnaalavala/Documents/project_context/fastapi`
 Output: `/Users/mohankrishnaalavala/Documents/project_context/fastapi/.eval_results_v44`
 
-## Current Result
+## Historical v4.4 Artifact Baseline
 
 | Metric | context-router | code-review-graph |
 |---|---:|---:|
@@ -14,6 +14,21 @@ Output: `/Users/mohankrishnaalavala/Documents/project_context/fastapi/.eval_resu
 | Avg file precision | 0.333 | 0.833 |
 | Avg file recall | 0.333 | 1.000 |
 | Avg F1 | 0.333 | 0.889 |
+
+## Live Gate Reproduction Before Fixes
+
+Source: `/tmp/context-router-crg-parity-before/summary.md`
+
+| Metric | context-router | code-review-graph |
+|---|---:|---:|
+| Avg tokens per task | 8,048 | 1,507 |
+| Avg file precision | 0.007 | 0.833 |
+| Avg file recall | 1.000 | 1.000 |
+| Avg F1 | 0.014 | 0.889 |
+| Avg token reduction | 98.8% | 99.8% |
+
+The live gate includes the gold files, but precision is terrible because
+context-router returns roughly 140 files per task.
 
 ## Required Gate
 

@@ -168,7 +168,11 @@ while IFS=$'\t' read -r TID SHA QUERY MODE; do
   # correct HEAD~1 diff (the fixture commit's own diff).
   echo "   [code-review-graph build]"
   if ! code-review-graph build --repo "${FASTAPI_ROOT}" >/dev/null 2>&1; then
-    echo "   warning: code-review-graph build failed; detect-changes may be stale" >&2
+    echo "   error: code-review-graph build failed for ${TID}" >&2
+    echo "          Scoring cannot continue because detect-changes may use stale CRG data." >&2
+    echo "          Re-run manually to inspect the failure:" >&2
+    echo "            code-review-graph build --repo \"${FASTAPI_ROOT}\"" >&2
+    exit 1
   fi
 
   CR_OUT="${OUTPUT_DIR}/cr_${TID}.json"
