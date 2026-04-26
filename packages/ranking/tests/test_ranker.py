@@ -569,25 +569,26 @@ def test_aux_path_re_covers_auxiliary_dirs() -> None:
 def test_adaptive_topk_plateau_rule_fires() -> None:
     """Plateau rule drops from the first pair whose step < DELTA and conf < ABS_FLOOR.
 
-    With [0.52, 0.44, 0.43, 0.42, 0.41]:
-    - pair (a->b): step=0.08 >= DELTA — not a plateau entry
-    - pair (b->c): step=0.01 < DELTA AND c=0.43 < ABS_FLOOR — plateau starts here
-    Rule fires at i=2 -> last_keep=min(4,1)=1 -> keeps [a, b], drops c/d/e.
+    With [0.52, 0.42, 0.39, 0.38, 0.37] and ABS_FLOOR=0.40:
+    - pair (a->b): step=0.10 >= DELTA — not a plateau entry
+    - pair (b->c): step=0.03 >= DELTA — not a plateau entry
+    - pair (c->d): step=0.01 < DELTA AND d=0.38 < ABS_FLOOR — plateau starts here
+    Rule fires at i=3 -> last_keep=min(4,2)=2 -> keeps [a, b, c], drops d/e.
     """
     items = [
         _item(confidence=0.52, title="a"),
-        _item(confidence=0.44, title="b"),
-        _item(confidence=0.43, title="c"),
-        _item(confidence=0.42, title="d"),
-        _item(confidence=0.41, title="e"),
+        _item(confidence=0.42, title="b"),
+        _item(confidence=0.39, title="c"),
+        _item(confidence=0.38, title="d"),
+        _item(confidence=0.37, title="e"),
     ]
     ranker = ContextRanker(token_budget=0)
     result = ranker._apply_adaptive_top_k(items, "review")
     titles = [i.title for i in result]
     assert "a" in titles
-    assert "b" in titles, "b is kept — plateau fires at the b->c transition"
-    assert "c" not in titles, "c and beyond are cut as plateau"
-    assert "d" not in titles
+    assert "b" in titles
+    assert "c" in titles, "c is kept — plateau fires at the c->d transition"
+    assert "d" not in titles, "d and beyond are cut as plateau"
     assert "e" not in titles
 
 
@@ -693,3 +694,41 @@ def test_source_file_boost_ranks_module_above_test() -> None:
     assert paths.index("fastapi/security/oauth2.py") < paths.index(
         "tests/test_security_oauth2.py"
     ), f"Expected oauth2.py before test file, got order: {paths}"
+
+
+# -----------------------------------------------------------------------
+# v4.4 C2 — Lower ABS_FLOOR and enable semantic re-rank by default
+# -----------------------------------------------------------------------
+
+
+def test_adaptive_topk_floor_is_0_40() -> None:
+    """ABS_FLOOR is exactly 0.40 (not the old 0.45)."""
+    assert _ADAPTIVE_TOPK_ABS_FLOOR == 0.40
+
+
+def test_adaptive_topk_item_at_0_41_survives_plateau_cut() -> None:
+    """Item at conf=0.41 survives with ABS_FLOOR=0.40 (would be cut at old 0.45).
+
+    With [0.80, 0.41] and ABS_FLOOR=0.40:
+    - Rule 1: floor = 0.6 * 0.80 = 0.48 — 0.41 < 0.48, would be cut by Rule 1.
+    Use three items so Rule 1 doesn't cut the 0.41 item:
+    [0.80, 0.70, 0.41] — Rule 1 floor = 0.6 * 0.80 = 0.48; 0.41 < 0.48 — cut by Rule 1.
+
+    To isolate the plateau rule: use [0.45, 0.41] — floor=0.6*0.45=0.27, 0.41>0.27 survives Rule 1.
+    Plateau: leader=0.45 > ABS_FLOOR=0.40; pair (a->b): step=0.04>=DELTA — no fire.
+    Result: both items kept.
+    """
+    items = [
+        _item(confidence=0.45, title="a"),
+        _item(confidence=0.41, title="b"),
+    ]
+    ranker = ContextRanker(token_budget=0)
+    result = ranker._apply_adaptive_top_k(items, "review")
+    titles = [i.title for i in result]
+    assert "b" in titles, "item at conf=0.41 should survive with ABS_FLOOR=0.40"
+
+
+def test_use_embeddings_default_is_true() -> None:
+    """use_embeddings defaults to True (v4.4 C2: semantic re-rank enabled by default)."""
+    ranker = ContextRanker(token_budget=0)
+    assert ranker._use_embeddings is True

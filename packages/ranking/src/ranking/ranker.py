@@ -324,7 +324,7 @@ _DEFAULT_REASON = "Included in context pack"
 # Adaptive top-k constants (v4.2 T3; plateau rule added v4.3 C2)
 _ADAPTIVE_TOPK_FLOOR_RATIO: float = 0.6
 _ADAPTIVE_TOPK_PLATEAU_DELTA: float = 0.02   # max step between consecutive plateau items
-_ADAPTIVE_TOPK_ABS_FLOOR: float = 0.45       # plateau items must be below this threshold
+_ADAPTIVE_TOPK_ABS_FLOOR: float = 0.40       # plateau items must be below this threshold
 _ADAPTIVE_TOPK_MODES: frozenset[str] = frozenset({"review", "implement"})
 
 # v4.4 C1: source-file basename boost — lifts exact module name matches above
@@ -401,7 +401,7 @@ class ContextRanker:
     def __init__(
         self,
         token_budget: int = 8_000,
-        use_embeddings: bool = False,
+        use_embeddings: bool = True,
         progress_cb: Callable[[str], None] | None = None,
         use_hub_boost: bool | None = None,
         db_connection: Any | None = None,
@@ -414,7 +414,8 @@ class ContextRanker:
                 returned item list.  0 means unlimited.
             use_embeddings: If True, apply semantic similarity boosting via
                 sentence-transformers (requires ``pip install sentence-transformers``).
-                Defaults to False to avoid the model download on first run.
+                Defaults to True; when the model is unavailable a stderr warning is
+                emitted and ranking proceeds without semantic boosting.
             progress_cb: Optional callback invoked with status messages during
                 first-time model download (see :func:`_get_embed_model`).
                 Used by the CLI to render a rich progress bar; must be None
@@ -632,6 +633,10 @@ class ContextRanker:
             return items
         model = _get_embed_model(progress_cb=self._progress_cb)
         if not model:
+            sys.stderr.write(
+                "warning: use_embeddings=True but semantic model is unavailable; "
+                "semantic re-ranking skipped for this call.\n"
+            )
             return items
         # Reset the per-call "missing embeddings" warning latch so each
         # rank() call is permitted at most one stderr line.
