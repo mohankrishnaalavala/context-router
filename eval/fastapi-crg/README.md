@@ -65,6 +65,14 @@ bash eval/fastapi-crg/run.sh \
   --output-dir   /tmp/crg-eval-out
 ```
 
+The runner is a parity gate, not a token-reduction demo. It exits non-zero when
+context-router's average F1 is below `0.80` or below code-review-graph's average
+F1 on the same fixtures. The failure artifacts are:
+
+- `summary.md`: human-readable precision / recall / F1 comparison.
+- `diagnostics.json`: machine-readable missing ground-truth files, extra files,
+  source-type counts, and aggregate parity metrics.
+
 Then open `eval/fastapi-crg/output/summary.md`.
 
 ## What run.sh does (high level)

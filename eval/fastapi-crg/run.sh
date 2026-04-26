@@ -201,8 +201,13 @@ echo "── scoring ──"
 if ! python3 "${SCRIPT_DIR}/score.py" \
       --tasks "${TASKS_YAML}" \
       --output-dir "${OUTPUT_DIR}" \
-      --fastapi-root "${FASTAPI_ROOT}"; then
-  echo "error: scoring failed" >&2
+      --fastapi-root "${FASTAPI_ROOT}" \
+      --diagnostics-json diagnostics.json \
+      --gate \
+      --min-cr-f1 0.80 \
+      --min-crg-f1-ratio 1.00; then
+  echo "error: CRG parity gate failed" >&2
+  echo "       See ${OUTPUT_DIR}/summary.md and ${OUTPUT_DIR}/diagnostics.json" >&2
   exit 1
 fi
 
@@ -211,3 +216,4 @@ echo "done. Artifacts:"
 echo "  - ${OUTPUT_DIR}/cr_task{1,2,3}.json"
 echo "  - ${OUTPUT_DIR}/crg_task{1,2,3}.json"
 echo "  - ${OUTPUT_DIR}/summary.md"
+echo "  - ${OUTPUT_DIR}/diagnostics.json"
