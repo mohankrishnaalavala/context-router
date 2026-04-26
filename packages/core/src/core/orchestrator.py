@@ -1134,6 +1134,9 @@ class Orchestrator:
                     all_ranked, sym_repo, edge_repo, repo_name="default"
                 )
 
+            # v4.4 B3: enrich items with inline symbol bodies for token-efficient reads.
+            all_ranked = self._enrich_with_symbol_bodies(all_ranked, sym_repo)
+
             total_items_count = len(all_ranked)
 
             if progress_cb is not None:
@@ -2047,6 +2050,72 @@ class Orchestrator:
             )
             return annotated, note
         return annotated, None
+
+    # ------------------------------------------------------------------
+    # v4.4 B3 — inline symbol body enrichment
+    # ------------------------------------------------------------------
+
+    def _enrich_with_symbol_bodies(
+        self,
+        items: list[ContextItem],
+        sym_repo: "SymbolRepository",
+    ) -> list[ContextItem]:
+        """Populate symbol_body and symbol_lines on file-type items.
+
+        Looks up line ranges with a single DB batch query, then reads
+        just those lines from each source file. Items whose symbol is
+        not in the DB or whose file cannot be read are returned unchanged
+        (symbol_body stays None — the agent falls back to reading the
+        full file). Memory and decision items are always skipped.
+        """
+        if not items:
+            return items
+
+        _MEM_TYPES = frozenset({"memory", "decision"})
+        lookups: list[tuple[str, str, str]] = []
+        for item in items:
+            if item.source_type in _MEM_TYPES:
+                continue
+            # Title format from _build_symbol_reason: "SymbolName (filename.py)"
+            name = item.title.split(" (")[0] if " (" in item.title else item.title
+            if name and item.path_or_ref:
+                lookups.append((item.repo or "default", item.path_or_ref, name))
+
+        if not lookups:
+            return items
+
+        line_map = sym_repo.fetch_symbol_lines_batch(lookups)
+
+        result: list[ContextItem] = []
+        for item in items:
+            if item.source_type in _MEM_TYPES:
+                result.append(item)
+                continue
+            name = item.title.split(" (")[0] if " (" in item.title else item.title
+            key = (item.repo or "default", item.path_or_ref, name)
+            line_range = line_map.get(key)
+            if line_range is None:
+                result.append(item)
+                continue
+            line_start, line_end = line_range
+            if not line_start or not line_end or line_end < line_start:
+                result.append(item)
+                continue
+            try:
+                path = Path(item.path_or_ref)
+                if not path.is_absolute():
+                    path = self._root / path
+                content = path.read_text(encoding="utf-8", errors="replace")
+                body_lines = content.splitlines()[line_start - 1 : line_end]
+                body = "\n".join(body_lines)
+                result.append(item.model_copy(update={
+                    "symbol_body": body,
+                    "symbol_lines": (line_start, line_end),
+                }))
+            except OSError:
+                result.append(item)
+
+        return result
 
     # ------------------------------------------------------------------
     # v3.3.0 β3 — external reference resolution / filtering
