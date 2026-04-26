@@ -299,3 +299,102 @@ outcomes:
       verify:
         cmd: bash scripts/smoke-v4.3.sh
         expected_stdout_contains: "PASS: memory-federation"
+
+  # ── v4.4 outcomes ──────────────────────────────────────────────────────────
+
+  - id: v4.4-symbol-body-enrichment
+    phase: v4.4
+    priority: P0
+    description: >-
+      ContextItems in agent format include inline symbol bodies so agents read
+      ~200 tokens instead of opening full files (~10,000 tokens).
+    dod:
+      outcome: >-
+        `context-router pack --format agent` returns items with a "body" key
+        containing the actual source code for each symbol. Agents no longer
+        need to read entire files to get symbol content.
+      threshold: >-
+        For any pack with at least one indexed symbol, to_agent_format() returns
+        a "body" key on items where the symbol was found in the DB and the file
+        is readable. Items without a DB match omit "body" silently.
+      negative_case: >-
+        When a symbol is not in the index (e.g. after a fresh clone before
+        `context-router index`), the item is returned without "body" and no
+        warning is emitted — agents fall back to reading the full file.
+      verify:
+        cmd: >-
+          context-router pack --mode implement --query "oauth2 password" --format agent --json
+        expected_stdout_contains: '"body"'
+
+  - id: v4.4-source-file-boost
+    phase: v4.4
+    priority: P0
+    description: >-
+      Source files whose basename matches a query token are boosted 1.3x over
+      test files that only mention the module name in excerpts.
+    dod:
+      outcome: >-
+        For the query "Fix typo for client_secret in OAuth2 form docstrings",
+        fastapi/security/oauth2.py ranks at position 1 in the pack (was missing
+        from top-5 in v4.3).
+      threshold: >-
+        `context-router pack --mode debug --query "oauth2 form docstrings"` against
+        a fastapi checkout returns oauth2.py as the first item in selected_items.
+      negative_case: >-
+        The boost only fires for non-test, non-script source files. Test files
+        (matching _is_test_or_script_path) are never boosted, regardless of
+        filename match.
+      verify:
+        cmd: >-
+          context-router pack --mode debug --query "oauth2 form docstrings" --json
+            | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['selected_items'][0]['path_or_ref'])"
+        expected_stdout_contains: "oauth2"
+
+  - id: v4.4-language-analyzers
+    phase: v4.4
+    priority: P1
+    description: >-
+      Six new language analyzers (Go, Rust, Ruby, PHP, SQL, JavaScript) produce
+      symbols for indexing, making context-router effective on polyglot repos.
+    dod:
+      outcome: >-
+        `context-router index` on a repo containing .go, .rs, .rb, .php, .sql,
+        and .js files produces symbols for each language. Pack results for those
+        repos include file-level context items.
+      threshold: >-
+        Each language analyzer package has ≥4 passing unit tests covering
+        function/method/class/struct detection and test-file detection.
+      negative_case: >-
+        Files with unsupported extensions are silently skipped (no warning, no
+        crash). The overall index run still succeeds.
+      verify:
+        cmd: >-
+          uv run pytest packages/language-go packages/language-rust packages/language-ruby
+            packages/language-php packages/language-sql packages/language-typescript -q
+        expected_stdout_contains: "passed"
+
+  - id: v4.4-semantic-rerank-default
+    phase: v4.4
+    priority: P1
+    description: >-
+      Semantic re-ranking (all-MiniLM-L6-v2) is enabled by default. ABS_FLOOR
+      lowered from 0.45 to 0.40 to recover borderline-confidence items.
+    dod:
+      outcome: >-
+        ContextRanker uses semantic similarity boosting without any opt-in flag.
+        When sentence-transformers is unavailable, a stderr warning is emitted
+        and ranking proceeds without semantic boost (no silent no-op).
+      threshold: >-
+        `python3 -c "from ranking.ranker import ContextRanker, _ADAPTIVE_TOPK_ABS_FLOOR;
+        r = ContextRanker(); assert r._use_embeddings; assert _ADAPTIVE_TOPK_ABS_FLOOR == 0.40"`
+        exits 0.
+      negative_case: >-
+        When sentence-transformers is not installed, stderr contains
+        "semantic model is unavailable" and the pack is still returned with all
+        other signals applied.
+      verify:
+        cmd: >-
+          python3 -c "from ranking.ranker import ContextRanker, _ADAPTIVE_TOPK_ABS_FLOOR;
+          r = ContextRanker(token_budget=0); assert r._use_embeddings is True;
+          assert _ADAPTIVE_TOPK_ABS_FLOOR == 0.40; print('PASS: semantic-rerank-default')"
+        expected_stdout_contains: "PASS: semantic-rerank-default"
