@@ -90,6 +90,64 @@ class TestSymbolRepository:
         sym = repo.get_all("myrepo")[0]
         assert sym.community_id is None
 
+    def test_fetch_symbol_lines_batch_empty_input(self, db: Database):
+        repo = SymbolRepository(db.connection)
+        result = repo.fetch_symbol_lines_batch([])
+        assert result == {}
+
+    def test_fetch_symbol_lines_batch_returns_correct_line_ranges(self, db: Database):
+        repo = SymbolRepository(db.connection)
+        foo = Symbol(
+            name="foo",
+            kind="function",
+            file=Path("a.py"),
+            line_start=10,
+            line_end=20,
+            language="python",
+        )
+        bar = Symbol(
+            name="bar",
+            kind="function",
+            file=Path("a.py"),
+            line_start=30,
+            line_end=45,
+            language="python",
+        )
+        repo.add(foo, "r")
+        repo.add(bar, "r")
+
+        result = repo.fetch_symbol_lines_batch([
+            ("r", "a.py", "foo"),
+            ("r", "a.py", "bar"),
+        ])
+
+        assert ("r", "a.py", "foo") in result
+        assert ("r", "a.py", "bar") in result
+        assert result[("r", "a.py", "foo")] == (10, 20)
+        assert result[("r", "a.py", "bar")] == (30, 45)
+
+    def test_fetch_symbol_lines_batch_missing_symbol_absent(self, db: Database):
+        repo = SymbolRepository(db.connection)
+        repo.add(
+            Symbol(
+                name="exists",
+                kind="function",
+                file=Path("b.py"),
+                line_start=1,
+                line_end=5,
+                language="python",
+            ),
+            "r",
+        )
+
+        result = repo.fetch_symbol_lines_batch([
+            ("r", "b.py", "exists"),
+            ("r", "b.py", "no_such_symbol"),
+        ])
+
+        assert ("r", "b.py", "exists") in result
+        assert ("r", "b.py", "no_such_symbol") not in result
+
 
 class TestEdgeRepository:
     def test_add_raw_edge(self, db: Database):
