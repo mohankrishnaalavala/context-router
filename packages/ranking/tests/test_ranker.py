@@ -654,3 +654,42 @@ def test_memory_cap_no_memory_items_noop() -> None:
     result = ranker.rank(code_items, "", "review")
     # No memory items → code fills remaining budget (up to 1000 tokens = 10 items)
     assert len(result) >= 5
+
+
+# -----------------------------------------------------------------------
+# v4.4 C1: source-file basename boost
+# -----------------------------------------------------------------------
+
+def test_source_file_boost_ranks_module_above_test() -> None:
+    """oauth2.py (conf=0.5) must rank above tests/test_security_oauth2.py (conf=0.55).
+
+    The test file has a higher structural confidence; without the basename
+    boost the BM25 + structural blend would let it stay on top. The 1.3x
+    multiplier on the source module must overcome that gap.
+    """
+    source_item = ContextItem(
+        source_type="file",
+        repo="fastapi",
+        path_or_ref="fastapi/security/oauth2.py",
+        title="OAuth2 (oauth2.py)",
+        excerpt="class OAuth2: ...",
+        reason="",
+        confidence=0.5,
+        est_tokens=100,
+    )
+    test_item = ContextItem(
+        source_type="file",
+        repo="fastapi",
+        path_or_ref="tests/test_security_oauth2.py",
+        title="test_security_oauth2",
+        excerpt="from fastapi.security.oauth2 import OAuth2",
+        reason="",
+        confidence=0.55,
+        est_tokens=100,
+    )
+    ranker = ContextRanker(token_budget=0)
+    result = ranker.rank([source_item, test_item], "oauth2 form docstrings", "implement")
+    paths = [i.path_or_ref for i in result]
+    assert paths.index("fastapi/security/oauth2.py") < paths.index(
+        "tests/test_security_oauth2.py"
+    ), f"Expected oauth2.py before test file, got order: {paths}"

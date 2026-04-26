@@ -327,6 +327,10 @@ _ADAPTIVE_TOPK_PLATEAU_DELTA: float = 0.02   # max step between consecutive plat
 _ADAPTIVE_TOPK_ABS_FLOOR: float = 0.45       # plateau items must be below this threshold
 _ADAPTIVE_TOPK_MODES: frozenset[str] = frozenset({"review", "implement"})
 
+# v4.4 C1: source-file basename boost — lifts exact module name matches above
+# test files that merely mention the module in their excerpts.
+_SOURCE_FILE_BOOST: float = 1.3
+
 
 def _tokenize(text: str) -> set[str]:
     """Return lowercase tokens from *text* that are at least _MIN_TOKEN_LEN chars.
@@ -501,6 +505,7 @@ class ContextRanker:
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
         boosted = self._apply_bm25_boost(annotated, query_tokens, mode=mode)
+        boosted = self._apply_source_file_boost(boosted, query_tokens)  # v4.4 C1
         # v3 phase-3 (outcome: hub-bridge-ranking-signals): structural
         # boost applied AFTER BM25 so BM25's normalised signal is not
         # flattened, and BEFORE the semantic pass so both additive
@@ -891,6 +896,39 @@ class ContextRanker:
             ):
                 new_conf = new_conf * 0.85
             result.append(item.model_copy(update={"confidence": new_conf}))
+        return result
+
+    # ------------------------------------------------------------------
+    # Source-file basename boost (v4.4 C1: source-file-boost)
+    # ------------------------------------------------------------------
+
+    def _apply_source_file_boost(
+        self,
+        items: list[ContextItem],
+        query_tokens: set[str],
+    ) -> list[ContextItem]:
+        """Boost items whose file basename stem exactly matches a query token.
+
+        If the query contains "oauth2" and the item's file is "oauth2.py"
+        (stem = "oauth2"), apply a 1.3x multiplier capped at 0.95.
+        Only fires for non-test, non-script paths. This targets the known
+        BM25 failure mode where test files that mention a module name in
+        excerpts outrank the source module itself.
+        """
+        if not query_tokens:
+            return items
+        result = []
+        for item in items:
+            path = item.path_or_ref or ""
+            stem = Path(path).stem.lower().replace("-", "_").replace(".", "_")
+            if (
+                stem in query_tokens
+                and not _is_test_or_script_path(path)
+            ):
+                boosted = min(0.95, item.confidence * _SOURCE_FILE_BOOST)
+                result.append(item.model_copy(update={"confidence": boosted}))
+            else:
+                result.append(item)
         return result
 
     # ------------------------------------------------------------------
