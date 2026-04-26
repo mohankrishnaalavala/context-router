@@ -2447,6 +2447,7 @@ class Orchestrator:
                 signal_paths.add(p.name)
 
         changed_files = self._get_changed_files()
+        has_runtime_or_diff_signal = bool(signals) or bool(changed_files)
 
         blast_radius_files: set[str] = set()
         for cf in changed_files:
@@ -2487,7 +2488,7 @@ class Orchestrator:
             elif fp in past_files or fname in past_files:
                 source_type = "past_debug"
                 confidence = weights.get("past_debug", _DEBUG_CONFIDENCE.get("past_debug", 0.90))
-            elif self._is_test_file(fp):
+            elif has_runtime_or_diff_signal and self._is_test_file(fp):
                 source_type = "failing_test"
                 confidence = weights.get("failing_test", _DEBUG_CONFIDENCE["failing_test"])
             elif fp in changed_files:
