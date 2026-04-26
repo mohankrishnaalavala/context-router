@@ -264,3 +264,48 @@ class TestPackFeedbackFilesRead:
         )
         assert fb.missing == ["needed.py"]
         assert fb.files_read == ["read.py"]
+
+
+# ---------------------------------------------------------------------------
+# v4.4: symbol_body and symbol_lines enrichment fields
+# ---------------------------------------------------------------------------
+
+class TestSymbolBodyEnrichment:
+    def test_symbol_body_defaults_to_none(self):
+        item = _make_item()
+        assert item.symbol_body is None
+
+    def test_symbol_lines_defaults_to_none(self):
+        item = _make_item()
+        assert item.symbol_lines is None
+
+    def test_to_agent_format_omits_body_when_symbol_body_is_none(self):
+        pack = ContextPack(
+            mode="implement",
+            query="q",
+            selected_items=[_make_item()],
+        )
+        result = pack.to_agent_format()
+        assert len(result) == 1
+        assert "body" not in result[0]
+
+    def test_to_agent_format_includes_body_when_symbol_body_is_set(self):
+        item = _make_item(symbol_body="def foo():\n    return 42\n")
+        pack = ContextPack(mode="implement", query="q", selected_items=[item])
+        result = pack.to_agent_format()
+        assert len(result) == 1
+        assert result[0]["body"] == "def foo():\n    return 42\n"
+
+    def test_symbol_lines_round_trips_through_serialization(self):
+        item = _make_item(symbol_lines=(10, 25))
+        restored = ContextItem.model_validate_json(item.model_dump_json())
+        assert restored.symbol_lines == (10, 25)
+
+    def test_symbol_body_and_lines_together(self):
+        item = _make_item(
+            symbol_body="class Foo:\n    pass\n",
+            symbol_lines=(5, 6),
+        )
+        restored = ContextItem.model_validate_json(item.model_dump_json())
+        assert restored.symbol_body == "class Foo:\n    pass\n"
+        assert restored.symbol_lines == (5, 6)
