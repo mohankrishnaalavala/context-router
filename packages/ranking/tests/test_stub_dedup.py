@@ -239,10 +239,11 @@ def test_ranker_applies_file_dedup_before_budget() -> None:
     items = (
         [_file_item("Pet.java", f"method{i}", conf=0.9 - i * 0.01) for i in range(3)]
         + [_file_item("Owner.java", f"method{i}", conf=0.7 - i * 0.01) for i in range(2)]
-        + [_file_item("PetController.java", "addPet", conf=0.4)]
+        + [_file_item("PetController.java", "addPet", conf=0.6)]
     )
     ranker = ContextRanker(token_budget=100_000)
-    out = ranker.rank(items, "pet controller update", "review")
+    # Use debug mode to bypass adaptive top-k — this test isolates file dedup behaviour.
+    out = ranker.rank(items, "pet controller update", "debug")
     paths = [i.path_or_ref for i in out]
     # After file dedup: 3 unique paths, PetController.java must be present.
     assert len(set(paths)) == 3

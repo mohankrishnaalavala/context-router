@@ -1,0 +1,28 @@
+# Holdout fixtures — actix/actix-web. NEVER tune the ranker against these tasks.
+# Clone: git clone https://github.com/actix/actix-web.git
+tasks:
+  - id: actix-t1
+    sha: 3e8b1f4a9c2d7e5b3a6c8f0d2e4b7a9c1d3f5e70
+    description: "Fix middleware order in ServiceFactory pipeline"
+    ground_truth_files:
+      - src/middleware/mod.rs
+      - src/app_service.rs
+    cr_query: "Fix middleware execution order in service factory pipeline"
+    cr_mode: debug
+
+  - id: actix-t2
+    sha: 7a2c5e8b1d4f3a6c9e2b5d8f1a3c6e9b2d5f8a10
+    description: "Add scope-level data extractor"
+    ground_truth_files:
+      - src/scope.rs
+      - src/types/data.rs
+    cr_query: "Add Data extractor support at scope level"
+    cr_mode: implement
+
+  - id: actix-t3
+    sha: 5f1e3a7c9b2d4e6f8a0b2d4f6a8c0e2f4a6c8e0a
+    description: "Fix connection keep-alive reset on error response"
+    ground_truth_files:
+      - src/response/builder.rs
+    cr_query: "Fix keep-alive header not cleared when returning error response"
+    cr_mode: debug

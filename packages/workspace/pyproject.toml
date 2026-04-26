@@ -1,6 +1,6 @@
 [project]
 name = "context-router-workspace"
-version = "4.3.0"
+version = "4.4.0"
 requires-python = ">=3.12"
 description = "Multi-repo workspace registry and cross-repo link model for context-router (Phase 7)"
 license = {text = "Apache-2.0"}

@@ -1,0 +1,27 @@
+# Holdout fixtures — django/django. NEVER tune the ranker against these tasks.
+# Clone: git clone https://github.com/django/django.git
+tasks:
+  - id: django-t1
+    sha: 2b8e4a6c1d9f3b7e5a2c8d4f6b3e7a1c9d5f2b80
+    description: "Fix ORM annotate() with Window function ordering"
+    ground_truth_files:
+      - django/db/models/query.py
+    cr_query: "Fix annotate with Window function not preserving ordering"
+    cr_mode: debug
+
+  - id: django-t2
+    sha: 9a3c7e1b5d8f2a4c6e0b3d5f7a9c1e3b5d7f9a20
+    description: "Add JSONField to Django models"
+    ground_truth_files:
+      - django/db/models/fields/json.py
+      - django/db/backends/base/operations.py
+    cr_query: "Add JSONField support to Django model fields"
+    cr_mode: implement
+
+  - id: django-t3
+    sha: 6c2e4a8b1d5f3a7c9e1b4d6f8a0c2e4b6d8f0a20
+    description: "Fix middleware process_exception not called on StreamingHttpResponse"
+    ground_truth_files:
+      - django/core/handlers/base.py
+    cr_query: "Fix middleware process_exception skipped for StreamingHttpResponse"
+    cr_mode: debug

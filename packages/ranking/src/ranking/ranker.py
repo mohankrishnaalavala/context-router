@@ -324,8 +324,12 @@ _DEFAULT_REASON = "Included in context pack"
 # Adaptive top-k constants (v4.2 T3; plateau rule added v4.3 C2)
 _ADAPTIVE_TOPK_FLOOR_RATIO: float = 0.6
 _ADAPTIVE_TOPK_PLATEAU_DELTA: float = 0.02   # max step between consecutive plateau items
-_ADAPTIVE_TOPK_ABS_FLOOR: float = 0.45       # plateau items must be below this threshold
+_ADAPTIVE_TOPK_ABS_FLOOR: float = 0.40       # plateau items must be below this threshold
 _ADAPTIVE_TOPK_MODES: frozenset[str] = frozenset({"review", "implement"})
+
+# v4.4 C1: source-file basename boost — lifts exact module name matches above
+# test files that merely mention the module in their excerpts.
+_SOURCE_FILE_BOOST: float = 1.3
 
 
 def _tokenize(text: str) -> set[str]:
@@ -397,7 +401,7 @@ class ContextRanker:
     def __init__(
         self,
         token_budget: int = 8_000,
-        use_embeddings: bool = False,
+        use_embeddings: bool = True,
         progress_cb: Callable[[str], None] | None = None,
         use_hub_boost: bool | None = None,
         db_connection: Any | None = None,
@@ -410,7 +414,8 @@ class ContextRanker:
                 returned item list.  0 means unlimited.
             use_embeddings: If True, apply semantic similarity boosting via
                 sentence-transformers (requires ``pip install sentence-transformers``).
-                Defaults to False to avoid the model download on first run.
+                Defaults to True; when the model is unavailable a stderr warning is
+                emitted and ranking proceeds without semantic boosting.
             progress_cb: Optional callback invoked with status messages during
                 first-time model download (see :func:`_get_embed_model`).
                 Used by the CLI to render a rich progress bar; must be None
@@ -501,6 +506,7 @@ class ContextRanker:
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
         boosted = self._apply_bm25_boost(annotated, query_tokens, mode=mode)
+        boosted = self._apply_source_file_boost(boosted, query_tokens)  # v4.4 C1
         # v3 phase-3 (outcome: hub-bridge-ranking-signals): structural
         # boost applied AFTER BM25 so BM25's normalised signal is not
         # flattened, and BEFORE the semantic pass so both additive
@@ -627,6 +633,10 @@ class ContextRanker:
             return items
         model = _get_embed_model(progress_cb=self._progress_cb)
         if not model:
+            sys.stderr.write(
+                "warning: use_embeddings=True but semantic model is unavailable; "
+                "semantic re-ranking skipped for this call.\n"
+            )
             return items
         # Reset the per-call "missing embeddings" warning latch so each
         # rank() call is permitted at most one stderr line.
@@ -891,6 +901,39 @@ class ContextRanker:
             ):
                 new_conf = new_conf * 0.85
             result.append(item.model_copy(update={"confidence": new_conf}))
+        return result
+
+    # ------------------------------------------------------------------
+    # Source-file basename boost (v4.4 C1: source-file-boost)
+    # ------------------------------------------------------------------
+
+    def _apply_source_file_boost(
+        self,
+        items: list[ContextItem],
+        query_tokens: set[str],
+    ) -> list[ContextItem]:
+        """Boost items whose file basename stem exactly matches a query token.
+
+        If the query contains "oauth2" and the item's file is "oauth2.py"
+        (stem = "oauth2"), apply a 1.3x multiplier capped at 0.95.
+        Only fires for non-test, non-script paths. This targets the known
+        BM25 failure mode where test files that mention a module name in
+        excerpts outrank the source module itself.
+        """
+        if not query_tokens:
+            return items
+        result = []
+        for item in items:
+            path = item.path_or_ref or ""
+            stem = Path(path).stem.lower().replace("-", "_").replace(".", "_")
+            if (
+                stem in query_tokens
+                and not _is_test_or_script_path(path)
+            ):
+                boosted = min(0.95, item.confidence * _SOURCE_FILE_BOOST)
+                result.append(item.model_copy(update={"confidence": boosted}))
+            else:
+                result.append(item)
         return result
 
     # ------------------------------------------------------------------

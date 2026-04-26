@@ -1,0 +1,27 @@
+# Holdout fixtures — rails/rails. NEVER tune the ranker against these tasks.
+# Clone: git clone https://github.com/rails/rails.git
+tasks:
+  - id: rails-t1
+    sha: 4f6e20a1d9b347c82e6d9a8b3c14e7f5a2b09d81
+    description: "Fix has_many through association with source option"
+    ground_truth_files:
+      - activerecord/lib/active_record/associations/has_many_through_reflection.rb
+    cr_query: "Fix has_many :through association with :source option not resolving"
+    cr_mode: debug
+
+  - id: rails-t2
+    sha: 8c3a17e9b5f420d7c8e6b4a2d9f3e1c7b5a48f20
+    description: "Add insert_all and upsert_all to ActiveRecord"
+    ground_truth_files:
+      - activerecord/lib/active_record/persistence.rb
+      - activerecord/lib/active_record/insert_all.rb
+    cr_query: "Add bulk insert_all and upsert_all methods to ActiveRecord model"
+    cr_mode: implement
+
+  - id: rails-t3
+    sha: 1d7e4a9c3b5f820e6d8b2a7c4e9f3d1b7a5c2e80
+    description: "Fix ActionController strong parameters permit! deep merge"
+    ground_truth_files:
+      - actionpack/lib/action_controller/metal/strong_parameters.rb
+    cr_query: "Fix strong parameters permit! not merging nested hashes correctly"
+    cr_mode: debug

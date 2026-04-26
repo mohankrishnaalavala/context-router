@@ -55,6 +55,11 @@ class ContextItem(BaseModel):
     # ``ContextPack.duplicates_hidden``, which aggregates the
     # (title, path_or_ref) dedup pass at the pack level.
     duplicates_hidden: int = 0
+    # v4.4 symbol body enrichment: populated by the Orchestrator after budget
+    # enforcement when symbol lines can be fetched from the sqlite index.
+    # When set, agents can read the body directly instead of opening the file.
+    symbol_body: str | None = None
+    symbol_lines: tuple[int, int] | None = None
 
     def to_compact_line(self) -> str:
         """Return a compact single-item representation (no JSON metadata overhead)."""
@@ -157,6 +162,7 @@ class ContextPack(BaseModel):
                     "path": item.path_or_ref,
                     "lines": lines,
                     "reason": item.reason or item.title,
+                    **({"body": item.symbol_body} if item.symbol_body else {}),
                 }
             )
         return out

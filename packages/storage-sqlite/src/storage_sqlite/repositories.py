@@ -616,6 +616,41 @@ class SymbolRepository:
             result.setdefault(cid, []).append(row["id"])
         return result
 
+    def fetch_symbol_lines_batch(
+        self,
+        lookups: list[tuple[str, str, str]],  # (repo, file_path, symbol_name)
+    ) -> dict[tuple[str, str, str], tuple[int, int]]:
+        """Return line ranges for a batch of symbols in a single SQL query.
+
+        Args:
+            lookups: List of (repo, file_path, symbol_name) tuples to look up.
+
+        Returns:
+            Dict mapping (repo, file_path, symbol_name) → (line_start, line_end).
+            Missing symbols are absent from the result (not KeyError).
+        """
+        if not lookups:
+            return {}
+
+        placeholders = ",".join(["(?,?,?)"] * len(lookups))
+        flat_params = [v for t in lookups for v in t]
+        rows = self._conn.execute(
+            f"""
+            WITH lookup(repo, file_path, name) AS (VALUES {placeholders})
+            SELECT s.repo, s.file_path, s.name, s.line_start, s.line_end
+            FROM symbols s
+            JOIN lookup
+              ON s.repo = lookup.repo
+             AND s.file_path = lookup.file_path
+             AND s.name = lookup.name
+            """,
+            flat_params,
+        ).fetchall()
+        return {
+            (r["repo"], r["file_path"], r["name"]): (r["line_start"] or 0, r["line_end"] or 0)
+            for r in rows
+        }
+
     def get_untested_hotspots(
         self,
         repo: str,
