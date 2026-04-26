@@ -36,6 +36,16 @@ def _make_project(tmp_path: Path) -> Path:
                     signature="def test_security_oauth2(): ...",
                     docstring="Tests OAuth2 login form behavior.",
                 ),
+                Symbol(
+                    name="test_forms",
+                    kind="function",
+                    file=root / "tests/test_forms.py",
+                    line_start=1,
+                    line_end=20,
+                    language="python",
+                    signature="def test_forms(): ...",
+                    docstring="Tests unrelated form behavior.",
+                ),
             ],
             "default",
         )
@@ -59,4 +69,29 @@ def test_debug_without_error_file_is_source_discovery_not_global_test_failure(
         for item in pack.selected_items
         if "tests/" in Path(item.path_or_ref).as_posix()
     ]
+    assert test_items
     assert all(item.source_type == "file" for item in test_items)
+
+
+def test_debug_with_changed_source_does_not_promote_unrelated_tests(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    root = _make_project(tmp_path)
+    orchestrator = Orchestrator(project_root=root)
+    changed_source = root / "fastapi/security/oauth2.py"
+    monkeypatch.setattr(orchestrator, "_get_changed_files", lambda: {str(changed_source)})
+
+    pack = orchestrator.build_pack(
+        "debug",
+        "Fix typo for client_secret in OAuth2 form docstrings",
+        token_budget=1000,
+    )
+
+    by_path = {
+        Path(item.path_or_ref).as_posix(): item.source_type
+        for item in pack.selected_items
+    }
+
+    assert by_path[changed_source.as_posix()] == "changed_file"
+    assert by_path[(root / "tests/test_forms.py").as_posix()] == "file"
