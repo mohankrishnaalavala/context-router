@@ -316,11 +316,15 @@ def test_minimal_still_caps_at_five_items_after_preservation(
     orch = Orchestrator(project_root=root)
 
     # 10 synthetic items, all code-symbol, decreasing confidence.
+    # Confidences chosen so >5 items survive the v4.4 score floor
+    # (0.45 absolute floor after the 0.6× BM25-no-match multiplier ⇒ source
+    # confidences must be >= ~0.75 post-multiply ⇒ raw ≥ 1.25 / 0.6 ≈ 2.0).
+    # Using conf = 0.95 - i*0.03 yields 7 post-BM25 items above the floor.
     pool = [
         _code_item(
             f"src/module_{i}.py",
             source_type="file",
-            confidence=0.9 - i * 0.05,
+            confidence=0.95 - i * 0.03,
             title=f"mod{i}",
         )
         for i in range(10)

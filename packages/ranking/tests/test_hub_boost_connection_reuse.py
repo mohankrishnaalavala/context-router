@@ -196,8 +196,9 @@ def test_hub_boost_falls_back_to_fresh_connection_when_no_db_passed(
 
     # In the fallback path, the ranker DOES open a fresh connection — at
     # least one (may be more if _resolve_symbol_ids also opens one).
+    # v4.4: hub_boost is gated to handover mode only.
     with patch("sqlite3.connect", wraps=sqlite3.connect) as spy:
-        ranked = ranker.rank(items, "rank items", "implement")
+        ranked = ranker.rank(items, "rank items", "handover")
 
     assert spy.call_count >= 1, (
         "fallback path must still open sqlite3 connections when no "

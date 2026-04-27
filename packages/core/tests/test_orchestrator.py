@@ -236,8 +236,12 @@ def test_pagination_has_more_when_more_items_exist(tmp_path: Path) -> None:
     from contracts.interfaces import Symbol
 
     with Database(root / ".context-router" / "context-router.db") as db:
+        # v4.4: place files under src/models/ so the implement-mode classifier
+        # tags them as ``contract`` (conf=0.80) rather than ``file`` (0.30).
+        # Plain "file" items fall below the v4.4 score floor (0.45) leaving
+        # only top-1 in the pack — defeating the >3-item pagination test.
         syms = [
-            Symbol(name=f"fn_{i}", kind="function", file=Path(f"src/m_{i}.py"),
+            Symbol(name=f"fn_{i}", kind="function", file=Path(f"src/models/m_{i}.py"),
                    line_start=1, line_end=3, language="python",
                    signature=f"def fn_{i}(): pass", docstring="")
             for i in range(20)

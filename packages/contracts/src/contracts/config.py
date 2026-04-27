@@ -18,6 +18,18 @@ _CONFIG_DIR = ".context-router"
 _CONFIG_FILE = "config.yaml"
 _WORKSPACE_FILE = "workspace.yaml"
 
+# v4.4 precision-first per-mode budget defaults. Sourced from
+# ``docs/superpowers/plans/2026-04-27-performance-enhancements.md``. Used
+# as the seed for ``ContextRouterConfig.mode_budgets`` and as the merge
+# baseline for partial user overrides.
+_MODE_BUDGET_DEFAULTS: dict[str, int] = {
+    "review": 1500,
+    "implement": 1500,
+    "debug": 2500,
+    "handover": 4000,
+    "minimal": 800,
+}
+
 
 class CapabilitiesConfig(BaseModel):
     """Feature flags for optional capabilities."""
@@ -49,6 +61,17 @@ class ContextRouterConfig(BaseModel):
     """Project-level configuration for context-router."""
 
     token_budget: int = 8000
+    # v4.4 precision-first defaults. Per-mode budget defaults to keep packs
+    # tight: review/implement at 1500 (most tasks touch 1-3 files), debug at
+    # 2500 (call chains need depth), handover at 4000 (intentionally wider),
+    # minimal at 800 (hard cap, unchanged). Users can override individual
+    # modes by setting ``mode_budgets: {review: 4000, ...}`` in config.yaml.
+    # The validator below merges user overrides on top of the v4.4 defaults
+    # so a partial override only replaces the named modes.
+    # ``token_budget`` above remains a global fallback for unknown modes.
+    mode_budgets: dict[str, int] = Field(
+        default_factory=lambda: dict(_MODE_BUDGET_DEFAULTS)
+    )
     capabilities: CapabilitiesConfig = Field(default_factory=CapabilitiesConfig)
     language_analyzers: list[str] = Field(default_factory=list)
     ignore_patterns: list[str] = Field(
@@ -61,6 +84,28 @@ class ContextRouterConfig(BaseModel):
     # Fraction of the token budget reserved for memory/decision items.
     # Must be in (0, 1). Values outside that range fall back to 0.15 with a warning.
     memory_budget_pct: float = 0.15
+
+    @field_validator("mode_budgets", mode="before")
+    @classmethod
+    def _merge_mode_budgets(cls, value: object) -> dict[str, int]:
+        """Merge user-supplied mode_budgets on top of the v4.4 defaults.
+
+        Without this merger pydantic would replace the entire dict on partial
+        user overrides, silently dropping unmodified modes back to the
+        global ``token_budget`` fallback. We always start from the v4.4
+        defaults and let user keys take precedence.
+        """
+        merged = dict(_MODE_BUDGET_DEFAULTS)
+        if isinstance(value, dict):
+            for key, raw in value.items():
+                try:
+                    merged[str(key)] = int(raw)
+                except (TypeError, ValueError):
+                    sys.stderr.write(
+                        f"warning: mode_budgets[{key!r}] is not an integer; "
+                        f"falling back to default\n"
+                    )
+        return merged
 
     @field_validator("memory_budget_pct", mode="before")
     @classmethod

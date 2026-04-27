@@ -331,6 +331,36 @@ _ADAPTIVE_TOPK_MODES: frozenset[str] = frozenset({"review", "implement"})
 # test files that merely mention the module in their excerpts.
 _SOURCE_FILE_BOOST: float = 1.3
 
+# v4.4 precision-first score floor. Drops items below the floor BEFORE the
+# knapsack admission pass so low-conf "file" stragglers stop padding packs.
+# Per-task modes (review/implement/minimal) demand high precision: floor is
+# max(top1*0.55, 0.45). Debug needs more breadth for call chains (0.30).
+# Handover is intentionally widest (0.20). The top-1 item always survives.
+_SCORE_FLOOR_RATIO_PER_TASK: float = 0.55
+_SCORE_FLOOR_ABS_PER_TASK: float = 0.45
+_PER_TASK_FLOOR_MODES: frozenset[str] = frozenset({"review", "implement", "minimal"})
+_MODE_SCORE_FLOORS_ABS: dict[str, float] = {
+    "debug": 0.30,
+    "handover": 0.20,
+}
+
+# v4.4 precision-first per-source-type guarantee. Only these high-signal
+# source types retain the "at least one survives" guarantee in the knapsack.
+# The catch-all "file" type loses the guarantee — it was admitting conf-0.20
+# noise into every pack. Memory/decision items are governed by the separate
+# memory_budget_pct sub-budget and are not affected.
+_GUARANTEED_SOURCE_TYPES: frozenset[str] = frozenset({
+    "entrypoint",
+    "changed_file",
+    "runtime_signal",
+    "contract",
+    "extension_point",
+    "failing_test",
+    "past_debug",
+    "blast_radius",
+    "impacted_test",
+})
+
 
 def _tokenize(text: str) -> set[str]:
     """Return lowercase tokens from *text* that are at least _MIN_TOKEN_LEN chars.
@@ -524,7 +554,13 @@ class ContextRanker:
         # signals compose on the same base. Off by default — resolved
         # per-call from ``CAPABILITIES_HUB_BOOST`` env var or from
         # ``capabilities.hub_boost`` in the discovered project config.
-        if self._resolve_hub_boost_enabled(items):
+        # v4.4 precision-first: hub/bridge structural boost is scoped to
+        # handover mode only. Per-task queries (review/implement/debug/
+        # minimal) want narrowness, and hubs are popular but rarely the
+        # specific file a task touches. Even when explicitly enabled via
+        # capabilities.hub_boost / CAPABILITIES_HUB_BOOST, we now only
+        # apply it in handover mode where broader scope is intentional.
+        if mode == "handover" and self._resolve_hub_boost_enabled(items):
             boosted = self._apply_hub_bridge_boost(boosted)
         # v3 phase-2 (outcome: semantic-default-with-progress): the semantic
         # boost now applies in every pack mode when ``use_embeddings=True``.
@@ -569,6 +605,26 @@ class ContextRanker:
             if changed_file_items:
                 sorted_items = changed_file_items
                 authoritative_changed_files = True
+
+        # v4.4 precision-first: drop low-confidence code items before budget
+        # enforcement. Memory/decision items are exempt — they have their
+        # own freshness scoring and a separate sub-budget. Skipped when
+        # source_discovery has narrowed the pool to authoritative
+        # changed_file items, since their post-BM25 confidence may be
+        # legitimately low (e.g. test-file penalty) but the source-discovery
+        # contract treats them as the authoritative pack regardless.
+        if not authoritative_changed_files:
+            _mem_types_for_floor = frozenset({"memory", "decision"})
+            code_part = [
+                i for i in sorted_items if i.source_type not in _mem_types_for_floor
+            ]
+            mem_part = [
+                i for i in sorted_items if i.source_type in _mem_types_for_floor
+            ]
+            code_part = self._apply_score_floor(code_part, mode)
+            sorted_items = sorted(
+                code_part + mem_part, key=lambda i: i.confidence, reverse=True
+            )
 
         if authoritative_changed_files:
             adaptive_mode = "debug"
@@ -625,6 +681,34 @@ class ContextRanker:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _apply_score_floor(
+        self, items: list[ContextItem], mode: str
+    ) -> list[ContextItem]:
+        """Drop items below the mode-aware confidence floor.
+
+        v4.4 precision-first: a hard floor on confidence kills the long tail
+        of conf-0.20 file items that were padding packs without lifting
+        precision. Per-task modes (review/implement/minimal) use a relative
+        floor (max(top1*0.55, 0.45)); debug/handover use absolute floors.
+        Always preserves at least the top-1 item — never returns empty.
+        """
+        if not items:
+            return items
+        top_conf = items[0].confidence
+        if mode in _PER_TASK_FLOOR_MODES:
+            floor = max(
+                top_conf * _SCORE_FLOOR_RATIO_PER_TASK,
+                _SCORE_FLOOR_ABS_PER_TASK,
+            )
+        else:
+            floor = _MODE_SCORE_FLOORS_ABS.get(mode, 0.0)
+        if floor <= 0.0:
+            return items
+        # 1e-9 epsilon absorbs floating-point noise from earlier multiplicative
+        # boosts (e.g. 0.6 * 0.75 returning 0.44999... that should equal 0.45).
+        kept = [it for it in items if it.confidence >= floor - 1e-9]
+        return kept if kept else items[:1]
 
     def _apply_adaptive_top_k(
         self, items: list[ContextItem], mode: str
@@ -1524,10 +1608,14 @@ class ContextRanker:
 
         Items are admitted greedily in descending ``confidence / est_tokens``
         order so a handful of small high-confidence items outrank a single
-        large low-confidence one. ``is_first_of_type`` is preserved: at
-        least one item per ``source_type`` survives even if admitting it
-        slightly exceeds the budget. Returned items are re-sorted by raw
-        confidence (descending) to match the original output contract.
+        large low-confidence one. v4.4 precision-first: the per-source-type
+        guarantee (``is_first_of_type``) now applies only to high-signal
+        types (entrypoint, changed_file, runtime_signal, contract,
+        extension_point, failing_test, past_debug, blast_radius,
+        impacted_test). The catch-all ``file`` type and other low-signal
+        types must fit within budget like every other item — they were
+        padding packs with conf-0.20 noise. Returned items are re-sorted
+        by raw confidence (descending) to match the original contract.
 
         Args:
             items: Candidates to trim.
@@ -1550,7 +1638,10 @@ class ContextRanker:
         seen_types: set[str] = set()
 
         for item in admission_order:
-            is_first_of_type = item.source_type not in seen_types
+            is_first_of_type = (
+                item.source_type not in seen_types
+                and item.source_type in _GUARANTEED_SOURCE_TYPES
+            )
             fits = accumulated + item.est_tokens <= budget
 
             if fits or is_first_of_type:

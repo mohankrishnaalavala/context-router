@@ -794,10 +794,16 @@ class Orchestrator:
             )
 
         # Resolve the effective caller-level token budget. `None` means "use
-        # config default" for backward compatibility. Minimal mode is capped
-        # at 800 tokens by default to match the CRG-parity triage contract.
+        # config default" for backward compatibility. v4.4 precision-first:
+        # per-mode budgets in ``config.mode_budgets`` take precedence over
+        # the global ``config.token_budget`` so review/implement default to
+        # 1500 tokens (was 4000/8000) without breaking explicit overrides.
+        # Minimal mode keeps its 800-token cap from the mode_budgets dict.
         if token_budget is None:
-            if mode == "minimal":
+            mode_default = config.mode_budgets.get(mode)
+            if mode_default is not None:
+                caller_budget = int(mode_default)
+            elif mode == "minimal":
                 caller_budget = 800
             else:
                 caller_budget = int(config.token_budget)
@@ -1356,7 +1362,11 @@ class Orchestrator:
 
         # P2-1: community-cohesion boost — items sharing the anchor's community
         # get a small additive bump so co-changed files cluster together.
-        if mode != "handover":
+        # v4.4 precision-first: scoped to handover only. For per-task queries
+        # (review/implement/debug/minimal) cluster-mates pull in tangentially
+        # related files that hurt precision. Handover is intentionally broad
+        # so the cohesion signal is helpful there.
+        if mode == "handover":
             items = self._apply_community_boost(items, sym_repo, repo_name)
 
         # Apply feedback-based confidence adjustments (Phase 6)
