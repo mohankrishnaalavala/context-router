@@ -210,7 +210,12 @@ def test_guaranteed_set_covers_high_signal_types() -> None:
 # -----------------------------------------------------------------------
 
 def test_score_floor_constants_match_design() -> None:
-    """Lock in the floor constants per the v4.4 design."""
-    assert _SCORE_FLOOR_ABS_PER_TASK == 0.45
+    """Lock in the floor constants per the v4.4 design.
+
+    Per-task abs aligned with adaptive_top_k's 0.30 plateau threshold so the
+    two precision filters compose without overcutting recall. Precision win
+    in per-task modes is supplied by the restricted source-type guarantee.
+    """
+    assert _SCORE_FLOOR_ABS_PER_TASK == 0.30
     assert _MODE_SCORE_FLOORS_ABS["debug"] == 0.30
     assert _MODE_SCORE_FLOORS_ABS["handover"] == 0.20

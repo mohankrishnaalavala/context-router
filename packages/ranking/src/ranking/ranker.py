@@ -334,10 +334,15 @@ _SOURCE_FILE_BOOST: float = 1.3
 # v4.4 precision-first score floor. Drops items below the floor BEFORE the
 # knapsack admission pass so low-conf "file" stragglers stop padding packs.
 # Per-task modes (review/implement/minimal) demand high precision: floor is
-# max(top1*0.55, 0.45). Debug needs more breadth for call chains (0.30).
-# Handover is intentionally widest (0.20). The top-1 item always survives.
+# max(top1*0.55, 0.30). The 0.30 abs aligns with _apply_adaptive_top_k's
+# plateau threshold so the two filters compose without overcutting recall.
+# Debug needs more breadth for call chains (0.30). Handover is intentionally
+# widest (0.20). The top-1 item always survives. The restricted per-source-
+# type guarantee in _enforce_budget supplies the precision win when the
+# floor itself can't aggressively trim (e.g. broad queries with diffuse
+# signal where every item is mid-conf).
 _SCORE_FLOOR_RATIO_PER_TASK: float = 0.55
-_SCORE_FLOOR_ABS_PER_TASK: float = 0.45
+_SCORE_FLOOR_ABS_PER_TASK: float = 0.30
 _PER_TASK_FLOOR_MODES: frozenset[str] = frozenset({"review", "implement", "minimal"})
 _MODE_SCORE_FLOORS_ABS: dict[str, float] = {
     "debug": 0.30,
