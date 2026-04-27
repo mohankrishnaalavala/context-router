@@ -176,9 +176,10 @@ def test_hub_boost_env_var_toggles_the_flag(
         _item(title="leaf", path=project_root / "src" / "leaf.py", confidence=0.5),
     ]
     monkeypatch.setenv("CAPABILITIES_HUB_BOOST", "1")
-    on = ContextRanker(token_budget=0).rank(list(items), "rank items", "implement")
+    # v4.4: hub_boost is gated to handover mode only — exercise it there.
+    on = ContextRanker(token_budget=0).rank(list(items), "rank items", "handover")
     monkeypatch.setenv("CAPABILITIES_HUB_BOOST", "0")
-    off = ContextRanker(token_budget=0).rank(list(items), "rank items", "implement")
+    off = ContextRanker(token_budget=0).rank(list(items), "rank items", "handover")
     assert on[0].title == "hub"
     # Off path should leave the two identical-confidence peers tied, so
     # their stable-sort order depends only on input ordering.
@@ -214,11 +215,12 @@ def test_hub_boost_skips_items_without_resolvable_symbol_id(
         memory_item,
         _item(title="hub", path=project_root / "src" / "hub.py", confidence=0.5),
     ]
+    # v4.4: hub_boost is gated to handover mode only.
     on = ContextRanker(token_budget=0, use_hub_boost=True).rank(
-        list(seed), "rank items", "debug"
+        list(seed), "rank items", "handover"
     )
     off = ContextRanker(token_budget=0, use_hub_boost=False).rank(
-        list(seed), "rank items", "debug"
+        list(seed), "rank items", "handover"
     )
     on_ghost = next(i for i in on if i.title.startswith("ghost"))
     off_ghost = next(i for i in off if i.title.startswith("ghost"))
@@ -236,11 +238,12 @@ def test_hub_boost_capped_at_plus_ten(project_root: Path, seeded_db) -> None:
     cancels out — the delta is purely the hub/bridge boost.
     """
     seed = [_item(title="hub", path=project_root / "src" / "hub.py", confidence=0.5)]
+    # v4.4: hub_boost is gated to handover mode only.
     on = ContextRanker(token_budget=0, use_hub_boost=True).rank(
-        list(seed), "rank items", "implement"
+        list(seed), "rank items", "handover"
     )
     off = ContextRanker(token_budget=0, use_hub_boost=False).rank(
-        list(seed), "rank items", "implement"
+        list(seed), "rank items", "handover"
     )
     delta = on[0].confidence - off[0].confidence
     assert 0 < delta <= 0.10 + 1e-6, (
@@ -265,7 +268,8 @@ def test_hub_boost_silent_when_no_db_found(capsys) -> None:
         )
     ]
     ranker = ContextRanker(token_budget=0, use_hub_boost=True)
-    out = ranker.rank(list(items), "q", "implement")
+    # v4.4: hub_boost is gated to handover mode only.
+    out = ranker.rank(list(items), "q", "handover")
     assert len(out) == 1
     captured = capsys.readouterr()
     assert "hub_boost" in captured.err

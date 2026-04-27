@@ -32,7 +32,10 @@ _VALID_FORMATS = ("json", "compact", "table", "agent")
 # ``-1`` on the corresponding typer options lets us detect "not passed"
 # reliably (``0`` is an already-meaningful "no cap" value).
 _REVIEW_DEFAULT_TOP_K = 5
-_REVIEW_DEFAULT_MAX_TOKENS = 4000
+# v4.4 precision-first: review-mode default tightened from 4000 → 1500 to
+# match the new mode-specific config defaults. Aligns with the precision
+# redesign goal of <=1500 token avg packs.
+_REVIEW_DEFAULT_MAX_TOKENS = 1500
 
 # Sentinel value for "flag not supplied". Typer treats any explicit int
 # (including 0) as user-provided, so we use -1 to distinguish the "flag

@@ -60,6 +60,18 @@ def _stub_config(monkeypatch: pytest.MonkeyPatch, token_budget: int = 8_000) -> 
             (),
             {
                 "token_budget": token_budget,
+                # v4.4 precision-first: per-mode budgets feed the cache key.
+                # These tests pre-populate the L2 cache with ``token_budget`` (8000)
+                # and call build_pack("implement", ...) — keep implement at the
+                # legacy value so the seeded keys match. The other modes use
+                # the v4.4 production defaults.
+                "mode_budgets": {
+                    "review": 1_500,
+                    "implement": token_budget,  # match seeded cache key
+                    "debug": 2_500,
+                    "handover": 4_000,
+                    "minimal": 800,
+                },
                 "modes": {},
                 "confidence_weights": {},
                 "capabilities": type("C", (), {"llm_summarization": False})(),

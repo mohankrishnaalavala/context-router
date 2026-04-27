@@ -331,6 +331,48 @@ _ADAPTIVE_TOPK_MODES: frozenset[str] = frozenset({"review", "implement"})
 # test files that merely mention the module in their excerpts.
 _SOURCE_FILE_BOOST: float = 1.3
 
+# v4.4 precision-first score floor. Drops items below the floor BEFORE the
+# knapsack admission pass so low-conf "file" stragglers stop padding packs.
+# Per-task modes (review/implement/minimal) demand high precision: floor is
+# max(top1*0.55, 0.30). The 0.30 abs aligns with _apply_adaptive_top_k's
+# plateau threshold so the two filters compose without overcutting recall.
+# Debug needs more breadth for call chains (0.30). Handover is intentionally
+# widest (0.20). The top-1 item always survives. The restricted per-source-
+# type guarantee in _enforce_budget supplies the precision win when the
+# floor itself can't aggressively trim (e.g. broad queries with diffuse
+# signal where every item is mid-conf).
+_SCORE_FLOOR_RATIO_PER_TASK: float = 0.55
+_SCORE_FLOOR_ABS_PER_TASK: float = 0.30
+_PER_TASK_FLOOR_MODES: frozenset[str] = frozenset({"review", "implement", "minimal"})
+_MODE_SCORE_FLOORS_ABS: dict[str, float] = {
+    "debug": 0.30,
+    "handover": 0.20,
+}
+
+# v4.4 precision-first per-source-type guarantee. Only these high-signal
+# source types retain the "at least one survives" guarantee in the knapsack.
+# Memory/decision items are governed by the separate memory_budget_pct
+# sub-budget and are not affected.
+_GUARANTEED_SOURCE_TYPES: frozenset[str] = frozenset({
+    "entrypoint",
+    "changed_file",
+    "runtime_signal",
+    "contract",
+    "extension_point",
+    "failing_test",
+    "past_debug",
+    "blast_radius",
+    "impacted_test",
+})
+
+# v4.4 tuning: review and handover queries often have a sparse high-signal
+# pool (no diff, no runtime trace) so the catch-all "file" type retains
+# its guarantee in those modes — otherwise the GT file gets dropped on
+# query-only review packs. Implement/debug/minimal still exclude "file"
+# because they have entrypoint/contract/extension_point/runtime_signal
+# evidence to anchor on.
+_FILE_GUARANTEED_MODES: frozenset[str] = frozenset({"review", "handover"})
+
 
 def _tokenize(text: str) -> set[str]:
     """Return lowercase tokens from *text* that are at least _MIN_TOKEN_LEN chars.
@@ -524,7 +566,13 @@ class ContextRanker:
         # signals compose on the same base. Off by default — resolved
         # per-call from ``CAPABILITIES_HUB_BOOST`` env var or from
         # ``capabilities.hub_boost`` in the discovered project config.
-        if self._resolve_hub_boost_enabled(items):
+        # v4.4 precision-first: hub/bridge structural boost is scoped to
+        # handover mode only. Per-task queries (review/implement/debug/
+        # minimal) want narrowness, and hubs are popular but rarely the
+        # specific file a task touches. Even when explicitly enabled via
+        # capabilities.hub_boost / CAPABILITIES_HUB_BOOST, we now only
+        # apply it in handover mode where broader scope is intentional.
+        if mode == "handover" and self._resolve_hub_boost_enabled(items):
             boosted = self._apply_hub_bridge_boost(boosted)
         # v3 phase-2 (outcome: semantic-default-with-progress): the semantic
         # boost now applies in every pack mode when ``use_embeddings=True``.
@@ -570,6 +618,26 @@ class ContextRanker:
                 sorted_items = changed_file_items
                 authoritative_changed_files = True
 
+        # v4.4 precision-first: drop low-confidence code items before budget
+        # enforcement. Memory/decision items are exempt — they have their
+        # own freshness scoring and a separate sub-budget. Skipped when
+        # source_discovery has narrowed the pool to authoritative
+        # changed_file items, since their post-BM25 confidence may be
+        # legitimately low (e.g. test-file penalty) but the source-discovery
+        # contract treats them as the authoritative pack regardless.
+        if not authoritative_changed_files:
+            _mem_types_for_floor = frozenset({"memory", "decision"})
+            code_part = [
+                i for i in sorted_items if i.source_type not in _mem_types_for_floor
+            ]
+            mem_part = [
+                i for i in sorted_items if i.source_type in _mem_types_for_floor
+            ]
+            code_part = self._apply_score_floor(code_part, mode)
+            sorted_items = sorted(
+                code_part + mem_part, key=lambda i: i.confidence, reverse=True
+            )
+
         if authoritative_changed_files:
             adaptive_mode = "debug"
         elif source_discovery:
@@ -599,11 +667,12 @@ class ContextRanker:
         code_items = [i for i in sorted_items if i.source_type not in _mem_types]
 
         memory_cap = int(self._budget * self._memory_budget_pct)
-        trimmed_memory = self._enforce_budget(memory_items, cap=memory_cap)
+        trimmed_memory = self._enforce_budget(memory_items, cap=memory_cap, mode=mode)
         remaining = self._budget - sum(i.est_tokens for i in trimmed_memory)
         trimmed_code = self._enforce_budget(
             sorted(code_items, key=lambda i: i.confidence, reverse=True),
             cap=max(0, remaining),
+            mode=mode,
         )
 
         result = sorted(trimmed_memory + trimmed_code, key=lambda i: i.confidence, reverse=True)
@@ -625,6 +694,34 @@ class ContextRanker:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _apply_score_floor(
+        self, items: list[ContextItem], mode: str
+    ) -> list[ContextItem]:
+        """Drop items below the mode-aware confidence floor.
+
+        v4.4 precision-first: a hard floor on confidence kills the long tail
+        of conf-0.20 file items that were padding packs without lifting
+        precision. Per-task modes (review/implement/minimal) use a relative
+        floor (max(top1*0.55, 0.45)); debug/handover use absolute floors.
+        Always preserves at least the top-1 item — never returns empty.
+        """
+        if not items:
+            return items
+        top_conf = items[0].confidence
+        if mode in _PER_TASK_FLOOR_MODES:
+            floor = max(
+                top_conf * _SCORE_FLOOR_RATIO_PER_TASK,
+                _SCORE_FLOOR_ABS_PER_TASK,
+            )
+        else:
+            floor = _MODE_SCORE_FLOORS_ABS.get(mode, 0.0)
+        if floor <= 0.0:
+            return items
+        # 1e-9 epsilon absorbs floating-point noise from earlier multiplicative
+        # boosts (e.g. 0.6 * 0.75 returning 0.44999... that should equal 0.45).
+        kept = [it for it in items if it.confidence >= floor - 1e-9]
+        return kept if kept else items[:1]
 
     def _apply_adaptive_top_k(
         self, items: list[ContextItem], mode: str
@@ -1518,16 +1615,24 @@ class ContextRanker:
         return item.model_copy(update={"reason": reason})
 
     def _enforce_budget(
-        self, items: list[ContextItem], cap: int | None = None
+        self,
+        items: list[ContextItem],
+        cap: int | None = None,
+        *,
+        mode: str = "",
     ) -> list[ContextItem]:
         """Trim *items* to the budget using a value-per-token ordering.
 
         Items are admitted greedily in descending ``confidence / est_tokens``
         order so a handful of small high-confidence items outrank a single
-        large low-confidence one. ``is_first_of_type`` is preserved: at
-        least one item per ``source_type`` survives even if admitting it
-        slightly exceeds the budget. Returned items are re-sorted by raw
-        confidence (descending) to match the original output contract.
+        large low-confidence one. v4.4 precision-first: the per-source-type
+        guarantee (``is_first_of_type``) now applies only to high-signal
+        types (entrypoint, changed_file, runtime_signal, contract,
+        extension_point, failing_test, past_debug, blast_radius,
+        impacted_test). The catch-all ``file`` type and other low-signal
+        types must fit within budget like every other item — they were
+        padding packs with conf-0.20 noise. Returned items are re-sorted
+        by raw confidence (descending) to match the original contract.
 
         Args:
             items: Candidates to trim.
@@ -1549,8 +1654,19 @@ class ContextRanker:
         accumulated = 0
         seen_types: set[str] = set()
 
+        # v4.4 tuning: in review/handover the catch-all "file" type also
+        # retains the per-type guarantee — those modes often have no
+        # high-signal evidence, and dropping the file fallback caused the
+        # GT to disappear on query-only review packs (fastapi T1, etc.).
+        guaranteed_types = _GUARANTEED_SOURCE_TYPES
+        if mode in _FILE_GUARANTEED_MODES:
+            guaranteed_types = guaranteed_types | {"file"}
+
         for item in admission_order:
-            is_first_of_type = item.source_type not in seen_types
+            is_first_of_type = (
+                item.source_type not in seen_types
+                and item.source_type in guaranteed_types
+            )
             fits = accumulated + item.est_tokens <= budget
 
             if fits or is_first_of_type:
