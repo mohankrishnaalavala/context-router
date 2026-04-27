@@ -130,8 +130,12 @@ def test_hub_boost_reuses_injected_connection(project_root: Path, seeded_db) -> 
         _item(title="hub", path=project_root / "src" / "hub.py", confidence=0.5),
         _item(title="leaf", path=project_root / "src" / "leaf.py", confidence=0.5),
     ]
+    # use_embeddings=False isolates the hub-boost connection-reuse contract
+    # from the semantic-boost path which legitimately opens its own
+    # read-only connection to look up the persistent embeddings table.
     ranker = ContextRanker(
         token_budget=0,
+        use_embeddings=False,
         use_hub_boost=True,
         db_connection=seeded_db.connection,
     )
@@ -161,8 +165,12 @@ def test_hub_boost_does_not_close_injected_connection(
         _item(title="hub", path=project_root / "src" / "hub.py", confidence=0.5),
         _item(title="leaf", path=project_root / "src" / "leaf.py", confidence=0.5),
     ]
+    # use_embeddings=False isolates the hub-boost connection-reuse contract
+    # from the semantic-boost path which legitimately opens its own
+    # read-only connection to look up the persistent embeddings table.
     ranker = ContextRanker(
         token_budget=0,
+        use_embeddings=False,
         use_hub_boost=True,
         db_connection=seeded_db.connection,
     )
