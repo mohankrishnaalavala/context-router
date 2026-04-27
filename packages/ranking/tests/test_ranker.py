@@ -752,6 +752,41 @@ def test_runtime_debug_keeps_test_evidence_eligible() -> None:
     assert result[0].path_or_ref == "tests/test_source.py"
 
 
+def test_source_discovery_preserves_best_non_aux_source_before_tiny_aux_files() -> None:
+    source = ContextItem(
+        source_type="file",
+        repo="test",
+        path_or_ref="fastapi/dependencies/utils.py",
+        title="analyze_param (utils.py)",
+        excerpt="Form parameter list parsing extra allow",
+        reason="",
+        confidence=0.42,
+        est_tokens=260,
+    )
+    tiny_tests = [
+        ContextItem(
+            source_type="file",
+            repo="test",
+            path_or_ref=f"tests/test_forms_{i}.py",
+            title=f"test_form_{i}",
+            excerpt="Form parameter list parsing",
+            reason="",
+            confidence=0.40,
+            est_tokens=40,
+        )
+        for i in range(6)
+    ]
+
+    result = ContextRanker(token_budget=200).rank(
+        tiny_tests + [source],
+        "Fix Form parameter list parsing",
+        "debug",
+        source_discovery=True,
+    )
+
+    assert any(item.path_or_ref == "fastapi/dependencies/utils.py" for item in result[:3])
+
+
 # -----------------------------------------------------------------------
 # v4.4 C2 — Lower ABS_FLOOR and enable semantic re-rank by default
 # -----------------------------------------------------------------------

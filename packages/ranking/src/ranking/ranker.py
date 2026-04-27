@@ -561,6 +561,19 @@ class ContextRanker:
         # 3/5 slots in the v4.0 benchmark, missing PetController.java.
         sorted_items, _ = _dedup_by_file(sorted_items)
 
+        pinned_source: ContextItem | None = None
+        if source_discovery:
+            pinned_source = next(
+                (
+                    item
+                    for item in sorted_items
+                    if item.source_type
+                    not in {"memory", "decision", "runtime_signal", "failing_test"}
+                    and not _is_test_or_script_path(item.path_or_ref or "")
+                ),
+                None,
+            )
+
         if self._budget <= 0:
             return self._apply_adaptive_top_k(sorted_items, mode)
 
@@ -578,6 +591,19 @@ class ContextRanker:
         )
 
         result = sorted(trimmed_memory + trimmed_code, key=lambda i: i.confidence, reverse=True)
+        if pinned_source is not None and all(
+            item.path_or_ref != pinned_source.path_or_ref for item in result
+        ):
+            result = [pinned_source] + result
+            total = 0
+            trimmed: list[ContextItem] = []
+            for item in result:
+                if total + item.est_tokens <= self._budget or (
+                    item.path_or_ref == pinned_source.path_or_ref
+                ):
+                    trimmed.append(item)
+                    total += item.est_tokens
+            result = sorted(trimmed, key=lambda i: i.confidence, reverse=True)
         return self._apply_adaptive_top_k(result, mode)
 
     # ------------------------------------------------------------------
