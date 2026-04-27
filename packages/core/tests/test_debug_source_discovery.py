@@ -69,8 +69,8 @@ def test_debug_without_error_file_is_source_discovery_not_global_test_failure(
         for item in pack.selected_items
         if "tests/" in Path(item.path_or_ref).as_posix()
     ]
-    assert test_items
     assert all(item.source_type == "file" for item in test_items)
+    assert all(item.source_type != "failing_test" for item in pack.selected_items)
 
 
 def test_debug_with_changed_source_does_not_promote_unrelated_tests(
@@ -94,4 +94,5 @@ def test_debug_with_changed_source_does_not_promote_unrelated_tests(
     }
 
     assert by_path[changed_source.as_posix()] == "changed_file"
-    assert by_path[(root / "tests/test_forms.py").as_posix()] == "file"
+    unrelated_test = (root / "tests/test_forms.py").as_posix()
+    assert by_path.get(unrelated_test, "file") == "file"

@@ -30,6 +30,25 @@ Source: `/tmp/context-router-crg-parity-before/summary.md`
 The live gate includes the gold files, but precision is terrible because
 context-router returns roughly 140 files per task.
 
+## Live Gate After CRG-Parity Fixes
+
+Source: `/tmp/context-router-crg-parity-after/summary.md`
+
+| Metric | context-router | code-review-graph |
+|---|---:|---:|
+| Avg tokens per task | 84 | 1,432 |
+| Avg file precision | 0.833 | 0.833 |
+| Avg file recall | 1.000 | 1.000 |
+| Avg F1 | 0.889 | 0.889 |
+| Avg token reduction | 100.0% | 99.8% |
+
+Per-task result:
+
+- Task 1 selects `fastapi/security/oauth2.py`.
+- Task 2 selects `scripts/people.py`.
+- Task 3 selects `fastapi/dependencies/utils.py` and
+  `tests/test_forms_single_model.py`, matching code-review-graph's file set.
+
 ## Required Gate
 
 - context-router average F1 >= 0.80

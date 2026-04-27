@@ -21,6 +21,7 @@ set -u
 set -o pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TASKS_YAML="${SCRIPT_DIR}/fixtures/tasks.yaml"
 
 FASTAPI_ROOT_DEFAULT="${HOME}/Documents/project_context/fastapi"
@@ -91,8 +92,13 @@ if [[ ! -d "${FASTAPI_ROOT}/.git" ]]; then
   exit 1
 fi
 
-command -v context-router >/dev/null 2>&1 \
-  || die "context-router not on PATH. Install with: pipx install context-router-cli"
+if command -v uv >/dev/null 2>&1 && [[ -f "${REPO_ROOT}/pyproject.toml" ]]; then
+  CONTEXT_ROUTER_CMD=(uv --project "${REPO_ROOT}" run context-router)
+elif command -v context-router >/dev/null 2>&1; then
+  CONTEXT_ROUTER_CMD=(context-router)
+else
+  die "context-router not on PATH. Install with: pipx install context-router-cli"
+fi
 command -v code-review-graph >/dev/null 2>&1 \
   || die "code-review-graph not on PATH. Install with: pipx install code-review-graph"
 command -v python3 >/dev/null 2>&1 \
@@ -160,13 +166,18 @@ while IFS=$'\t' read -r TID SHA QUERY MODE; do
 
   # Re-index context-router for this commit (graph + symbols need to match HEAD).
   echo "   [context-router index]"
-  if ! context-router index --project-root "${FASTAPI_ROOT}" >/dev/null 2>&1; then
+  if ! "${CONTEXT_ROUTER_CMD[@]}" index --project-root "${FASTAPI_ROOT}" >/dev/null 2>&1; then
     echo "   warning: context-router index failed; pack output may be stale" >&2
   fi
 
   # Re-build the code-review-graph for this commit so detect-changes sees the
   # correct HEAD~1 diff (the fixture commit's own diff).
   echo "   [code-review-graph build]"
+  # CRG's SQLite rebuild path can fail when the same graph database is reused
+  # across historical fixture checkouts. Remove only generated graph artifacts
+  # so every task starts from a clean CRG graph for its pinned commit.
+  CRG_DB="${FASTAPI_ROOT}/.code-review-graph/graph.db"
+  rm -f "${CRG_DB}" "${CRG_DB}-wal" "${CRG_DB}-shm"
   if ! code-review-graph build --repo "${FASTAPI_ROOT}" >/dev/null 2>&1; then
     echo "   error: code-review-graph build failed for ${TID}" >&2
     echo "          Scoring cannot continue because detect-changes may use stale CRG data." >&2
@@ -179,7 +190,7 @@ while IFS=$'\t' read -r TID SHA QUERY MODE; do
   CRG_OUT="${OUTPUT_DIR}/crg_${TID}.json"
 
   echo "   [context-router pack] -> ${CR_OUT}"
-  if ! context-router pack \
+  if ! "${CONTEXT_ROUTER_CMD[@]}" pack \
         --mode "${MODE}" \
         --query "${QUERY}" \
         --project-root "${FASTAPI_ROOT}" \

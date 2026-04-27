@@ -82,9 +82,14 @@ For every task in `fixtures/tasks.yaml`:
 
 1. `git -C <fastapi-root> checkout <sha>` — pins the commit state.
 2. `context-router index --project-root <fastapi-root>` — refresh the
-   symbol / graph index for the pinned tree.
-3. `code-review-graph build --repo <fastapi-root>` — refresh the CRG
-   graph so `detect-changes` sees the correct `HEAD~1` diff.
+   symbol / graph index for the pinned tree. When the harness is run from this
+   repo and `uv` is available, it uses `uv --project <repo> run context-router`
+   so the eval exercises the current branch instead of a globally installed
+   CLI.
+3. Remove generated CRG SQLite artifacts, then run
+   `code-review-graph build --repo <fastapi-root>` — rebuild the CRG graph from
+   a clean database so `detect-changes` sees the correct `HEAD~1` diff for each
+   historical fixture checkout.
 4. `context-router pack --mode <mode> --query "<cr_query>" --json
    --project-root <fastapi-root>` → `output/cr_<id>.json`.
 5. `code-review-graph detect-changes --repo <fastapi-root>` →

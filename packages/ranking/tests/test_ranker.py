@@ -787,6 +787,70 @@ def test_source_discovery_preserves_best_non_aux_source_before_tiny_aux_files() 
     assert any(item.path_or_ref == "fastapi/dependencies/utils.py" for item in result[:3])
 
 
+def test_source_discovery_uses_changed_files_as_authoritative_pack() -> None:
+    changed_source = ContextItem(
+        source_type="changed_file",
+        repo="test",
+        path_or_ref="fastapi/dependencies/utils.py",
+        title="analyze_param",
+        excerpt="Form parameter list parsing",
+        reason="",
+        confidence=0.65,
+        est_tokens=80,
+    )
+    changed_test = ContextItem(
+        source_type="changed_file",
+        repo="test",
+        path_or_ref="tests/test_forms_single_model.py",
+        title="test_forms_single_model",
+        excerpt="Form parameter list regression",
+        reason="",
+        confidence=0.55,
+        est_tokens=60,
+    )
+    unrelated = ContextItem(
+        source_type="file",
+        repo="test",
+        path_or_ref="fastapi/openapi/models.py",
+        title="OpenAPI models",
+        excerpt="Form parameter list",
+        reason="",
+        confidence=0.80,
+        est_tokens=50,
+    )
+
+    result = ContextRanker(token_budget=1000, use_embeddings=False).rank(
+        [unrelated, changed_source, changed_test],
+        "Fix Form parameter list parsing",
+        "debug",
+        source_discovery=True,
+    )
+
+    assert {item.path_or_ref for item in result} == {
+        "fastapi/dependencies/utils.py",
+        "tests/test_forms_single_model.py",
+    }
+
+
+def test_source_discovery_debug_applies_adaptive_topk_without_changed_files() -> None:
+    items = [
+        _item(confidence=0.90, title="source_a"),
+        _item(confidence=0.80, title="source_b"),
+        _item(confidence=0.70, title="source_c"),
+        _item(confidence=0.20, title="tail_a"),
+        _item(confidence=0.10, title="tail_b"),
+    ]
+
+    result = ContextRanker(token_budget=0, use_embeddings=False).rank(
+        items,
+        "",
+        "debug",
+        source_discovery=True,
+    )
+
+    assert [item.title for item in result] == ["source_a", "source_b", "source_c"]
+
+
 # -----------------------------------------------------------------------
 # v4.4 C2 — Lower ABS_FLOOR and enable semantic re-rank by default
 # -----------------------------------------------------------------------
