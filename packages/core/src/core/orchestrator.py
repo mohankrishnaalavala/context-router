@@ -143,6 +143,12 @@ _REVIEW_CONFIDENCE: dict[str, float] = {
     "changed_file": 0.95,
     "blast_radius": 0.70,
     "impacted_test": 0.60,
+    # v4.4 Phase 3: query-driven candidate widening for review-no-diff. Files
+    # whose basename or symbol name matches a query token get lifted out of
+    # the conf-0.20 file-fallback pool so the GT file (e.g. fastapi
+    # security/oauth2.py for a "fix OAuth2 docstring" query) doesn't get
+    # buried beneath BM25-noisy test files.
+    "query_match": 0.55,
     "config": 0.25,
     "file": 0.20,
 }
@@ -157,6 +163,103 @@ _NON_ENTRYPOINT_PATH_FRAGMENTS = frozenset({
 
 # Regex to extract filenames from query strings (e.g. "ranker.py", "main.js")
 _QUERY_FILENAME_RE = re.compile(r'\b([\w][\w.-]+\.\w{2,6})\b')
+
+# v4.4 Phase 3 query-match helpers. Token = >=3 chars, alphanumeric. Splits
+# CamelCase / snake_case so "OAuth2Form" → {"oauth2", "form"}.
+_QUERY_MATCH_MIN_TOKEN_LEN = 3
+# Stop tokens common in queries that would match almost any file name.
+_QUERY_MATCH_STOP_TOKENS: frozenset[str] = frozenset({
+    "fix", "add", "update", "remove", "the", "and", "for", "with", "from",
+    "that", "this", "into", "out", "off", "doc", "docs", "code", "test",
+    "tests", "src", "main", "new", "old", "use", "all", "any", "set",
+})
+
+
+def _tokens_for_query_match(query: str) -> set[str]:
+    """Tokenise *query* for filename / symbol-name matching.
+
+    Splits CamelCase + non-alphanumeric so "OAuth2 client_secret" yields
+    ``{"oauth2", "client", "secret"}``. Drops short tokens and a small
+    stop-word set so generic verbs ("fix", "add") don't promote every
+    file in the repo.
+    """
+    if not query:
+        return set()
+    expanded = re.sub(
+        r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", query
+    )
+    raw = re.split(r"[^a-zA-Z0-9]+", expanded.lower())
+    return {
+        t for t in raw
+        if len(t) >= _QUERY_MATCH_MIN_TOKEN_LEN and t not in _QUERY_MATCH_STOP_TOKENS
+    }
+
+
+def _matches_query_tokens(file_stem: str, sym_name: str, tokens: set[str]) -> bool:
+    """Return True when *file_stem* contains any *tokens*.
+
+    v4.4 Phase 3: matches against file stem only — symbol-name matches
+    proved too permissive in benchmarking (every file with a one-word
+    symbol named after a common query term was promoted, drowning out
+    the GT). The file basename is the strongest signal a maintainer
+    encodes about a file's purpose, so restricting to stem-only keeps
+    precision high while still rescuing GT files like
+    fastapi/security/oauth2.py for an "OAuth2 docstring" query.
+    The ``sym_name`` parameter is retained for API stability.
+    """
+    if not tokens or not file_stem:
+        return False
+    expanded_stem = re.sub(
+        r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", " ", file_stem
+    )
+    parts = set(re.split(r"[^a-zA-Z0-9]+", expanded_stem.lower()))
+    return bool(parts & tokens)
+
+
+# v4.4 Phase 3b adaptive-depth thresholds. Annotation-only — does not trim
+# the items list so recall stays unaffected. The agent can use the label
+# to decide how to consume the pack (narrow → trust top-1; broad → treat
+# as exploratory).
+_DEPTH_NARROW_TOP1: float = 0.75
+_DEPTH_NARROW_GAP: float = 0.15
+_DEPTH_STANDARD_TOP1: float = 0.55
+
+
+def _classify_pack_depth(items: list[ContextItem]) -> dict[str, str]:
+    """Classify *items* as narrow / standard / broad based on top-3 spread.
+
+    Returns ``{"depth": <label>, "reason": <one-liner>}``. The reason
+    surfaces the actual top confidences so the agent can sanity-check
+    the label without re-reading scores.
+    """
+    if not items:
+        return {"depth": "broad", "reason": "empty pack — no signal"}
+    c1 = items[0].confidence
+    c2 = items[1].confidence if len(items) > 1 else 0.0
+    c3 = items[2].confidence if len(items) > 2 else 0.0
+    if c1 >= _DEPTH_NARROW_TOP1 and (c1 - c2) >= _DEPTH_NARROW_GAP:
+        return {
+            "depth": "narrow",
+            "reason": (
+                f"top1 confidence {c1:.2f} is high and clearly leads the pack "
+                f"(gap to top2: {c1 - c2:.2f}); trust the top item"
+            ),
+        }
+    if c1 >= _DEPTH_STANDARD_TOP1:
+        return {
+            "depth": "standard",
+            "reason": (
+                f"top1 {c1:.2f}, top2 {c2:.2f}, top3 {c3:.2f} — "
+                "moderate confidence, consider the top few items"
+            ),
+        }
+    return {
+        "depth": "broad",
+        "reason": (
+            f"top1 {c1:.2f}, top2 {c2:.2f}, top3 {c3:.2f} — diffuse signal, "
+            "treat the pack as exploratory and consider refining the query"
+        ),
+    }
 
 # Implement mode: patterns that identify entrypoints
 _ENTRYPOINT_PATTERN = re.compile(
@@ -188,6 +291,8 @@ _IMPLEMENT_CONFIDENCE: dict[str, float] = {
     "entrypoint": 0.90,
     "contract": 0.80,
     "extension_point": 0.70,
+    # v4.4 Phase 3: query-driven candidate widening (mirrors review).
+    "query_match": 0.55,
     "file_class": 0.40,
     "file_function": 0.30,
     "file": 0.20,
@@ -351,6 +456,7 @@ _SYMBOL_REASON_VERB: dict[str, str] = {
     "entrypoint": "Public API entry point",
     "contract": "Data contract or interface definition",
     "extension_point": "Plugin or extension point",
+    "query_match": "File or symbol name matches the query",
     "file": "Referenced in codebase",
     "runtime_signal": "Mentioned in runtime error or stack trace",
     "failing_test": "Test symbol likely related to the failure",
@@ -1028,6 +1134,7 @@ class Orchestrator:
                 runtime_signals=runtime_signals,
                 past_debug_files=past_debug_files,
                 feedback_adjustments=feedback_adjustments,
+                query=query,
             )
 
             # v3.3.0 β3 — resolve or drop ``<external>`` placeholder items.
@@ -1166,6 +1273,15 @@ class Orchestrator:
             # v4.4 B3: enrich items with inline symbol bodies for token-efficient reads.
             all_ranked = self._enrich_with_symbol_bodies(all_ranked, sym_repo)
 
+            # v4.4 Phase 3b: adaptive-depth annotation. Inspects the top-3
+            # confidences and labels the pack as narrow / standard / broad
+            # so the agent knows whether to trust the top hit (narrow) or
+            # treat the pack as exploratory (broad). Annotation-only — does
+            # not trim the items list, so recall stays unaffected.
+            adaptive_depth_meta: dict[str, str] | None = None
+            if mode in {"review", "implement"} and all_ranked:
+                adaptive_depth_meta = _classify_pack_depth(all_ranked)
+
             total_items_count = len(all_ranked)
 
             if progress_cb is not None:
@@ -1236,6 +1352,15 @@ class Orchestrator:
         # reported so agents / eval harnesses can tell the difference
         # between "no externals seen" and "pipeline skipped".
         pack_metadata["external_dropped"] = int(_external_dropped)
+
+        # v4.4 Phase 3b: adaptive-depth annotation. Tells the agent whether
+        # the pack is concentrated (narrow), spread (standard), or diffuse
+        # (broad) so it can decide whether to trust the top item or treat
+        # the whole pack as exploratory. Only emitted for review/implement
+        # — debug/handover/minimal have their own per-mode shaping.
+        if adaptive_depth_meta is not None:
+            pack_metadata["depth"] = adaptive_depth_meta["depth"]
+            pack_metadata["depth_reason"] = adaptive_depth_meta["reason"]
 
         total = sum(i.est_tokens for i in page_items)
         reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
@@ -1341,6 +1466,7 @@ class Orchestrator:
         runtime_signals: list[RuntimeSignal] | None = None,
         past_debug_files: set[str] | None = None,
         feedback_adjustments: dict[str, float] | None = None,
+        query: str = "",
     ) -> list[ContextItem]:
         """Fetch and pre-score candidate ContextItems for *mode*.
 
@@ -1360,7 +1486,9 @@ class Orchestrator:
         self._symbol_reason_fallback_flag: list[bool] = [False]
 
         if mode == "review":
-            items = self._review_candidates(sym_repo, edge_repo, repo_name, weights)
+            items = self._review_candidates(
+                sym_repo, edge_repo, repo_name, weights, query=query
+            )
         elif mode == "implement":
             items = self._implement_candidates(sym_repo, repo_name, weights)
         elif mode == "minimal":
@@ -1607,6 +1735,7 @@ class Orchestrator:
         edge_repo: EdgeRepository,
         repo_name: str,
         weights: dict[str, float],
+        query: str = "",
     ) -> list[ContextItem]:
         """Build candidates prioritised for a code-review task."""
         changed_files = self._get_changed_files()
@@ -1628,6 +1757,20 @@ class Orchestrator:
                     if fp not in transitive_blast_files or depth < transitive_blast_files[fp]:
                         transitive_blast_files[fp] = depth
 
+        # v4.4 Phase 3: query-driven candidate widening for review-no-diff.
+        # When the diff is empty, the candidate pool collapses to conf-0.20
+        # file fallback for everything that isn't config — and BM25 then
+        # surfaces noisy peers over the GT (e.g. fastapi T1 "fix OAuth2
+        # docstring" → tests/test_tutorial001.py which mentions OAuth2
+        # client_secret verbatim). Lift files whose basename matches a
+        # query token to source_type="query_match" (conf 0.55) so the GT
+        # survives the floor + guarantee.
+        # Skipped when the diff IS authoritative (a real PR review): the
+        # changed_file / blast_radius signal is stronger than name match,
+        # and benchmarking showed widening on top of a real diff regresses
+        # F1 by displacing diff-driven items.
+        query_tokens = _tokens_for_query_match(query) if not changed_files else set()
+
         seen_files: set[str] = set()
         items: list[ContextItem] = []
 
@@ -1642,6 +1785,10 @@ class Orchestrator:
                 source_type = "impacted_test"
             elif sym.file.suffix.lstrip(".") in _CONFIG_EXTENSIONS:
                 source_type = "config"
+            elif query_tokens and _matches_query_tokens(
+                sym.file.stem, sym.name, query_tokens
+            ):
+                source_type = "query_match"
             else:
                 source_type = "file"
 
