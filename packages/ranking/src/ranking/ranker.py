@@ -351,9 +351,8 @@ _MODE_SCORE_FLOORS_ABS: dict[str, float] = {
 
 # v4.4 precision-first per-source-type guarantee. Only these high-signal
 # source types retain the "at least one survives" guarantee in the knapsack.
-# The catch-all "file" type loses the guarantee — it was admitting conf-0.20
-# noise into every pack. Memory/decision items are governed by the separate
-# memory_budget_pct sub-budget and are not affected.
+# Memory/decision items are governed by the separate memory_budget_pct
+# sub-budget and are not affected.
 _GUARANTEED_SOURCE_TYPES: frozenset[str] = frozenset({
     "entrypoint",
     "changed_file",
@@ -365,6 +364,14 @@ _GUARANTEED_SOURCE_TYPES: frozenset[str] = frozenset({
     "blast_radius",
     "impacted_test",
 })
+
+# v4.4 tuning: review and handover queries often have a sparse high-signal
+# pool (no diff, no runtime trace) so the catch-all "file" type retains
+# its guarantee in those modes — otherwise the GT file gets dropped on
+# query-only review packs. Implement/debug/minimal still exclude "file"
+# because they have entrypoint/contract/extension_point/runtime_signal
+# evidence to anchor on.
+_FILE_GUARANTEED_MODES: frozenset[str] = frozenset({"review", "handover"})
 
 
 def _tokenize(text: str) -> set[str]:
@@ -660,11 +667,12 @@ class ContextRanker:
         code_items = [i for i in sorted_items if i.source_type not in _mem_types]
 
         memory_cap = int(self._budget * self._memory_budget_pct)
-        trimmed_memory = self._enforce_budget(memory_items, cap=memory_cap)
+        trimmed_memory = self._enforce_budget(memory_items, cap=memory_cap, mode=mode)
         remaining = self._budget - sum(i.est_tokens for i in trimmed_memory)
         trimmed_code = self._enforce_budget(
             sorted(code_items, key=lambda i: i.confidence, reverse=True),
             cap=max(0, remaining),
+            mode=mode,
         )
 
         result = sorted(trimmed_memory + trimmed_code, key=lambda i: i.confidence, reverse=True)
@@ -1607,7 +1615,11 @@ class ContextRanker:
         return item.model_copy(update={"reason": reason})
 
     def _enforce_budget(
-        self, items: list[ContextItem], cap: int | None = None
+        self,
+        items: list[ContextItem],
+        cap: int | None = None,
+        *,
+        mode: str = "",
     ) -> list[ContextItem]:
         """Trim *items* to the budget using a value-per-token ordering.
 
@@ -1642,10 +1654,18 @@ class ContextRanker:
         accumulated = 0
         seen_types: set[str] = set()
 
+        # v4.4 tuning: in review/handover the catch-all "file" type also
+        # retains the per-type guarantee — those modes often have no
+        # high-signal evidence, and dropping the file fallback caused the
+        # GT to disappear on query-only review packs (fastapi T1, etc.).
+        guaranteed_types = _GUARANTEED_SOURCE_TYPES
+        if mode in _FILE_GUARANTEED_MODES:
+            guaranteed_types = guaranteed_types | {"file"}
+
         for item in admission_order:
             is_first_of_type = (
                 item.source_type not in seen_types
-                and item.source_type in _GUARANTEED_SOURCE_TYPES
+                and item.source_type in guaranteed_types
             )
             fits = accumulated + item.est_tokens <= budget
 
