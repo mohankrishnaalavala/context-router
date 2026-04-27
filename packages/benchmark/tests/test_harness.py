@@ -102,12 +102,25 @@ class TestBenchmarkRunner:
         assert "avg_latency_ms" in report.summary
         assert "success_rate" in report.summary
 
-    def test_run_suite_default_tasks(self, project_root):
+    def test_run_suite_default_tasks(self, project_root, monkeypatch):
         """Default (no tasks arg) uses the full 20-task suite."""
         from benchmark import BenchmarkRunner
+
+        def fake_run_single(self, task):
+            return TaskMetrics(
+                task_id=task.id,
+                mode=task.mode,
+                query=task.query,
+                latency_ms=1.0,
+                success=True,
+            )
+
+        monkeypatch.setattr(BenchmarkRunner, "run_single", fake_run_single)
         runner = BenchmarkRunner(project_root)
         report = runner.run_suite()
         assert report.summary["total_tasks"] == 20
+        assert report.n_runs == 10
+        assert all(task.n_runs == 10 for task in report.tasks)
 
     def test_run_single_populates_vs_keyword_field(self, project_root):
         """``run_single`` sets the new per-task baseline-delta fields.

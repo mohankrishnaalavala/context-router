@@ -954,7 +954,8 @@ class ContextRanker:
                 and item.source_type not in {"runtime_signal", "failing_test"}
             )
             if should_penalize_aux and max_non_test_conf >= new_conf * 0.70:
-                new_conf = new_conf * 0.65
+                penalty = 0.65 if source_discovery else 0.85
+                new_conf = new_conf * penalty
             result.append(item.model_copy(update={"confidence": new_conf}))
         return result
 
