@@ -350,6 +350,31 @@ outcomes:
             | python3 -c "import json,sys; d=json.load(sys.stdin); print(d['selected_items'][0]['path_or_ref'])"
         expected_stdout_contains: "oauth2"
 
+  - id: crg-parity-fastapi
+    phase: v4.4
+    priority: P0
+    description: >-
+      context-router matches or beats code-review-graph F1 on the FastAPI
+      parity fixture.
+    dod:
+      outcome: >-
+        The FastAPI CR-vs-CRG harness runs all pinned fixture commits and the
+        score gate exits 0 when context-router average F1 is >= 0.80 and
+        context-router/code-review-graph average F1 ratio is >= 1.00.
+      threshold: >-
+        The harness prints "done. Artifacts" and writes summary.md plus
+        diagnostics.json under /tmp/context-router-crg-parity-ship-check.
+      negative_case: >-
+        Missing local FastAPI clone skips in ship-check with
+        "SKIP crg-parity-fastapi: local fastapi clone not found" instead of
+        failing unrelated environments.
+      verify:
+        cmd: >-
+          bash eval/fastapi-crg/run.sh --fastapi-root
+          /Users/mohankrishnaalavala/Documents/project_context/fastapi
+          --output-dir /tmp/context-router-crg-parity-ship-check
+        expected_stdout_contains: "done. Artifacts"
+
   - id: v4.4-language-analyzers
     phase: v4.4
     priority: P1

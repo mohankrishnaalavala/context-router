@@ -52,8 +52,8 @@ def create_order(payload):
 
 
 _UNRELATED_FILE = """\
-def add(a, b):
-    return a + b
+def create_order_preview(payload):
+    return {'preview': payload}
 """
 
 
@@ -79,7 +79,7 @@ def _seed_project(
     src_dir = root / "src"
     src_dir.mkdir(exist_ok=True)
     client = src_dir / "orders_client.py"
-    other = src_dir / "math_utils.py"
+    other = src_dir / "order_helpers.py"
     client.write_text(_CLIENT_FILE)
     other.write_text(_UNRELATED_FILE)
 
@@ -106,13 +106,13 @@ def _seed_project(
                     docstring="",
                 ),
                 Symbol(
-                    name="add",
+                    name="create_order_preview",
                     kind="function",
                     file=other,
                     line_start=1,
                     line_end=2,
                     language="python",
-                    signature="def add(a, b):",
+                    signature="def create_order_preview(payload):",
                     docstring="",
                 ),
             ],

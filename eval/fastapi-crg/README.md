@@ -10,13 +10,14 @@ commit state, saves the raw JSON outputs, and scores the results into a
 
 ## What you get
 
-After a successful run, `./output/` contains:
+After scoring runs, whether or not the gate passes, `./output/` contains:
 
 | File | Source | Notes |
 |---|---|---|
 | `cr_task1.json` … `cr_task3.json` | `context-router pack --json` | one per fixture |
 | `crg_task1.json` … `crg_task3.json` | `code-review-graph detect-changes` | one per fixture |
 | `summary.md` | `score.py` | aggregate precision / recall / F1 / token reduction |
+| `diagnostics.json` | `score.py` | missing/extra files, source-type counts, aggregate parity metrics |
 
 ## Prerequisites
 
@@ -65,6 +66,14 @@ bash eval/fastapi-crg/run.sh \
   --output-dir   /tmp/crg-eval-out
 ```
 
+The runner is a parity gate, not a token-reduction demo. It exits non-zero when
+context-router's average F1 is below `0.80` or below code-review-graph's average
+F1 on the same fixtures. The failure artifacts are:
+
+- `summary.md`: human-readable precision / recall / F1 comparison.
+- `diagnostics.json`: machine-readable missing ground-truth files, extra files,
+  source-type counts, and aggregate parity metrics.
+
 Then open `eval/fastapi-crg/output/summary.md`.
 
 ## What run.sh does (high level)
@@ -73,9 +82,14 @@ For every task in `fixtures/tasks.yaml`:
 
 1. `git -C <fastapi-root> checkout <sha>` — pins the commit state.
 2. `context-router index --project-root <fastapi-root>` — refresh the
-   symbol / graph index for the pinned tree.
-3. `code-review-graph build --repo <fastapi-root>` — refresh the CRG
-   graph so `detect-changes` sees the correct `HEAD~1` diff.
+   symbol / graph index for the pinned tree. When the harness is run from this
+   repo and `uv` is available, it uses `uv --project <repo> run context-router`
+   so the eval exercises the current branch instead of a globally installed
+   CLI.
+3. Remove generated CRG SQLite artifacts, then run
+   `code-review-graph build --repo <fastapi-root>` — rebuild the CRG graph from
+   a clean database so `detect-changes` sees the correct `HEAD~1` diff for each
+   historical fixture checkout.
 4. `context-router pack --mode <mode> --query "<cr_query>" --json
    --project-root <fastapi-root>` → `output/cr_<id>.json`.
 5. `code-review-graph detect-changes --repo <fastapi-root>` →

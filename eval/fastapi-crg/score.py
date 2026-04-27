@@ -14,7 +14,8 @@ For each task in ``fixtures/tasks.yaml`` we read the matching
 The output is written to ``<output-dir>/summary.md`` in the same shape as
 ``/Users/mohankrishnaalavala/Documents/project_context/fastapi/.eval_results/judge_summary.md``.
 
-Exits 0 on success. Non-zero only if inputs are missing / unreadable.
+Exits 0 on success, 3 when ``--gate`` fails, or 1 when inputs are missing /
+unreadable.
 """
 
 from __future__ import annotations
@@ -84,6 +85,73 @@ def _reduction(tokens: int, baseline: int) -> float:
     if baseline <= 0:
         return 0.0
     return max(0.0, 1.0 - tokens / baseline)
+
+
+def _source_type_counts(pack: dict[str, Any]) -> dict[str, int]:
+    items = pack.get("selected_items") or pack.get("items") or []
+    counts: dict[str, int] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        source_type = item.get("source_type")
+        if not isinstance(source_type, str) or not source_type:
+            continue
+        counts[source_type] = counts.get(source_type, 0) + 1
+    return counts
+
+
+def _aggregate(rows: list[dict[str, Any]], key: str) -> dict[str, float]:
+    count = max(1, len(rows))
+    return {
+        "avg_tokens": sum(r[key]["tokens"] for r in rows) / count,
+        "avg_precision": sum(r[key]["precision"] for r in rows) / count,
+        "avg_recall": sum(r[key]["recall"] for r in rows) / count,
+        "avg_f1": sum(r[key]["f1"] for r in rows) / count,
+        "avg_reduction": sum(r[key]["reduction"] for r in rows) / count,
+    }
+
+
+def _diagnostics(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    tasks: list[dict[str, Any]] = []
+    for row in rows:
+        ground_truth = row["ground_truth"]
+        cr_files = row["cr"]["files"]
+        crg_files = row["crg"]["files"]
+        tasks.append(
+            {
+                "id": row["id"],
+                "description": row["description"],
+                "ground_truth": sorted(ground_truth),
+                "context_router": {
+                    "files": sorted(cr_files),
+                    "missing_ground_truth": sorted(ground_truth - cr_files),
+                    "extra_files": sorted(cr_files - ground_truth),
+                    "precision": row["cr"]["precision"],
+                    "recall": row["cr"]["recall"],
+                    "f1": row["cr"]["f1"],
+                    "tokens": row["cr"]["tokens"],
+                    "reduction": row["cr"]["reduction"],
+                    "source_type_counts": row["cr"]["source_type_counts"],
+                },
+                "code_review_graph": {
+                    "files": sorted(crg_files),
+                    "missing_ground_truth": sorted(ground_truth - crg_files),
+                    "extra_files": sorted(crg_files - ground_truth),
+                    "precision": row["crg"]["precision"],
+                    "recall": row["crg"]["recall"],
+                    "f1": row["crg"]["f1"],
+                    "tokens": row["crg"]["tokens"],
+                    "reduction": row["crg"]["reduction"],
+                },
+            }
+        )
+    return {
+        "aggregate": {
+            "context_router": _aggregate(rows, "cr"),
+            "code_review_graph": _aggregate(rows, "crg"),
+        },
+        "tasks": tasks,
+    }
 
 
 # ──────────────────── summary renderer ───────────────────────────
@@ -186,6 +254,29 @@ def main(argv: list[str] | None = None) -> int:
         default=NAIVE_BASELINE_TOKENS,
         help=f"Full-repo token baseline (default: {NAIVE_BASELINE_TOKENS}).",
     )
+    parser.add_argument(
+        "--diagnostics-json",
+        type=str,
+        default="",
+        help="Optional diagnostics JSON filename, written under --output-dir.",
+    )
+    parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="Fail when context-router does not meet score parity thresholds.",
+    )
+    parser.add_argument(
+        "--min-cr-f1",
+        type=float,
+        default=0.80,
+        help="Minimum aggregate context-router F1 when --gate is set.",
+    )
+    parser.add_argument(
+        "--min-crg-f1-ratio",
+        type=float,
+        default=1.0,
+        help="Minimum context-router/code-review-graph aggregate F1 ratio when --gate is set.",
+    )
     args = parser.parse_args(argv)
 
     if not args.tasks.is_file():
@@ -239,6 +330,7 @@ def main(argv: list[str] | None = None) -> int:
                     "f1": cr_f1,
                     "tokens": cr_tok,
                     "reduction": _reduction(cr_tok, args.naive_baseline),
+                    "source_type_counts": _source_type_counts(cr_pack),
                 },
                 "crg": {
                     "files": crg_files,
@@ -254,6 +346,33 @@ def main(argv: list[str] | None = None) -> int:
     summary_path = args.output_dir / "summary.md"
     summary_path.write_text(_render_summary(rows, args.naive_baseline), encoding="utf-8")
     print(f"wrote {summary_path}")
+    diagnostics = _diagnostics(rows)
+    if args.diagnostics_json:
+        diagnostics_path = args.output_dir / args.diagnostics_json
+        diagnostics_path.write_text(
+            json.dumps(diagnostics, indent=2, sort_keys=True),
+            encoding="utf-8",
+        )
+        print(f"wrote {diagnostics_path}")
+
+    if args.gate:
+        failures: list[str] = []
+        cr_avg_f1 = diagnostics["aggregate"]["context_router"]["avg_f1"]
+        crg_avg_f1 = diagnostics["aggregate"]["code_review_graph"]["avg_f1"]
+        if cr_avg_f1 < args.min_cr_f1:
+            failures.append(
+                f"context-router avg F1 {cr_avg_f1:.3f} below minimum {args.min_cr_f1:.3f}"
+            )
+        crg_ratio = cr_avg_f1 / crg_avg_f1 if crg_avg_f1 > 0 else 1.0
+        if crg_ratio < args.min_crg_f1_ratio:
+            failures.append(
+                "context-router/code-review-graph avg F1 ratio "
+                f"{crg_ratio:.3f} below minimum {args.min_crg_f1_ratio:.3f}"
+            )
+        if failures:
+            for failure in failures:
+                print(f"gate failed: {failure}", file=sys.stderr)
+            return 3
     return 0
 
 

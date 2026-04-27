@@ -1076,6 +1076,10 @@ class Orchestrator:
                     self._pre_fix if self._pre_fix else "HEAD"
                 )
             boosted_items_ids: list[str] = []
+            source_discovery = (
+                mode in {"implement", "minimal"}
+                or (mode == "debug" and not runtime_signals)
+            )
             all_ranked = ranker.rank(
                 candidates,
                 query,
@@ -1083,6 +1087,7 @@ class Orchestrator:
                 diff_spec=diff_spec_for_rank,
                 project_root=self._root,
                 boosted_items_sink=boosted_items_ids,
+                source_discovery=source_discovery,
             )
             all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
             # v3.2 outcome ``symbol-stub-dedup`` (P1): collapse identical
@@ -2487,12 +2492,14 @@ class Orchestrator:
             elif fp in past_files or fname in past_files:
                 source_type = "past_debug"
                 confidence = weights.get("past_debug", _DEBUG_CONFIDENCE.get("past_debug", 0.90))
-            elif self._is_test_file(fp):
-                source_type = "failing_test"
-                confidence = weights.get("failing_test", _DEBUG_CONFIDENCE["failing_test"])
             elif fp in changed_files:
                 source_type = "changed_file"
                 confidence = weights.get("changed_file", _DEBUG_CONFIDENCE["changed_file"])
+            elif self._is_test_file(fp) and (
+                bool(signals) or self._matches_changed(fp, changed_files)
+            ):
+                source_type = "failing_test"
+                confidence = weights.get("failing_test", _DEBUG_CONFIDENCE["failing_test"])
             elif fp in blast_radius_files:
                 source_type = "blast_radius"
                 confidence = weights.get("blast_radius", _DEBUG_CONFIDENCE["blast_radius"])

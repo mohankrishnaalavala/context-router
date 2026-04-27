@@ -1979,6 +1979,31 @@ _check_reproducible-eval-harness() {
   echo "PASS reproducible-eval-harness (scaffolding OK; run 'bash eval/fastapi-crg/run.sh' for a full eval)"
 }
 
+_check_crg-parity-fastapi() {
+  local fastapi_root="${FASTAPI_ROOT:-/Users/mohankrishnaalavala/Documents/project_context/fastapi}"
+  if [[ ! -d "${fastapi_root}/.git" ]]; then
+    echo "SKIP crg-parity-fastapi: local fastapi clone not found"
+    return 0
+  fi
+
+  local out
+  out="$(bash "${REPO_ROOT}/eval/fastapi-crg/run.sh" \
+          --fastapi-root "${fastapi_root}" \
+          --output-dir /tmp/context-router-crg-parity-ship-check 2>&1)" || {
+    echo "FAIL crg-parity-fastapi: parity harness exited non-zero"
+    echo "${out}" | sed 's/^/    /'
+    return 1
+  }
+
+  if ! echo "${out}" | grep -qF "done. Artifacts"; then
+    echo "FAIL crg-parity-fastapi: expected successful artifact footer"
+    echo "${out}" | sed 's/^/    /'
+    return 1
+  fi
+
+  echo "PASS crg-parity-fastapi"
+}
+
 _check_top-k-flag() {
   # P2 v3.2: `pack --top-k N` caps selected_items at N post-ranking.
   # Negative case: without --top-k, the item count matches v3.1 (no
