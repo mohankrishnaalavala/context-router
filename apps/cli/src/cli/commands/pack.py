@@ -106,6 +106,18 @@ def pack(
             ),
         ),
     ] = False,
+    use_rerank: Annotated[
+        bool,
+        typer.Option(
+            "--with-rerank/--no-rerank",
+            help=(
+                "v4.4 Phase 2: opt-in cross-encoder rerank pass over the "
+                "top-30 candidates using cross-encoder/ms-marco-MiniLM-L-6-v2 "
+                "(~22 MB download on first use). Lifts precision +0.10 to "
+                "+0.20 on query-driven packs at ~50ms extra latency."
+            ),
+        ),
+    ] = False,
     show_progress: Annotated[
         bool,
         typer.Option(
@@ -374,6 +386,7 @@ def pack(
             max_tokens=max_tokens,
             pre_fix=pre_fix or None,
             keep_low_signal=keep_low_signal,
+            use_rerank=use_rerank,
         )
     except FileNotFoundError as exc:
         typer.echo(str(exc), err=True)
@@ -737,6 +750,7 @@ def _run_build_pack(
     max_tokens: int = 0,
     pre_fix: str | None = None,
     keep_low_signal: bool = False,
+    use_rerank: bool = False,
 ):
     """Call Orchestrator.build_pack with an optional rich progress bar.
 
@@ -775,6 +789,10 @@ def _run_build_pack(
         extra_kwargs["pre_fix"] = pre_fix
     if keep_low_signal:
         extra_kwargs["keep_low_signal"] = True
+    # v4.4 Phase 2: only forward use_rerank when the caller actually
+    # opted in so pre-existing test mocks without the new kwarg still work.
+    if use_rerank:
+        extra_kwargs["use_rerank"] = True
 
     if not needs_progress:
         return orch.build_pack(

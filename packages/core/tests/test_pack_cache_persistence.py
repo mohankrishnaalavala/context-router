@@ -259,6 +259,7 @@ class TestPackCachePersistence:
             False,
             items_hash,
             orch._canonical_hub_boost_flag(),
+            False,  # v4.4 Phase 2: use_rerank tail position
         )
         orch._pack_cache[cache_key] = pack
 

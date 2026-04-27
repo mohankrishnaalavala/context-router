@@ -607,12 +607,17 @@ class Orchestrator:
         use_embeddings: bool,
         items_hash: str,
         hub_boost_flag: str = "0",
+        use_rerank: bool = False,
     ) -> str:
         """Fold the cache-key tuple into a stable string for L2 storage.
 
         Kept separate from the L1 tuple so that the L2 primary-key column
         stays a single TEXT — the DB does not need to understand the
         structure, only compare bytes.
+
+        v4.4 Phase 2: ``use_rerank`` is appended to the key tail so that
+        rerank-on / rerank-off calls don't collide. Defaults to False so
+        existing callers that omit it keep producing the legacy hash.
         """
         h = hashlib.sha1()
         for part in (
@@ -622,6 +627,7 @@ class Orchestrator:
             "1" if use_embeddings else "0",
             items_hash,
             hub_boost_flag,
+            "1" if use_rerank else "0",
         ):
             h.update(part.encode("utf-8"))
             h.update(b"|")
@@ -702,6 +708,7 @@ class Orchestrator:
         token_budget: int | None = None,
         pre_fix: str | None = None,
         keep_low_signal: bool = False,
+        use_rerank: bool = False,
     ) -> ContextPack:
         """Build and return a ranked ContextPack for the given mode and query.
 
@@ -859,6 +866,11 @@ class Orchestrator:
         # under different flag values are genuinely different packs.
         # See ``_canonical_hub_boost_flag`` for the normalisation contract.
         hub_boost_flag = self._canonical_hub_boost_flag()
+        # v4.4 Phase 2: include ``use_rerank`` in the cache key so a
+        # rerank-on call doesn't reuse a rerank-off cached pack (the two
+        # are genuinely different ranked outputs). Tail position keeps
+        # the existing cache-key tuple shape stable for callers that
+        # construct it directly.
         cache_key = (
             repo_id,
             mode,
@@ -867,6 +879,7 @@ class Orchestrator:
             bool(use_embeddings),
             items_hash,
             hub_boost_flag,
+            bool(use_rerank),
         )
         with self._pack_cache_lock:
             cached = self._pack_cache.get(cache_key)
@@ -881,6 +894,7 @@ class Orchestrator:
             bool(use_embeddings),
             items_hash,
             hub_boost_flag,
+            bool(use_rerank),
         )
         l2_pack = self._l2_get(cache_key_str, repo_id, db_path)
         if l2_pack is not None:
@@ -915,6 +929,7 @@ class Orchestrator:
                 cache_key_str=cache_key_str,
                 repo_id=repo_id,
                 keep_low_signal=keep_low_signal,
+                use_rerank=use_rerank,
             )
         finally:
             # Always clear so subsequent reuses of this Orchestrator instance
@@ -942,6 +957,7 @@ class Orchestrator:
         cache_key_str: str,
         repo_id: str,
         keep_low_signal: bool = False,
+        use_rerank: bool = False,
     ) -> ContextPack:
         """Internal body of :meth:`build_pack` — split so the outer wrapper
         can own the ``self._pre_fix`` lifecycle via try/finally without
@@ -1069,6 +1085,8 @@ class Orchestrator:
                 # open a fresh sqlite3.Connection per pack build.
                 db_connection=db.connection,
                 memory_budget_pct=config.memory_budget_pct,
+                # v4.4 Phase 2: opt-in cross-encoder rerank pass.
+                use_rerank=use_rerank,
             )
             # v3.2 outcome ``diff-aware-ranking-boost`` (P2): when review
             # mode has a diff to reason about — either the working-tree

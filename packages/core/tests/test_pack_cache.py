@@ -46,6 +46,7 @@ class TestPackCache:
             False,
             orch._compute_items_hash(error_file=None, page=0, page_size=0),
             orch._canonical_hub_boost_flag(),
+            False,  # v4.4 Phase 2: use_rerank tail position
         )
         pack = _make_pack()
         orch._pack_cache[key] = pack
@@ -104,6 +105,7 @@ class TestPackCache:
             False,
             orch._compute_items_hash(error_file=None, page=0, page_size=0),
             orch._canonical_hub_boost_flag(),
+            False,  # v4.4 Phase 2: use_rerank tail position
         )
         orch._pack_cache[key] = pack
 
