@@ -697,6 +697,61 @@ def test_source_file_boost_ranks_module_above_test() -> None:
     assert paths[0] == "fastapi/security/oauth2.py", f"Expected oauth2.py first, got: {paths}"
 
 
+def test_debug_source_discovery_penalizes_tests_when_no_runtime_signal() -> None:
+    source = ContextItem(
+        source_type="file",
+        repo="test",
+        path_or_ref="fastapi/security/oauth2.py",
+        title="OAuth2PasswordRequestForm (oauth2.py)",
+        excerpt="OAuth2 form client_secret docstring",
+        reason="",
+        confidence=0.20,
+        est_tokens=80,
+    )
+    test = ContextItem(
+        source_type="file",
+        repo="test",
+        path_or_ref="tests/test_security_oauth2.py",
+        title="test_security_oauth2 (test_security_oauth2.py)",
+        excerpt="OAuth2 form client_secret test",
+        reason="",
+        confidence=0.20,
+        est_tokens=40,
+    )
+
+    result = ContextRanker(token_budget=1000).rank(
+        [test, source],
+        "Fix typo for client_secret in OAuth2 form docstrings",
+        "debug",
+        source_discovery=True,
+    )
+
+    assert result[0].path_or_ref == "fastapi/security/oauth2.py"
+
+
+def test_runtime_debug_keeps_test_evidence_eligible() -> None:
+    source = _item(title="source", confidence=0.20, est_tokens=80)
+    test = ContextItem(
+        source_type="failing_test",
+        repo="test",
+        path_or_ref="tests/test_source.py",
+        title="test_source",
+        excerpt="assert failure traceback",
+        reason="",
+        confidence=0.85,
+        est_tokens=40,
+    )
+
+    result = ContextRanker(token_budget=1000).rank(
+        [source, test],
+        "test failure traceback",
+        "debug",
+        source_discovery=False,
+    )
+
+    assert result[0].path_or_ref == "tests/test_source.py"
+
+
 # -----------------------------------------------------------------------
 # v4.4 C2 — Lower ABS_FLOOR and enable semantic re-rank by default
 # -----------------------------------------------------------------------

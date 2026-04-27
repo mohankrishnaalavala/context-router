@@ -1076,6 +1076,10 @@ class Orchestrator:
                     self._pre_fix if self._pre_fix else "HEAD"
                 )
             boosted_items_ids: list[str] = []
+            source_discovery = (
+                mode in {"implement", "minimal"}
+                or (mode == "debug" and not runtime_signals)
+            )
             all_ranked = ranker.rank(
                 candidates,
                 query,
@@ -1083,6 +1087,7 @@ class Orchestrator:
                 diff_spec=diff_spec_for_rank,
                 project_root=self._root,
                 boosted_items_sink=boosted_items_ids,
+                source_discovery=source_discovery,
             )
             all_ranked, _dup_dropped = _dedup_ranked(all_ranked)
             # v3.2 outcome ``symbol-stub-dedup`` (P1): collapse identical

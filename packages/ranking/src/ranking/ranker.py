@@ -460,6 +460,7 @@ class ContextRanker:
         diff_spec: str | None = None,
         project_root: Path | None = None,
         boosted_items_sink: list[str] | None = None,
+        source_discovery: bool = False,
     ) -> list[ContextItem]:
         """Rank *items* and enforce the token budget.
 
@@ -496,6 +497,11 @@ class ContextRanker:
                 of every diff-boosted item to. The Orchestrator supplies
                 this to surface telemetry under
                 ``ContextPack.metadata["boosted_items"]``.
+            source_discovery: True when the caller is trying to discover
+                source files for a free-text task rather than diagnose a
+                concrete failing test/runtime signal. In this mode test and
+                auxiliary paths are downweighted unless they carry primary
+                debug evidence.
 
         Returns:
             Ranked and budget-enforced list of ContextItems.
@@ -505,7 +511,12 @@ class ContextRanker:
 
         query_tokens = _tokenize(query)
         annotated = [self._annotate(item) for item in items]
-        boosted = self._apply_bm25_boost(annotated, query_tokens, mode=mode)
+        boosted = self._apply_bm25_boost(
+            annotated,
+            query_tokens,
+            mode=mode,
+            source_discovery=source_discovery,
+        )
         boosted = self._apply_source_file_boost(boosted, query_tokens)  # v4.4 C1
         # v3 phase-3 (outcome: hub-bridge-ranking-signals): structural
         # boost applied AFTER BM25 so BM25's normalised signal is not
@@ -832,6 +843,7 @@ class ContextRanker:
         items: list[ContextItem],
         query_tokens: set[str],
         mode: str = "",
+        source_discovery: bool = False,
     ) -> list[ContextItem]:
         """Re-score items using BM25 relevance combined with structural confidence.
 
@@ -886,20 +898,21 @@ class ContextRanker:
             default=0.0,
         )
 
-        # Pass 2: build result, applying the 0.85× penalty to test/script/aux
-        # files when max_non_test_conf >= their pre-score (i.e. at least one
-        # non-auxiliary competitor ranks as high or higher).
-        # In debug mode the penalty never fires (test failures are primary
-        # evidence there).
+        # Pass 2: build result, applying an auxiliary-path penalty when a
+        # non-auxiliary competitor has comparable signal. Runtime/failing-test
+        # evidence is primary debug signal and is never penalized. Plain debug
+        # mode keeps tests eligible unless the caller has explicitly marked the
+        # task as source discovery.
         result = []
         for item, pre_score in zip(items, pre_scores):
             new_conf = pre_score
-            if (
-                mode != "debug"
-                and _is_test_or_script_path(item.path_or_ref or "")
-                and max_non_test_conf >= new_conf
-            ):
-                new_conf = new_conf * 0.85
+            should_penalize_aux = (
+                _is_test_or_script_path(item.path_or_ref or "")
+                and (mode != "debug" or source_discovery)
+                and item.source_type not in {"runtime_signal", "failing_test"}
+            )
+            if should_penalize_aux and max_non_test_conf >= new_conf * 0.70:
+                new_conf = new_conf * 0.65
             result.append(item.model_copy(update={"confidence": new_conf}))
         return result
 
