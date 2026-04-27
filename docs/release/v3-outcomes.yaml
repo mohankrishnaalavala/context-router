@@ -87,6 +87,17 @@ outcomes:
       cmd: "scripts/smoke-v3.sh check benchmark-keyword-baseline-honest"
       expected_stdout_contains: "PASS benchmark-keyword-baseline-honest"
 
+  - id: crg-parity-fastapi
+    severity: P0
+    effort: M
+    title: "FastAPI parity gate matches or beats code-review-graph F1"
+    outcome: "context-router matches or beats code-review-graph F1 on the FastAPI parity fixture"
+    threshold: "`bash eval/fastapi-crg/run.sh --fastapi-root /Users/mohankrishnaalavala/Documents/project_context/fastapi --output-dir /tmp/context-router-crg-parity-ship-check` exits 0 and prints done. Artifacts"
+    negative_case: "missing local FastAPI clone skips with `SKIP crg-parity-fastapi: local fastapi clone not found` instead of failing unrelated environments"
+    verify:
+      cmd: "scripts/smoke-v3.sh check crg-parity-fastapi"
+      expected_stdout_contains: "PASS crg-parity-fastapi"
+
   # ──────────────────── P1 — hotfix candidates rolled into v3 ────────────────────
 
   - id: pack-cache-persists-cli
@@ -601,4 +612,3 @@ outcomes:
     verify:
       cmd: "scripts/smoke-v3.sh check mcp-resources"
       expected_stdout_contains: "PASS mcp-resources"
-
