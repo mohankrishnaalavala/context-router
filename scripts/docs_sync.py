@@ -13,11 +13,10 @@ Conservative update rules (enforced via system prompt):
 - Only update roadmap.md on chore(release): commits
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
-
-import anthropic
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -138,6 +137,12 @@ def main() -> None:
         sys.exit(0)
 
     docs_block = build_docs_block()
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("Skipping docs sync: ANTHROPIC_API_KEY is not configured.")
+        sys.exit(0)
+
+    import anthropic
 
     client = anthropic.Anthropic()
 
