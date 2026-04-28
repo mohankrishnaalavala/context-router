@@ -55,6 +55,14 @@ _CROSS_ENCODER_DOC_CHAR_CAP: int = 256
 # 0.5/0.5 mirrors the BM25 boost formula but uses the cross-encoder's
 # joint signal in place of BM25's term-frequency one.
 _CROSS_ENCODER_WEIGHT: float = 0.5
+# v4.4.2: post-rerank source-preference prior. Cross-encoders reward
+# lexical overlap and can promote test files (whose names quote the
+# query verbatim) over the production source. We restore the v4.1
+# source/test asymmetry as a multiplicative pass after the blend so
+# cross still reorders within a class but never inverts source vs
+# test at equal relevance.
+_RERANK_SOURCE_PRIOR_MULT: float = 1.15
+_RERANK_TEST_PRIOR_MULT: float = 0.85
 
 
 class _BM25Scorer:
@@ -1057,6 +1065,13 @@ class ContextRanker:
             blended = (1.0 - _CROSS_ENCODER_WEIGHT) * structural + (
                 _CROSS_ENCODER_WEIGHT * cross
             )
+            path_str = str(items[global_idx].path_or_ref)
+            prior_mult = (
+                _RERANK_TEST_PRIOR_MULT
+                if _is_test_or_script_path(path_str)
+                else _RERANK_SOURCE_PRIOR_MULT
+            )
+            blended = blended * prior_mult
             blended = max(0.0, min(0.95, blended))
             new_items[global_idx] = items[global_idx].model_copy(
                 update={"confidence": blended}
