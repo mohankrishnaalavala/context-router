@@ -21,6 +21,15 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
+# The post-rerank prior these tests assert on only takes effect inside
+# ``_apply_cross_encoder_rerank``'s sigmoid pass, which requires numpy.
+# When numpy is absent (CI's bare workspace install — sentence-transformers
+# is the transitive carrier) the rerank silent-degrades to a no-op and the
+# prior is never reached. Skip the whole module in that case rather than
+# assert numeric outcomes against the no-op path.
+pytest.importorskip("numpy")
+
 from contracts.models import ContextItem
 from ranking.ranker import (
     ContextRanker,
