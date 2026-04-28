@@ -216,6 +216,56 @@ def _matches_query_tokens(file_stem: str, sym_name: str, tokens: set[str]) -> bo
     return bool(parts & tokens)
 
 
+# v4.4.2 Phase 7: paths classified as documentation. Used by the
+# widening gate so that PRs whose entire diff is a release-notes
+# or CHANGELOG bump don't suppress query-driven candidate widening.
+_DOCS_FILE_SUFFIXES: frozenset[str] = frozenset({
+    ".md", ".rst", ".adoc",
+})
+_DOCS_FILENAME_PREFIXES: tuple[str, ...] = (
+    "release-notes", "changelog", "history", "notice", "license",
+    "contributing", "code_of_conduct", "security", "authors",
+    "maintainers", "readme",
+)
+_DOCS_DIR_NAMES: frozenset[str] = frozenset({
+    "docs", "documentation", "doc",
+})
+
+
+def _is_docs_path(path: str) -> bool:
+    """Return True when *path* looks like a documentation file."""
+    p = Path(path)
+    suffix = p.suffix.lower()
+    name_lower = p.name.lower()
+    parts_lower = {part.lower() for part in p.parts}
+    parent_parts_lower = {part.lower() for part in p.parts[:-1]}
+    is_top_level = len(p.parts) == 1
+    in_docs_dir = bool(parent_parts_lower & _DOCS_DIR_NAMES)
+    if suffix in _DOCS_FILE_SUFFIXES:
+        return True
+    # Top-level marker files (LICENSE, CONTRIBUTING, README, etc.) are docs;
+    # a same-named module nested under a code dir (src/license.py) is not.
+    if is_top_level or in_docs_dir:
+        if any(name_lower.startswith(prefix) for prefix in _DOCS_FILENAME_PREFIXES):
+            return True
+    if parts_lower & _DOCS_DIR_NAMES:
+        return True
+    # .txt only counts as docs when it lives under a docs directory or is
+    # a top-level marker file like README.txt — handled by the prefix
+    # check above. Don't blanket-classify .txt as docs (could be a real
+    # source file in some languages).
+    if suffix == ".txt" and (parts_lower & _DOCS_DIR_NAMES):
+        return True
+    return False
+
+
+def _is_docs_only_diff(changed_files: set[str] | list[str]) -> bool:
+    """Return True iff *changed_files* is non-empty AND every entry is docs."""
+    if not changed_files:
+        return False
+    return all(_is_docs_path(cf) for cf in changed_files)
+
+
 # v4.4 Phase 3b adaptive-depth thresholds. Annotation-only — does not trim
 # the items list so recall stays unaffected. The agent can use the label
 # to decide how to consume the pack (narrow → trust top-1; broad → treat
@@ -1115,10 +1165,19 @@ class Orchestrator:
                             )
 
             # Phase 6: load feedback-based confidence adjustments
+            # v4.4.2 Phase 6: cosine-weight historical feedback by query similarity.
+            # Silent-degrade when the bi-encoder model isn't available — the read
+            # path falls back to v4.4.1 unweighted aggregation.
+            try:
+                from memory.store import _try_embed_query
+                current_query_embedding = _try_embed_query(query) if query else b""
+            except Exception:
+                current_query_embedding = b""
             try:
                 from storage_sqlite.repositories import PackFeedbackRepository
                 feedback_adjustments = PackFeedbackRepository(db.connection).get_file_adjustments(
                     repo_scope=repo_scope,
+                    current_query_embedding=current_query_embedding,
                 )
             except Exception as exc:  # noqa: BLE001
                 _warn_optional_subsystem_failure(
@@ -1786,7 +1845,13 @@ class Orchestrator:
         # changed_file / blast_radius signal is stronger than name match,
         # and benchmarking showed widening on top of a real diff regresses
         # F1 by displacing diff-driven items.
-        query_tokens = _tokens_for_query_match(query) if not changed_files else set()
+        # v4.4.2 Phase 7: docs-only diffs (e.g. a release-notes.md bump) no
+        # longer suppress widening. The `changed_files` set itself is
+        # untouched — diff-aware boost and changed_file source-type still
+        # see it — but the widening gate treats docs-only as "no diff" so
+        # query-driven candidates can fire on PRs like fastapi T1/T3.
+        should_widen = (not changed_files) or _is_docs_only_diff(changed_files)
+        query_tokens = _tokens_for_query_match(query) if should_widen else set()
 
         seen_files: set[str] = set()
         items: list[ContextItem] = []

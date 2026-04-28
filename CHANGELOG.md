@@ -9,6 +9,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.4.2] — 2026-04-28
+
+> Precision follow-ups to v4.4.1: closes the rank-1 regression caused by `--with-rerank`, ships the two deferred phases (Phase 6 query-conditional feedback, Phase 7 docs-only-diff heuristic). See [`docs/release/v4.4.2-notes.md`](docs/release/v4.4.2-notes.md).
+
+### Added
+- **Rerank source-prior fix** (`packages/ranking/src/ranking/ranker.py`). After the 0.5/0.5 cross-encoder/structural blend, multiply by a multiplicative source-preference prior: source files `*= 1.15`, test/aux files `*= 0.85` (reuses the existing `_is_test_or_script_path` helper). Cross still reorders within a class (source vs source); the prior restores the structural veto across classes. Targets fastapi T1 and eShop T1, where the v4.4.1 rerank promoted test files above production sources.
+- **Phase 7 — docs-only-diff heuristic** (`packages/core/src/core/orchestrator.py`). New `_is_docs_path` / `_is_docs_only_diff` classifiers. When a PR's entire diff is documentation (`*.md`, `*.rst`, `*.adoc`, `docs/**`, `release-notes*`, `CHANGELOG*`, `LICENSE*`, `CONTRIBUTING*`, etc.), the Phase 3 query-driven widening gate now fires — letting `query_match` candidates surface even though `changed_files` is non-empty. Mixed PRs (any code + docs) keep the v4.4.1 authoritative-diff behaviour.
+- **Phase 6 — query-conditional feedback** (`packages/storage-sqlite/src/storage_sqlite/migrations/0014_pack_feedback_query_embedding.sql` + `packages/memory/src/memory/store.py` + `packages/storage-sqlite/src/storage_sqlite/repositories.py` + `packages/contracts/src/contracts/models.py` + orchestrator). New nullable `query_text` and `query_embedding` columns on `pack_feedback`. `FeedbackStore.add()` opportunistically embeds the query via the existing bi-encoder (silent-degrades to `NULL` when sentence-transformers is unavailable). `get_file_adjustments()` accepts `current_query_embedding` and weights each per-row delta by `max(0, cosine(current, row))` — orthogonal queries contribute nothing rather than flipping the sign of an adjustment. Legacy rows (NULL embedding) keep the v4.4.1 unweighted behaviour. The `min_count=3` raw threshold still gates whether an adjustment fires.
+- New tests:
+  - `packages/ranking/tests/test_rerank_source_prior.py` (4 cases / 6 parametrized)
+  - `packages/core/tests/test_phase7_docs_only_diff.py` (6 cases)
+  - `packages/memory/tests/test_feedback.py::TestQueryConditionalFeedback` (7 cases, gated on numpy)
+
+### Changed
+- `PackFeedback` model gains `query_text: str = ""` and `query_embedding: bytes = b""`.
+- `PackFeedbackRepository.get_file_adjustments` signature gains `current_query_embedding: bytes = b""` (default keeps v4.4.1 behaviour).
+- `FeedbackStore.get_file_adjustments` signature mirrors the same kwarg.
+- Schema version bumped to **14** (migration `0014_pack_feedback_query_embedding.sql`; additive, fully backward-compatible).
+
+### Performance (rationale, full re-benchmark pending in user's test environment)
+Targets relative to v4.4.1 (F1 0.583 / tokens 1,906 / Rank-1 7/12):
+- Avg F1 ≥ 0.62 (no regression baseline; gains expected from rerank-prior + Phase 7).
+- Rank-1 ≥ 9/12 (recovers eShop T1 + fastapi T1).
+- Avg tokens ≤ 1,900.
+
+---
+
 ## [4.4.1] — 2026-04-27
 
 > Precision-first release. v4.4.0 was tagged as the carrying version; v4.4.1 is the first release where the full four-phase redesign (PRs #107–#110) is merged into `main`. See [`docs/release/v4.4.1-notes.md`](docs/release/v4.4.1-notes.md) for the long-form story and benchmark numbers.

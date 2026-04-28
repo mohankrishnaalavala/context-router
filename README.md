@@ -245,7 +245,9 @@ A per-mode **score floor** (v4.4 Phase 1) drops low-confidence noise before knap
 
 **Adaptive depth** (v4.4 Phase 3). `pack.metadata` exposes `depth` (`narrow` / `standard` / `broad`) and `depth_reason` based on top-1 confidence and the gap to top-2 — narrow on confident queries, broad when scores are flat.
 
-**Cross-encoder rerank** (`--with-rerank`, v4.4 Phase 2). Opt-in second-stage rerank over the top-30 candidates using `cross-encoder/ms-marco-MiniLM-L-6-v2` (~22 MB, downloaded once). Lifts precision +0.10 to +0.20 on query-driven packs at ~50 ms extra latency. Falls back silently when `sentence-transformers` is not installed; pair with `--no-rerank` to force off.
+**Cross-encoder rerank** (`--with-rerank`, v4.4 Phase 2). Opt-in second-stage rerank over the top-30 candidates using `cross-encoder/ms-marco-MiniLM-L-6-v2` (~22 MB, downloaded once). Lifts precision +0.10 to +0.20 on query-driven packs at ~50 ms extra latency. Falls back silently when `sentence-transformers` is not installed; pair with `--no-rerank` to force off. Since v4.4.2 the rerank score is post-multiplied by a source-preference prior (source paths `× 1.15`, test/aux paths `× 0.85`) so the cross-encoder's lexical overlap can no longer promote test files above the production source at equal relevance.
+
+**Phase 7 — docs-only-diff widening** (v4.4.2). When the entire diff for a review-mode pack is documentation (`*.md`, `*.rst`, `release-notes*`, `CHANGELOG*`, `LICENSE*`, `docs/**`, …), Phase 3's query-driven candidate widening fires even though `changed_files` is non-empty. Mixed PRs (any code + docs) keep the v4.4.1 authoritative-diff behaviour.
 
 The pack is saved to `.context-router/last-pack.json` for later inspection.
 
@@ -406,6 +408,8 @@ Each `feedback record` call stores one `PackFeedback` entry. After ≥3 reports 
 - **files_read** files get a **+0.03** confidence boost in future packs (v4.4 Phase 4 — implicit positive signal, smaller than missing)
 
 Adjustments applied to the current pack are surfaced in `pack.metadata.feedback_applied` as `[{path, delta}, …]` so callers can audit which historical signals shaped the result. Adjustments for files not selected into the pack are filtered out, keeping the metadata answer-focused.
+
+Since v4.4.2 (Phase 6) those deltas are **cosine-weighted by query similarity**: when feedback is recorded with a query attached, the bi-encoder embedding is persisted alongside the row (silent-degrades to NULL when sentence-transformers is unavailable), and at pack build time each per-row delta is multiplied by `max(0, cosine(current_query_embedding, row_query_embedding))`. Result: feedback for query X only fires strongly for similar queries; orthogonal queries contribute nothing rather than flipping the sign of an adjustment. Legacy rows (NULL embedding) keep the v4.4.1 unweighted behaviour. The `min_count=3` raw threshold still gates whether an adjustment fires.
 
 `--files-read` records which files the agent actually consumed from the pack (space-separated). After ≥5 reports with `files_read`, `stats` shows `read_overlap_pct` (fraction of reads that were pack hits) and `noise_ratio_pct` (fraction of pack items never read).
 
