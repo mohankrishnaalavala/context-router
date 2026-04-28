@@ -30,6 +30,11 @@ from contracts.config import ContextRouterConfig, load_config
 from contracts.models import ContextItem, ContextPack, RuntimeSignal
 from graph_index.git_diff import GitDiffParser
 from ranking import ContextRanker, dedup_stubs, estimate_tokens
+from ranking.ranker import (
+    _RERANK_SOURCE_PRIOR_MULT,
+    _RERANK_TEST_PRIOR_MULT,
+    _is_test_or_script_path,
+)
 from storage_sqlite.database import Database
 from storage_sqlite.repositories import (
     ContractRepository,
@@ -1616,6 +1621,46 @@ class Orchestrator:
         return items
 
     @staticmethod
+    def _source_prior_mult(path: str) -> float:
+        """Return the v3.3.1-style source/test asymmetry multiplier.
+
+        Reuses the ranker's ``_is_test_or_script_path`` so the upstream
+        candidate scoring matches what ``_apply_cross_encoder_rerank`` does
+        post-blend. Source paths get ×1.15, test/aux paths ×0.85.
+        """
+        return (
+            _RERANK_TEST_PRIOR_MULT
+            if _is_test_or_script_path(path)
+            else _RERANK_SOURCE_PRIOR_MULT
+        )
+
+    @staticmethod
+    def _load_symbols_with_paths(
+        sym_repo: SymbolRepository,
+        repo_name: str,
+        ensure_paths: set[str],
+    ) -> list[Any]:
+        """Return ``sym_repo.get_all`` plus any symbols for *ensure_paths*.
+
+        ``get_all`` caps at 10k symbols silently, so on large repos
+        (django: 43k) files outside the cap are invisible to the candidate
+        builder — including ``changed_files``. This helper unions the
+        cap-bounded result with a targeted lookup for paths the caller
+        cares about, deduping by symbol identity.
+        """
+        all_symbols = sym_repo.get_all(repo_name)
+        if not ensure_paths:
+            return all_symbols
+        seen_files = {str(s.file) for s in all_symbols}
+        missing = [p for p in ensure_paths if p not in seen_files]
+        if not missing:
+            return all_symbols
+        extras = sym_repo.get_for_files(repo_name, missing)
+        if not extras:
+            return all_symbols
+        return list(all_symbols) + list(extras)
+
+    @staticmethod
     def _apply_community_boost(
         items: list[ContextItem],
         sym_repo: SymbolRepository,
@@ -1815,7 +1860,9 @@ class Orchestrator:
     ) -> list[ContextItem]:
         """Build candidates prioritised for a code-review task."""
         changed_files = self._get_changed_files()
-        all_symbols = sym_repo.get_all(repo_name)
+        all_symbols = self._load_symbols_with_paths(
+            sym_repo, repo_name, changed_files
+        )
 
         # Pre-compute adjacency for changed files (blast radius, depth=1)
         blast_radius_files: set[str] = set()
@@ -1875,6 +1922,14 @@ class Orchestrator:
                 source_type = "file"
 
             confidence = weights.get(source_type, _REVIEW_CONFIDENCE[source_type])
+            # v4.4.3: apply v3.3.1-style source/test asymmetry to changed_file
+            # candidates so the test sibling (which often quotes the query
+            # verbatim — e.g. test_order_by_group_by_join) doesn't outrank
+            # the production source on equal-base scoring. Mirrors the
+            # multiplier _apply_cross_encoder_rerank applies post-blend, but
+            # fires unconditionally so it works without --with-rerank.
+            if source_type == "changed_file":
+                confidence = min(0.95, confidence * self._source_prior_mult(fp))
             seen_files.add(fp)
             items.append(
                 _make_item(
@@ -2747,7 +2802,8 @@ class Orchestrator:
             blast_radius_files.update(edge_repo.get_adjacent_files(repo_name, cf))
         blast_radius_files -= changed_files
 
-        all_symbols = sym_repo.get_all(repo_name)
+        ensure = set(changed_files) | blast_radius_files | signal_paths
+        all_symbols = self._load_symbols_with_paths(sym_repo, repo_name, ensure)
         items: list[ContextItem] = []
 
         # Add RuntimeSignal items first (one item per signal, not per symbol)
@@ -2784,6 +2840,8 @@ class Orchestrator:
             elif fp in changed_files:
                 source_type = "changed_file"
                 confidence = weights.get("changed_file", _DEBUG_CONFIDENCE["changed_file"])
+                # v4.4.3 source/test asymmetry — see _review_candidates note.
+                confidence = min(0.95, confidence * self._source_prior_mult(fp))
             elif self._is_test_file(fp) and (
                 bool(signals) or self._matches_changed(fp, changed_files)
             ):
@@ -2872,7 +2930,9 @@ class Orchestrator:
             blast_radius_files.update(edge_repo.get_adjacent_files(repo_name, cf))
         blast_radius_files -= changed_files
 
-        all_symbols = sym_repo.get_all(repo_name)
+        all_symbols = self._load_symbols_with_paths(
+            sym_repo, repo_name, set(changed_files) | blast_radius_files
+        )
         items: list[ContextItem] = []
 
         # Symbol-based items (changed + blast radius)
@@ -2881,6 +2941,8 @@ class Orchestrator:
             if fp in changed_files:
                 source_type = "changed_file"
                 confidence = weights.get("changed_file", _HANDOVER_CONFIDENCE["changed_file"])
+                # v4.4.3 source/test asymmetry — see _review_candidates note.
+                confidence = min(0.95, confidence * self._source_prior_mult(fp))
             elif fp in blast_radius_files:
                 source_type = "blast_radius"
                 confidence = weights.get("blast_radius", _HANDOVER_CONFIDENCE["blast_radius"])

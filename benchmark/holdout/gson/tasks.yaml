@@ -1,0 +1,27 @@
+# Holdout fixtures — google/gson. NEVER tune the ranker against these tasks.
+# Clone: git clone https://github.com/google/gson.git
+# SHAs are real commits from upstream history.
+tasks:
+  - id: gson-t1
+    sha: 6bf8bf6cbf4d4f5f72f69262be890a5a5e28259d
+    description: "fix: Include location info in NumberFormatException from JsonReader (#3000)"
+    ground_truth_files:
+      - gson/src/main/java/com/google/gson/stream/JsonReader.java
+    cr_query: "JsonReader NumberFormatException missing location info on malformed input"
+    cr_mode: debug
+
+  - id: gson-t2
+    sha: f4d371d29c04066dbe7fdb31f642831f9c7f40cd
+    description: "Fix duplicate key detection when first value is null (#3006)"
+    ground_truth_files:
+      - gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java
+    cr_query: "MapTypeAdapterFactory duplicate key detection skips null first value"
+    cr_mode: debug
+
+  - id: gson-t3
+    sha: e8cdabf296cd4c2c1550ed76cf27a1a8e0c4ec59
+    description: "Fix typeArguments array not being cloned when resolving ParameterizedType with changed owner (#2706)"
+    ground_truth_files:
+      - gson/src/main/java/com/google/gson/internal/$Gson$Types.java
+    cr_query: "ParameterizedType typeArguments array not cloned when owner changed"
+    cr_mode: debug

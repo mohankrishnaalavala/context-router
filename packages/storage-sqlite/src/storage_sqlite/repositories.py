@@ -557,6 +557,44 @@ class SymbolRepository:
             for r in rows
         ]
 
+    def get_for_files(self, repo: str, file_paths: list[str] | set[str]) -> list[Symbol]:
+        """Return all symbols belonging to *file_paths*, bypassing the get_all cap.
+
+        ``get_all``'s 10,000-row cap silently drops files in large repos
+        (django: 43k symbols → 33k invisible). When the orchestrator needs
+        to guarantee that specific files (e.g. ``changed_files``) are
+        represented in the candidate pool, it calls this helper to fetch
+        them directly by path.
+        """
+        paths = list(file_paths)
+        if not paths:
+            return []
+        placeholders = ",".join("?" * len(paths))
+        rows = self._conn.execute(
+            f"""
+            SELECT id, name, kind, file_path, line_start, line_end,
+                   language, signature, docstring, community_id
+            FROM symbols
+            WHERE repo = ? AND file_path IN ({placeholders})
+            """,
+            (repo, *paths),
+        ).fetchall()
+        return [
+            Symbol(
+                name=r["name"],
+                kind=r["kind"],
+                file=Path(r["file_path"]),
+                line_start=r["line_start"] or 0,
+                line_end=r["line_end"] or 0,
+                language=r["language"] or "",
+                signature=r["signature"] or "",
+                docstring=r["docstring"] or "",
+                community_id=r["community_id"],
+                id=r["id"],
+            )
+            for r in rows
+        ]
+
     def get_distinct_files(self, repo: str) -> list[str]:
         """Return the distinct file paths that have at least one symbol.
 
