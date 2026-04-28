@@ -1,0 +1,27 @@
+# Holdout fixtures — colinhacks/zod. NEVER tune the ranker against these tasks.
+# Clone: git clone https://github.com/colinhacks/zod.git
+# SHAs are real commits from upstream history.
+tasks:
+  - id: zod-t1
+    sha: 7f789defd73ee35f3099ab5c2091cb19bd2b3578
+    description: "fix: skip non-enumerable properties in record validation (#5719)"
+    ground_truth_files:
+      - packages/zod/src/v4/core/schemas.ts
+    cr_query: "z.record validation iterates non-enumerable properties causing wrong errors"
+    cr_mode: debug
+
+  - id: zod-t2
+    sha: 2f8414bc90cebc76be87c3640617e300a5d9b060
+    description: "fix: add missing addIssue to transform context (#5699)"
+    ground_truth_files:
+      - packages/zod/src/v4/classic/schemas.ts
+    cr_query: "transform context is missing addIssue method when reporting issues"
+    cr_mode: debug
+
+  - id: zod-t3
+    sha: 3a818de145dc2fa9b5753bc8bf97b0b8484cfbaf
+    description: "fix(v4): handle multi-digit exponents in floatSafeRemainder (#5687)"
+    ground_truth_files:
+      - packages/zod/src/v4/core/util.ts
+    cr_query: "floatSafeRemainder mishandles multi-digit exponents in scientific notation"
+    cr_mode: debug

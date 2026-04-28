@@ -1,0 +1,27 @@
+# Holdout fixtures — psf/requests. NEVER tune the ranker against these tasks.
+# Clone: git clone https://github.com/psf/requests.git
+# SHAs are real commits from upstream history.
+tasks:
+  - id: requests-t1
+    sha: f0198e6dfc431a2293dc16e1b1e8fcddc910a7f3
+    description: "Fix malformed value parsing for Content-Type (#7309)"
+    ground_truth_files:
+      - src/requests/utils.py
+    cr_query: "malformed Content-Type header value parsing fails in requests utils"
+    cr_mode: debug
+
+  - id: requests-t2
+    sha: 47914226c2968802f2cdee3f6f0f6e06e4472f64
+    description: "Fix empty netrc entry usage (#7205)"
+    ground_truth_files:
+      - src/requests/utils.py
+    cr_query: "empty netrc entry causes credentials to be sent as None"
+    cr_mode: debug
+
+  - id: requests-t3
+    sha: 3ff3ff21dd45957c9e143cd500291959bb15f690
+    description: "Fix #6628 - JSONDecodeError are not deserializable"
+    ground_truth_files:
+      - src/requests/exceptions.py
+    cr_query: "JSONDecodeError raised by requests is not picklable / not deserializable"
+    cr_mode: debug
