@@ -26,7 +26,7 @@ AI coding agents work best with focused, relevant context rather than entire cod
 | **Language support** | Python (full), TypeScript/JS (full), YAML (k8s/Helm/GHA), Java (full with `enum`), .NET/C# (full with `record` / `enum`) |
 | **Edge types** | `imports`, `calls` (symbol-level), `extends`, `implements`, `tested_by`, `needs` (GHA), community links |
 | **Task modes** | `review` (adds per-item `risk` from git diff + size), `implement`, `debug` (annotates items with flow: entry → leaf), `handover` (with `--wiki` for a markdown subsystem summary), `minimal` (≤5 items under tight token budget with `next_tool_suggestion`) |
-| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional `--with-semantic` semantic boost (all-MiniLM-L6-v2, applies in every pack mode), community-cohesion boost (+0.10 for same-cluster candidates), opt-in hub/bridge structural boost via `capabilities.hub_boost`, single-repo contracts-consumer boost (+0.10 when an item's file references a same-repo OpenAPI endpoint), per-project `confidence_weights` overrides in `.context-router/config.yaml` |
+| **Ranking** | BM25 query scoring (Okapi BM25, inline, no extra dependency), freshness decay (30-day half-life), optional `--with-semantic` semantic boost (all-MiniLM-L6-v2, applies in every pack mode), optional `--with-rerank` cross-encoder rerank pass (cross-encoder/ms-marco-MiniLM-L-6-v2, top-30 only; v4.4 Phase 2), per-mode score floor that drops low-confidence noise before knapsack admission, community-cohesion boost (handover-only after v4.4), opt-in hub/bridge structural boost via `capabilities.hub_boost` (handover-only after v4.4), single-repo contracts-consumer boost (+0.10 when an item's file references a same-repo OpenAPI endpoint), feedback-driven per-file confidence adjustments (`+0.05` missing / `−0.10` noisy / `+0.03` files_read after ≥3 reports, scoped per project), per-project `confidence_weights` overrides in `.context-router/config.yaml` |
 | **Pack cache** | Two-tier cache: in-process L1 (5-minute TTLCache) + SQLite L2 (survives across CLI invocations) — keyed on `(repo_id, mode, sha256(query), budget, use_embeddings, items_hash)`; `repo_id` derived from `(COUNT(*), MAX(id))` of `symbols` so writes to `pack_cache` don't self-invalidate |
 | **Embeddings** | Proactive cache via `context-router embed` — pre-computes symbol embeddings once (stored in `embeddings` table), then `pack --with-semantic` is a cosine lookup instead of on-the-fly encoding; on-the-fly fallback with stderr warning when the table is empty |
 | **Audit** | `context-router audit --untested-hotspots` ranks high-inbound symbols with zero `tested_by` edges (requires `tested_by` edges from recent indexing) |
@@ -224,22 +224,28 @@ context-router watch [--project-root PATH]
 Generate a ranked context pack for a task.
 
 ```
-context-router pack --mode MODE [--query TEXT] [--project-root PATH] [--json]
+context-router pack --mode MODE [--query TEXT] [--project-root PATH] [--with-semantic] [--with-rerank] [--max-tokens N] [--json]
 ```
 
 **Modes:**
 
-| Mode | Ranking priority | Best for |
-|---|---|---|
-| `review` | changed files → blast radius → impacted tests → config | PR review, diff analysis |
-| `implement` | entrypoints → contracts → extension points → patterns | Building new features |
-| `debug` | runtime signal match → failing tests → changed files → call chain | Fixing errors, CI failures |
-| `handover` | recent changes → memory observations → decisions → blast radius | Onboarding, sprint docs |
-| `minimal` | implement-mode ranking, hard-capped to the top 5 items | Cheap triage; pairs with a `metadata.next_tool_suggestion` hint for the next call |
+| Mode | Ranking priority | Best for | Default budget (v4.4) |
+|---|---|---|---:|
+| `review` | changed files → blast radius → impacted tests → config | PR review, diff analysis | 1 500 |
+| `implement` | entrypoints → contracts → extension points → patterns | Building new features | 1 500 |
+| `debug` | runtime signal match → failing tests → changed files → call chain | Fixing errors, CI failures | 2 500 |
+| `handover` | recent changes → memory observations → decisions → blast radius | Onboarding, sprint docs | 4 000 |
+| `minimal` | implement-mode ranking, hard-capped to the top 5 items | Cheap triage; pairs with a `metadata.next_tool_suggestion` hint for the next call | 800 |
 
 Not sure which mode to pick? See the full **[mode decision guide](docs/guides/modes.md)** — one paragraph per mode plus an "I am trying to… → mode" table.
 
-**Token budget** (default: 8 000 tokens) is read from `.context-router/config.yaml`. Items are dropped lowest-confidence first, but at least one item per source category is always preserved. `--max-tokens N` overrides the budget for a single call (minimal mode defaults to 800 when the flag is omitted).
+**Token budget.** v4.4 introduces per-mode budget defaults (table above). Override individual modes in `.context-router/config.yaml` under `mode_budgets:` (e.g. `mode_budgets: {review: 4000}` only changes review; other modes keep the v4.4 defaults). Single-call override: `--max-tokens N`. Precedence: `--max-tokens` > `mode_budgets[mode]` > `token_budget` (legacy global fallback).
+
+A per-mode **score floor** (v4.4 Phase 1) drops low-confidence noise before knapsack admission. The catch-all `file` source-type guarantee survives only in `review`/`handover`; high-signal types (`entrypoint`, `changed_file`, `runtime_signal`, `contract`, `extension_point`, `failing_test`, `query_match`) are always guaranteed.
+
+**Adaptive depth** (v4.4 Phase 3). `pack.metadata` exposes `depth` (`narrow` / `standard` / `broad`) and `depth_reason` based on top-1 confidence and the gap to top-2 — narrow on confident queries, broad when scores are flat.
+
+**Cross-encoder rerank** (`--with-rerank`, v4.4 Phase 2). Opt-in second-stage rerank over the top-30 candidates using `cross-encoder/ms-marco-MiniLM-L-6-v2` (~22 MB, downloaded once). Lifts precision +0.10 to +0.20 on query-driven packs at ~50 ms extra latency. Falls back silently when `sentence-transformers` is not installed; pair with `--no-rerank` to force off.
 
 The pack is saved to `.context-router/last-pack.json` for later inspection.
 
@@ -259,6 +265,12 @@ uv run context-router pack --mode debug --error-file test-results.xml
 
 # JSON output for piping into agent prompts
 uv run context-router pack --mode review --json | jq '.selected_items[].title'
+
+# Implement with cross-encoder rerank (v4.4 Phase 2)
+uv run context-router pack --mode implement --with-rerank --query "add pagination to users endpoint"
+
+# Inspect adaptive-depth metadata (v4.4 Phase 3)
+uv run context-router pack --mode review --json | jq '.metadata.depth, .metadata.depth_reason'
 ```
 
 ---
@@ -388,9 +400,12 @@ context-router feedback list [--limit N] [--project-root PATH]
 
 **How it works:**
 
-Each `feedback record` call stores one `PackFeedback` entry. After ≥3 reports for the same file:
+Each `feedback record` call stores one `PackFeedback` entry. After ≥3 reports for the same file (scoped per project via `repo_scope`):
 - **missing** files get a **+0.05** confidence boost in future packs
 - **noisy** files get a **−0.10** confidence penalty in future packs
+- **files_read** files get a **+0.03** confidence boost in future packs (v4.4 Phase 4 — implicit positive signal, smaller than missing)
+
+Adjustments applied to the current pack are surfaced in `pack.metadata.feedback_applied` as `[{path, delta}, …]` so callers can audit which historical signals shaped the result. Adjustments for files not selected into the pack are filtered out, keeping the metadata answer-focused.
 
 `--files-read` records which files the agent actually consumed from the pack (space-separated). After ≥5 reports with `files_read`, `stats` shows `read_overlap_pct` (fraction of reads that were pack hits) and `noise_ratio_pct` (fraction of pack items never read).
 
