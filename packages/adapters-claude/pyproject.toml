@@ -1,6 +1,6 @@
 [project]
 name = "context-router-adapters-claude"
-version = "4.4.0"
+version = "4.4.1"
 requires-python = ">=3.12"
 description = "Claude Code agent adapter for context-router (Phase 6)"
 license = {text = "Apache-2.0"}

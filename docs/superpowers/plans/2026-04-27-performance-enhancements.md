@@ -203,3 +203,49 @@ HF_HUB_OFFLINE=1 uv run context-router pack --mode review --no-rerank
 3. **Disabling hub-boost outside handover** may hurt some implement queries that legitimately want hub files. Acceptable — task-specific queries are the majority case, and a `--with-hub-boost` flag is one line to expose.
 4. **Symbol-body inlining for top-1 only** is more conservative than v4.4 roadmap. Trade-off: slightly less inlined info, but much smaller packs. Reversible via `--inline-bodies all`.
 5. **Rollback plan:** each phase ships as a separate PR with feature-flag gates (`config.precision_mode: v44` toggles all changes). If Phase 2 regresses unexpectedly on holdout, revert just the rerank without losing Phase 1 wins.
+
+---
+
+## Status (2026-04-27)
+
+| PR | Phase | Status |
+|---|---|---|
+| #107 | Phase 1 — mode budgets, score floor, scoped boosts, Phase 5 top-1 inlining | merged |
+| #108 | Phase 2 — cross-encoder reranker | merged |
+| #109 | Phase 3 — query-driven widening + adaptive depth metadata | merged |
+| #110 | Phase 4 — feedback loop (`files_read` signal + `feedback_applied` metadata) | green, awaiting merge |
+
+Final benchmark vs `code-review-graph` (12 tasks, 4 repos): F1 0.611, precision 0.625, avg tokens 1,860. 2/4 repos lead the competitor outright; both v4.4 targets hit.
+
+---
+
+## Future phases (post-v4.4)
+
+Deferred from v4.4 — kept out of scope to ship the release. Pick up after the test-environment efficiency study comes back.
+
+### Phase 6 — query-conditional feedback (cosine-weight per-query)
+
+**Problem.** Phase 4 adjustments are per-file globally: a file flagged `noisy` in one query gets the −0.10 penalty on every future query. Bleed-over hurts when the same file is genuinely useful for an unrelated task.
+
+**Approach.**
+1. Persist the query embedding (or its hash + top-k tokens) alongside each `pack_feedback` row.
+2. At pack build time, weight each historical adjustment by cosine(current_query_embedding, feedback_query_embedding) — so feedback only fires strongly for similar queries.
+3. Keep the `min_count=3` threshold; sum is now `Σ cosine_sim * delta` instead of `Σ delta`.
+4. Surface the per-query weight in `pack.metadata.feedback_applied` for auditability.
+
+**Cost.** Schema migration on `pack_feedback`; depends on bi-encoder being available (silent degrade to v4.4 behaviour otherwise). No new model.
+
+**Why deferred.** No harness signal — the 12-task benchmark has no feedback history. Real-world value compounds only after weeks of usage. Ship after the test environment produces enough feedback rows to evaluate.
+
+### Phase 7 — "treat docs-only diffs as no-diff" heuristic
+
+**Problem.** Phase 3 widening short-circuits when `changed_files` is non-empty. Some real PRs (e.g. fastapi tasks T1/T3 in the harness) have a tiny irrelevant diff (`release-notes.md`) that suppresses widening — exactly the cases where widening would close the GT gap.
+
+**Approach.**
+1. In `_review_candidates`, classify each `changed_file`: docs (`*.md`, `*.rst`, `release-notes.*`, `CHANGELOG*`, `docs/**`) vs code.
+2. If the diff is 100% docs, treat `changed_files = []` for the purposes of the widening gate (still record them as candidates, just don't suppress widening).
+3. Authoritative-changed-files mode stays unchanged when *any* code file is touched.
+
+**Cost.** ~30-line change in `packages/core/src/core/orchestrator.py`. No schema, no new dependency.
+
+**Why deferred.** Direct benchmark payoff (closes the fastapi gap), but the heuristic has corner cases (config-only PRs, generated files) that warrant care. Ship as a focused follow-up PR after v4.4 is stable.
