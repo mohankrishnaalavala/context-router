@@ -1,0 +1,110 @@
+{
+  "id": "2fdd18fc-72f6-454a-b393-f14a8b599922",
+  "mode": "debug",
+  "query": "malformed Content-Type header value parsing fails in requests utils",
+  "selected_items": [
+    {
+      "id": "1c4a9ad4-bbbf-4bba-94e9-1c596062803a",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "_parse_content_type_header (utils.py)",
+      "excerpt": "def _parse_content_type_header(header):\nReturns content type and parameters from given header.\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters.",
+      "reason": "Modified `_parse_content_type_header` lines 504-523",
+      "confidence": 0.9452050009666441,
+      "est_tokens": 87,
+      "freshness": "2026-04-28T15:36:10.391725Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "get_encoding_from_headers -> _parse_content_type_header",
+      "duplicates_hidden": 42,
+      "symbol_body": "def _parse_content_type_header(header):\n    \"\"\"Returns content type and parameters from given header.\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters.\n    \"\"\"\n\n    tokens = header.split(\";\")\n    content_type, params = tokens[0].strip(), tokens[1:]\n    params_dict = {}\n    strip_chars = \"\\\"' \"\n\n    for param in params:\n        param = param.strip()\n        if param and (idx := param.find(\"=\")) != -1:\n            key = param[:idx].strip(strip_chars)\n            value = param[idx + 1 :].strip(strip_chars)\n            params_dict[key.lower()] = value\n    return content_type, params_dict",
+      "symbol_lines": [
+        504,
+        523
+      ]
+    },
+    {
+      "id": "50a5043f-0dde-4de8-8ac0-62522df106e2",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+      "title": "test__parse_content_type_header (test_utils.py)",
+      "excerpt": "def test__parse_content_type_header(value, expected):",
+      "reason": "Modified `test__parse_content_type_header` lines 635-636",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 62,
+      "freshness": "2026-04-28T15:36:10.428742Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test__parse_content_type_header -> _parse_content_type_header",
+      "duplicates_hidden": 81,
+      "symbol_body": null,
+      "symbol_lines": [
+        635,
+        636
+      ]
+    }
+  ],
+  "total_est_tokens": 149,
+  "baseline_est_tokens": 55881,
+  "reduction_pct": 99.7,
+  "created_at": "2026-04-28T15:36:10.948421Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 16,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "1c4a9ad4-bbbf-4bba-94e9-1c596062803a",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "_parse_content_type_header (utils.py)",
+      "excerpt": "def _parse_content_type_header(header):\nReturns content type and parameters from given header.\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters.",
+      "reason": "Modified `_parse_content_type_header` lines 504-523",
+      "confidence": 0.9452050009666441,
+      "est_tokens": 87,
+      "freshness": "2026-04-28T15:36:10.391725Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "get_encoding_from_headers -> _parse_content_type_header",
+      "duplicates_hidden": 42,
+      "symbol_body": "def _parse_content_type_header(header):\n    \"\"\"Returns content type and parameters from given header.\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters.\n    \"\"\"\n\n    tokens = header.split(\";\")\n    content_type, params = tokens[0].strip(), tokens[1:]\n    params_dict = {}\n    strip_chars = \"\\\"' \"\n\n    for param in params:\n        param = param.strip()\n        if param and (idx := param.find(\"=\")) != -1:\n            key = param[:idx].strip(strip_chars)\n            value = param[idx + 1 :].strip(strip_chars)\n            params_dict[key.lower()] = value\n    return content_type, params_dict",
+      "symbol_lines": [
+        504,
+        523
+      ]
+    },
+    {
+      "id": "50a5043f-0dde-4de8-8ac0-62522df106e2",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+      "title": "test__parse_content_type_header (test_utils.py)",
+      "excerpt": "def test__parse_content_type_header(value, expected):",
+      "reason": "Modified `test__parse_content_type_header` lines 635-636",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 62,
+      "freshness": "2026-04-28T15:36:10.428742Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test__parse_content_type_header -> _parse_content_type_header",
+      "duplicates_hidden": 81,
+      "symbol_body": null,
+      "symbol_lines": [
+        635,
+        636
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 149,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

@@ -1,0 +1,152 @@
+{
+  "id": "0e9d7a39-61ee-45c7-bbfb-0d496bd96802",
+  "mode": "debug",
+  "query": "MapTypeAdapterFactory duplicate key detection skips null first value",
+  "selected_items": [
+    {
+      "id": "178ee957-372b-4d90-b1bf-fd5901119c35",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+      "title": "Adapter (MapTypeAdapterFactory.java)",
+      "excerpt": "Adapter(\n        TypeAdapter<K> keyTypeAdapter,\n        TypeAdapter<V> valueTypeAdapter,\n        ObjectConstructor<? extends Map<K, V>> constructor)",
+      "reason": "Modified `Adapter` lines 166-173",
+      "confidence": 0.7613803073457635,
+      "est_tokens": 78,
+      "freshness": "2026-04-28T15:35:36.725750Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 8,
+      "symbol_body": "    Adapter(\n        TypeAdapter<K> keyTypeAdapter,\n        TypeAdapter<V> valueTypeAdapter,\n        ObjectConstructor<? extends Map<K, V>> constructor) {\n      this.keyTypeAdapter = keyTypeAdapter;\n      this.valueTypeAdapter = valueTypeAdapter;\n      this.constructor = constructor;\n    }",
+      "symbol_lines": [
+        166,
+        173
+      ]
+    },
+    {
+      "id": "6576fa59-1588-4857-a2b3-d634e826dcf9",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+      "title": "testDuplicateKeyWithNullFirstValueArrayForm (MapAsArrayTypeAdapterTest.java)",
+      "excerpt": "@Test @Test\n  public void testDuplicateKeyWithNullFirstValueArrayForm()",
+      "reason": "Modified `testDuplicateKeyWithNullFirstValueArrayForm` lines 83-91",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 75,
+      "freshness": "2026-04-28T15:35:36.575929Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "testDuplicateKeyWithNullFirstValueArrayForm -> enableComplexMapKeySerialization",
+      "duplicates_hidden": 14,
+      "symbol_body": null,
+      "symbol_lines": [
+        83,
+        91
+      ]
+    },
+    {
+      "id": "1c457a92-238e-4eb3-90ee-0b6323e10377",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapTest.java",
+      "title": "testMapDeserializationWithDuplicateKeysNullFirstValue (MapTest.java)",
+      "excerpt": "@Test @Test\n  public void testMapDeserializationWithDuplicateKeysNullFirstValue()",
+      "reason": "Modified `testMapDeserializationWithDuplicateKeysNullFirstValue` lines 696-704",
+      "confidence": 0.439511379975105,
+      "est_tokens": 74,
+      "freshness": "2026-04-28T15:35:36.582385Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "testMapDeserializationWithDuplicateKeysNullFirstValue -> getType",
+      "duplicates_hidden": 73,
+      "symbol_body": null,
+      "symbol_lines": [
+        696,
+        704
+      ]
+    }
+  ],
+  "total_est_tokens": 227,
+  "baseline_est_tokens": 292170,
+  "reduction_pct": 99.9,
+  "created_at": "2026-04-28T15:35:38.293584Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 3 items; consider re-indexing or widening the query",
+    "external_dropped": 52,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "178ee957-372b-4d90-b1bf-fd5901119c35",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+      "title": "Adapter (MapTypeAdapterFactory.java)",
+      "excerpt": "Adapter(\n        TypeAdapter<K> keyTypeAdapter,\n        TypeAdapter<V> valueTypeAdapter,\n        ObjectConstructor<? extends Map<K, V>> constructor)",
+      "reason": "Modified `Adapter` lines 166-173",
+      "confidence": 0.7613803073457635,
+      "est_tokens": 78,
+      "freshness": "2026-04-28T15:35:36.725750Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 8,
+      "symbol_body": "    Adapter(\n        TypeAdapter<K> keyTypeAdapter,\n        TypeAdapter<V> valueTypeAdapter,\n        ObjectConstructor<? extends Map<K, V>> constructor) {\n      this.keyTypeAdapter = keyTypeAdapter;\n      this.valueTypeAdapter = valueTypeAdapter;\n      this.constructor = constructor;\n    }",
+      "symbol_lines": [
+        166,
+        173
+      ]
+    },
+    {
+      "id": "6576fa59-1588-4857-a2b3-d634e826dcf9",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+      "title": "testDuplicateKeyWithNullFirstValueArrayForm (MapAsArrayTypeAdapterTest.java)",
+      "excerpt": "@Test @Test\n  public void testDuplicateKeyWithNullFirstValueArrayForm()",
+      "reason": "Modified `testDuplicateKeyWithNullFirstValueArrayForm` lines 83-91",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 75,
+      "freshness": "2026-04-28T15:35:36.575929Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "testDuplicateKeyWithNullFirstValueArrayForm -> enableComplexMapKeySerialization",
+      "duplicates_hidden": 14,
+      "symbol_body": null,
+      "symbol_lines": [
+        83,
+        91
+      ]
+    },
+    {
+      "id": "1c457a92-238e-4eb3-90ee-0b6323e10377",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapTest.java",
+      "title": "testMapDeserializationWithDuplicateKeysNullFirstValue (MapTest.java)",
+      "excerpt": "@Test @Test\n  public void testMapDeserializationWithDuplicateKeysNullFirstValue()",
+      "reason": "Modified `testMapDeserializationWithDuplicateKeysNullFirstValue` lines 696-704",
+      "confidence": 0.439511379975105,
+      "est_tokens": 74,
+      "freshness": "2026-04-28T15:35:36.582385Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "testMapDeserializationWithDuplicateKeysNullFirstValue -> getType",
+      "duplicates_hidden": 73,
+      "symbol_body": null,
+      "symbol_lines": [
+        696,
+        704
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 227,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

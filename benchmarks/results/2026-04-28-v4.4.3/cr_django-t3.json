@@ -1,0 +1,489 @@
+{
+  "id": "f3439926-df0b-4ce9-869d-112a5c26d64e",
+  "mode": "implement",
+  "query": "optimize Field.deconstruct slow path on model field serialization",
+  "selected_items": [
+    {
+      "id": "571cbbec-cb00-4ff3-884e-6ad6d0dbc4e0",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/utils/deconstruct.py",
+      "title": "deconstruct (deconstruct.py)",
+      "excerpt": "def deconstruct(obj):\n\n            Return a 3-tuple of class import path, positional arguments,\n            and keyword arguments.",
+      "reason": "Referenced in codebase `deconstruct` lines 21-52",
+      "confidence": 0.7540000000000001,
+      "est_tokens": 72,
+      "freshness": "2026-04-28T14:29:06.735506Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 3,
+      "symbol_body": "        def deconstruct(obj):\n            \"\"\"\n            Return a 3-tuple of class import path, positional arguments,\n            and keyword arguments.\n            \"\"\"\n            # Fallback version\n            if path and type(obj) is klass:\n                module_name, _, name = path.rpartition(\".\")\n            else:\n                module_name = obj.__module__\n                name = obj.__class__.__name__\n            # Make sure it's actually there and not an inner class\n            module = import_module(module_name)\n            if not hasattr(module, name):\n                raise ValueError(\n                    \"Could not find object %s in %s.\\n\"\n                    \"Please note that you cannot serialize things like inner \"\n                    \"classes. Please move the object into the main module \"\n                    \"body to use migrations.\\n\"\n                    \"For more information, see \"\n                    \"https://docs.djangoproject.com/en/%s/topics/migrations/\"\n                    \"#serializing-values\" % (name, module_name, get_docs_version())\n                )\n            return (\n                (\n                    path\n                    if path and type(obj) is klass\n                    else f\"{obj.__class__.__module__}.{name}\"\n                ),\n                obj._constructor_args[0],\n                obj._constructor_args[1],\n            )",
+      "symbol_lines": [
+        21,
+        52
+      ]
+    },
+    {
+      "id": "1e87d8a3-9dff-4035-a4bb-0d4d13ddbc40",
+      "source_type": "entrypoint",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/views/static.py",
+      "title": "serve (static.py)",
+      "excerpt": "def serve(request, path, document_root=None, show_indexes=False):\n\n    Serve static files below a given point in the directory structure.\n\n    To use, put a URL pattern such as::\n\n        from django.views.static import serve\n\n        path('<path:path>', serve, {'document_root': '/path/to/my/files/'})\n\n    in your URLconf. You must provide the ``document_root`` param. You may\n    also set ``show_indexes`` to ``True`` if you'd like to serve a basic index\n    of the directory. This index view will use the template hardcoded below,\n    but if you'd like to override it, you can create a template called\n    ``static/directory_index.html``.",
+      "reason": "Public API entry point `serve` lines 28-64",
+      "confidence": 0.599269213161677,
+      "est_tokens": 191,
+      "freshness": "2026-04-28T14:29:06.824180Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 3,
+      "symbol_body": null,
+      "symbol_lines": [
+        28,
+        64
+      ]
+    },
+    {
+      "id": "b73f8845-a476-43c5-aac8-a81ead0ea19c",
+      "source_type": "entrypoint",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/docs/_ext/djangodocs.py",
+      "title": "run (djangodocs.py)",
+      "excerpt": "def run(self):",
+      "reason": "Public API entry point `run` lines 82-107",
+      "confidence": 0.54,
+      "est_tokens": 52,
+      "freshness": "2026-04-28T14:29:06.824885Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 27,
+      "symbol_body": null,
+      "symbol_lines": [
+        304,
+        383
+      ]
+    },
+    {
+      "id": "f6616ce3-a50e-47be-8a41-494574ad8513",
+      "source_type": "entrypoint",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/utils/autoreload.py",
+      "title": "run (autoreload.py)",
+      "excerpt": "def run(self, django_main_thread):",
+      "reason": "Public API entry point `run` lines 345-361",
+      "confidence": 0.54,
+      "est_tokens": 55,
+      "freshness": "2026-04-28T14:29:06.713257Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 45,
+      "symbol_body": null,
+      "symbol_lines": [
+        345,
+        361
+      ]
+    },
+    {
+      "id": "d9924b4c-3367-4b11-9985-86cf4d6d7edd",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/constraints/models.py",
+      "title": "JSONFieldModel (models.py)",
+      "excerpt": "class JSONFieldModel(models.Model):",
+      "reason": "Data contract or interface definition `JSONFieldModel` lines 166-170",
+      "confidence": 0.49962221746624463,
+      "est_tokens": 54,
+      "freshness": "2026-04-28T14:29:07.424393Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 12,
+      "symbol_body": null,
+      "symbol_lines": [
+        166,
+        170
+      ]
+    },
+    {
+      "id": "763673b7-9823-4ed9-a428-61310a2f3de0",
+      "source_type": "extension_point",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/views/generic/edit.py",
+      "title": "ModelFormMixin (edit.py)",
+      "excerpt": "class ModelFormMixin(FormMixin, SingleObjectMixin):\nProvide a way to show and handle a ModelForm in a request.",
+      "reason": "Plugin or extension point `ModelFormMixin` lines 76-134",
+      "confidence": 0.4949358220014094,
+      "est_tokens": 72,
+      "freshness": "2026-04-28T14:29:06.817581Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 30,
+      "symbol_body": null,
+      "symbol_lines": [
+        76,
+        134
+      ]
+    },
+    {
+      "id": "0125d092-e0ed-47f1-8ec9-6739a2b037af",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/admin_views/models.py",
+      "title": "AdminOrderedField (models.py)",
+      "excerpt": "class AdminOrderedField(models.Model):",
+      "reason": "Data contract or interface definition `AdminOrderedField` lines 832-834",
+      "confidence": 0.48848375409932177,
+      "est_tokens": 54,
+      "freshness": "2026-04-28T14:29:06.999653Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 158,
+      "symbol_body": null,
+      "symbol_lines": [
+        832,
+        834
+      ]
+    },
+    {
+      "id": "ea117489-cc2c-436b-b66d-c3e38c74f23c",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/bulk_create/models.py",
+      "title": "SmallAutoFieldModel (models.py)",
+      "excerpt": "class SmallAutoFieldModel(models.Model):",
+      "reason": "Data contract or interface definition `SmallAutoFieldModel` lines 88-89",
+      "confidence": 0.48848375409932177,
+      "est_tokens": 56,
+      "freshness": "2026-04-28T14:29:07.327702Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 19,
+      "symbol_body": null,
+      "symbol_lines": [
+        88,
+        89
+      ]
+    },
+    {
+      "id": "32ee414b-bc2b-4f2b-aa24-195d48335caf",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/check_framework/test_model_field_deprecation.py",
+      "title": "MyField (test_model_field_deprecation.py)",
+      "excerpt": "class MyField(models.Field):",
+      "reason": "Data contract or interface definition `MyField` lines 10-11",
+      "confidence": 0.48848375409932177,
+      "est_tokens": 56,
+      "freshness": "2026-04-28T14:29:07.376188Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 8,
+      "symbol_body": null,
+      "symbol_lines": [
+        78,
+        83
+      ]
+    },
+    {
+      "id": "eff91cfe-e3c9-4751-9344-ece693231b36",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/custom_pk/models.py",
+      "title": "CustomAutoFieldModel (models.py)",
+      "excerpt": "class CustomAutoFieldModel(models.Model):",
+      "reason": "Data contract or interface definition `CustomAutoFieldModel` lines 41-42",
+      "confidence": 0.48848375409932177,
+      "est_tokens": 56,
+      "freshness": "2026-04-28T14:29:07.485319Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 6,
+      "symbol_body": null,
+      "symbol_lines": [
+        41,
+        42
+      ]
+    },
+    {
+      "id": "b9d41e76-6cd4-4341-99ca-ad96709a2bf3",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/urls/converters.py",
+      "title": "PathConverter (converters.py)",
+      "excerpt": "class PathConverter(StringConverter):",
+      "reason": "Referenced in codebase `PathConverter` lines 39-40",
+      "confidence": 0.47134015700585075,
+      "est_tokens": 53,
+      "freshness": "2026-04-28T14:29:06.700977Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 8,
+      "symbol_body": null,
+      "symbol_lines": [
+        39,
+        40
+      ]
+    }
+  ],
+  "total_est_tokens": 771,
+  "baseline_est_tokens": 625567,
+  "reduction_pct": 99.9,
+  "created_at": "2026-04-28T14:29:08.992812Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.75 is high and clearly leads the pack (gap to top2: 0.15); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "571cbbec-cb00-4ff3-884e-6ad6d0dbc4e0",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/utils/deconstruct.py",
+      "title": "deconstruct (deconstruct.py)",
+      "excerpt": "def deconstruct(obj):\n\n            Return a 3-tuple of class import path, positional arguments,\n            and keyword arguments.",
+      "reason": "Referenced in codebase `deconstruct` lines 21-52",
+      "confidence": 0.7540000000000001,
+      "est_tokens": 72,
+      "freshness": "2026-04-28T14:29:06.735506Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 3,
+      "symbol_body": "        def deconstruct(obj):\n            \"\"\"\n            Return a 3-tuple of class import path, positional arguments,\n            and keyword arguments.\n            \"\"\"\n            # Fallback version\n            if path and type(obj) is klass:\n                module_name, _, name = path.rpartition(\".\")\n            else:\n                module_name = obj.__module__\n                name = obj.__class__.__name__\n            # Make sure it's actually there and not an inner class\n            module = import_module(module_name)\n            if not hasattr(module, name):\n                raise ValueError(\n                    \"Could not find object %s in %s.\\n\"\n                    \"Please note that you cannot serialize things like inner \"\n                    \"classes. Please move the object into the main module \"\n                    \"body to use migrations.\\n\"\n                    \"For more information, see \"\n                    \"https://docs.djangoproject.com/en/%s/topics/migrations/\"\n                    \"#serializing-values\" % (name, module_name, get_docs_version())\n                )\n            return (\n                (\n                    path\n                    if path and type(obj) is klass\n                    else f\"{obj.__class__.__module__}.{name}\"\n                ),\n                obj._constructor_args[0],\n                obj._constructor_args[1],\n            )",
+      "symbol_lines": [
+        21,
+        52
+      ]
+    },
+    {
+      "id": "1e87d8a3-9dff-4035-a4bb-0d4d13ddbc40",
+      "source_type": "entrypoint",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/views/static.py",
+      "title": "serve (static.py)",
+      "excerpt": "def serve(request, path, document_root=None, show_indexes=False):\n\n    Serve static files below a given point in the directory structure.\n\n    To use, put a URL pattern such as::\n\n        from django.views.static import serve\n\n        path('<path:path>', serve, {'document_root': '/path/to/my/files/'})\n\n    in your URLconf. You must provide the ``document_root`` param. You may\n    also set ``show_indexes`` to ``True`` if you'd like to serve a basic index\n    of the directory. This index view will use the template hardcoded below,\n    but if you'd like to override it, you can create a template called\n    ``static/directory_index.html``.",
+      "reason": "Public API entry point `serve` lines 28-64",
+      "confidence": 0.599269213161677,
+      "est_tokens": 191,
+      "freshness": "2026-04-28T14:29:06.824180Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 3,
+      "symbol_body": null,
+      "symbol_lines": [
+        28,
+        64
+      ]
+    },
+    {
+      "id": "b73f8845-a476-43c5-aac8-a81ead0ea19c",
+      "source_type": "entrypoint",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/docs/_ext/djangodocs.py",
+      "title": "run (djangodocs.py)",
+      "excerpt": "def run(self):",
+      "reason": "Public API entry point `run` lines 82-107",
+      "confidence": 0.54,
+      "est_tokens": 52,
+      "freshness": "2026-04-28T14:29:06.824885Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 27,
+      "symbol_body": null,
+      "symbol_lines": [
+        304,
+        383
+      ]
+    },
+    {
+      "id": "f6616ce3-a50e-47be-8a41-494574ad8513",
+      "source_type": "entrypoint",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/utils/autoreload.py",
+      "title": "run (autoreload.py)",
+      "excerpt": "def run(self, django_main_thread):",
+      "reason": "Public API entry point `run` lines 345-361",
+      "confidence": 0.54,
+      "est_tokens": 55,
+      "freshness": "2026-04-28T14:29:06.713257Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 45,
+      "symbol_body": null,
+      "symbol_lines": [
+        345,
+        361
+      ]
+    },
+    {
+      "id": "d9924b4c-3367-4b11-9985-86cf4d6d7edd",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/constraints/models.py",
+      "title": "JSONFieldModel (models.py)",
+      "excerpt": "class JSONFieldModel(models.Model):",
+      "reason": "Data contract or interface definition `JSONFieldModel` lines 166-170",
+      "confidence": 0.49962221746624463,
+      "est_tokens": 54,
+      "freshness": "2026-04-28T14:29:07.424393Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 12,
+      "symbol_body": null,
+      "symbol_lines": [
+        166,
+        170
+      ]
+    },
+    {
+      "id": "763673b7-9823-4ed9-a428-61310a2f3de0",
+      "source_type": "extension_point",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/views/generic/edit.py",
+      "title": "ModelFormMixin (edit.py)",
+      "excerpt": "class ModelFormMixin(FormMixin, SingleObjectMixin):\nProvide a way to show and handle a ModelForm in a request.",
+      "reason": "Plugin or extension point `ModelFormMixin` lines 76-134",
+      "confidence": 0.4949358220014094,
+      "est_tokens": 72,
+      "freshness": "2026-04-28T14:29:06.817581Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 30,
+      "symbol_body": null,
+      "symbol_lines": [
+        76,
+        134
+      ]
+    },
+    {
+      "id": "0125d092-e0ed-47f1-8ec9-6739a2b037af",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/admin_views/models.py",
+      "title": "AdminOrderedField (models.py)",
+      "excerpt": "class AdminOrderedField(models.Model):",
+      "reason": "Data contract or interface definition `AdminOrderedField` lines 832-834",
+      "confidence": 0.48848375409932177,
+      "est_tokens": 54,
+      "freshness": "2026-04-28T14:29:06.999653Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 158,
+      "symbol_body": null,
+      "symbol_lines": [
+        832,
+        834
+      ]
+    },
+    {
+      "id": "ea117489-cc2c-436b-b66d-c3e38c74f23c",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/bulk_create/models.py",
+      "title": "SmallAutoFieldModel (models.py)",
+      "excerpt": "class SmallAutoFieldModel(models.Model):",
+      "reason": "Data contract or interface definition `SmallAutoFieldModel` lines 88-89",
+      "confidence": 0.48848375409932177,
+      "est_tokens": 56,
+      "freshness": "2026-04-28T14:29:07.327702Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 19,
+      "symbol_body": null,
+      "symbol_lines": [
+        88,
+        89
+      ]
+    },
+    {
+      "id": "32ee414b-bc2b-4f2b-aa24-195d48335caf",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/check_framework/test_model_field_deprecation.py",
+      "title": "MyField (test_model_field_deprecation.py)",
+      "excerpt": "class MyField(models.Field):",
+      "reason": "Data contract or interface definition `MyField` lines 10-11",
+      "confidence": 0.48848375409932177,
+      "est_tokens": 56,
+      "freshness": "2026-04-28T14:29:07.376188Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 8,
+      "symbol_body": null,
+      "symbol_lines": [
+        78,
+        83
+      ]
+    },
+    {
+      "id": "eff91cfe-e3c9-4751-9344-ece693231b36",
+      "source_type": "contract",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/custom_pk/models.py",
+      "title": "CustomAutoFieldModel (models.py)",
+      "excerpt": "class CustomAutoFieldModel(models.Model):",
+      "reason": "Data contract or interface definition `CustomAutoFieldModel` lines 41-42",
+      "confidence": 0.48848375409932177,
+      "est_tokens": 56,
+      "freshness": "2026-04-28T14:29:07.485319Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 6,
+      "symbol_body": null,
+      "symbol_lines": [
+        41,
+        42
+      ]
+    },
+    {
+      "id": "b9d41e76-6cd4-4341-99ca-ad96709a2bf3",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/urls/converters.py",
+      "title": "PathConverter (converters.py)",
+      "excerpt": "class PathConverter(StringConverter):",
+      "reason": "Referenced in codebase `PathConverter` lines 39-40",
+      "confidence": 0.47134015700585075,
+      "est_tokens": 53,
+      "freshness": "2026-04-28T14:29:06.700977Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 8,
+      "symbol_body": null,
+      "symbol_lines": [
+        39,
+        40
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 771,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

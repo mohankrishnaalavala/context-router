@@ -1,0 +1,68 @@
+{
+  "id": "03880ea4-0a4a-4acc-93a1-39cef3774513",
+  "mode": "debug",
+  "query": "Route panics when .to() or .service() is called after .wrap() middleware",
+  "selected_items": [
+    {
+      "id": "2045c5d5-84ff-4cb8-b9c3-04329a5da322",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/route.rs",
+      "title": "wrap (route.rs)",
+      "excerpt": "fn wrap(...)",
+      "reason": "Modified `wrap` lines 61-77",
+      "confidence": 0.95,
+      "est_tokens": 48,
+      "freshness": "2026-04-28T14:24:40.973287Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "wrap",
+      "duplicates_hidden": 20,
+      "symbol_body": "    pub fn wrap<M, B>(self, mw: M) -> Route\n    where\n        M: Transform<\n                BoxService<ServiceRequest, ServiceResponse, Error>,\n                ServiceRequest,\n                Response = ServiceResponse<B>,\n                Error = Error,\n                InitError = (),\n            > + 'static,\n        B: MessageBody + 'static,\n    {\n        Route {\n            service: boxed::factory(apply(Compat::new(mw), self.service)),\n            guards: self.guards,\n            wrapped: true,\n        }\n    }",
+      "symbol_lines": [
+        61,
+        77
+      ]
+    }
+  ],
+  "total_est_tokens": 48,
+  "baseline_est_tokens": 210823,
+  "reduction_pct": 100.0,
+  "created_at": "2026-04-28T14:24:41.882852Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 1 of top 1 items; consider re-indexing or widening the query",
+    "external_dropped": 0,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "2045c5d5-84ff-4cb8-b9c3-04329a5da322",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/route.rs",
+      "title": "wrap (route.rs)",
+      "excerpt": "fn wrap(...)",
+      "reason": "Modified `wrap` lines 61-77",
+      "confidence": 0.95,
+      "est_tokens": 48,
+      "freshness": "2026-04-28T14:24:40.973287Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "wrap",
+      "duplicates_hidden": 20,
+      "symbol_body": "    pub fn wrap<M, B>(self, mw: M) -> Route\n    where\n        M: Transform<\n                BoxService<ServiceRequest, ServiceResponse, Error>,\n                ServiceRequest,\n                Response = ServiceResponse<B>,\n                Error = Error,\n                InitError = (),\n            > + 'static,\n        B: MessageBody + 'static,\n    {\n        Route {\n            service: boxed::factory(apply(Compat::new(mw), self.service)),\n            guards: self.guards,\n            wrapped: true,\n        }\n    }",
+      "symbol_lines": [
+        61,
+        77
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 48,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

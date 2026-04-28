@@ -1,0 +1,110 @@
+{
+  "id": "79b10184-93c8-45c1-a72b-edd3f14401ab",
+  "mode": "debug",
+  "query": "floatSafeRemainder mishandles multi-digit exponents in scientific notation",
+  "selected_items": [
+    {
+      "id": "79846b8f-8abd-4670-8a85-ce654b2ec957",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/util.ts",
+      "title": "floatSafeRemainder (util.ts)",
+      "excerpt": "",
+      "reason": "Modified `floatSafeRemainder` lines 247-262",
+      "confidence": 0.7922666947121823,
+      "est_tokens": 50,
+      "freshness": "2026-04-28T15:37:37.239977Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 132,
+      "symbol_body": "export function floatSafeRemainder(val: number, step: number): number {\n  const valDecCount = (val.toString().split(\".\")[1] || \"\").length;\n  const stepString = step.toString();\n  let stepDecCount = (stepString.split(\".\")[1] || \"\").length;\n  if (stepDecCount === 0 && /\\d?e-\\d+/.test(stepString)) {\n    const match = stepString.match(/\\d?e-(\\d+)/);\n    if (match?.[1]) {\n      stepDecCount = Number.parseInt(match[1]);\n    }\n  }\n\n  const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;\n  const valInt = Number.parseInt(val.toFixed(decCount).replace(\".\", \"\"));\n  const stepInt = Number.parseInt(step.toFixed(decCount).replace(\".\", \"\"));\n  return (valInt % stepInt) / 10 ** decCount;\n}",
+      "symbol_lines": [
+        247,
+        262
+      ]
+    },
+    {
+      "id": "e1973139-9359-4add-a393-09a3266195a2",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/number.test.ts",
+      "title": "test_multipleOf_with_scientific_notation_multi_digit_exponents (number.test.ts)",
+      "excerpt": "test_multipleOf_with_scientific_notation_multi_digit_exponents()",
+      "reason": "Modified `test_multipleOf_with_scientific_notation_multi_digit_exponents` lines 156-170",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 72,
+      "freshness": "2026-04-28T15:37:37.189134Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 27,
+      "symbol_body": null,
+      "symbol_lines": [
+        156,
+        170
+      ]
+    }
+  ],
+  "total_est_tokens": 122,
+  "baseline_est_tokens": 243839,
+  "reduction_pct": 99.9,
+  "created_at": "2026-04-28T15:37:38.998947Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 0 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 54,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "79846b8f-8abd-4670-8a85-ce654b2ec957",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/util.ts",
+      "title": "floatSafeRemainder (util.ts)",
+      "excerpt": "",
+      "reason": "Modified `floatSafeRemainder` lines 247-262",
+      "confidence": 0.7922666947121823,
+      "est_tokens": 50,
+      "freshness": "2026-04-28T15:37:37.239977Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 132,
+      "symbol_body": "export function floatSafeRemainder(val: number, step: number): number {\n  const valDecCount = (val.toString().split(\".\")[1] || \"\").length;\n  const stepString = step.toString();\n  let stepDecCount = (stepString.split(\".\")[1] || \"\").length;\n  if (stepDecCount === 0 && /\\d?e-\\d+/.test(stepString)) {\n    const match = stepString.match(/\\d?e-(\\d+)/);\n    if (match?.[1]) {\n      stepDecCount = Number.parseInt(match[1]);\n    }\n  }\n\n  const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;\n  const valInt = Number.parseInt(val.toFixed(decCount).replace(\".\", \"\"));\n  const stepInt = Number.parseInt(step.toFixed(decCount).replace(\".\", \"\"));\n  return (valInt % stepInt) / 10 ** decCount;\n}",
+      "symbol_lines": [
+        247,
+        262
+      ]
+    },
+    {
+      "id": "e1973139-9359-4add-a393-09a3266195a2",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/number.test.ts",
+      "title": "test_multipleOf_with_scientific_notation_multi_digit_exponents (number.test.ts)",
+      "excerpt": "test_multipleOf_with_scientific_notation_multi_digit_exponents()",
+      "reason": "Modified `test_multipleOf_with_scientific_notation_multi_digit_exponents` lines 156-170",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 72,
+      "freshness": "2026-04-28T15:37:37.189134Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 27,
+      "symbol_body": null,
+      "symbol_lines": [
+        156,
+        170
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 122,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

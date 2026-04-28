@@ -1,0 +1,110 @@
+{
+  "id": "10275156-5314-465f-a876-302df78d6959",
+  "mode": "debug",
+  "query": "empty netrc entry causes credentials to be sent as None",
+  "selected_items": [
+    {
+      "id": "b9e40cbc-7f22-494d-a680-b6fccb340b7b",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "get_netrc_auth (utils.py)",
+      "excerpt": "def get_netrc_auth(url, raise_errors=False):\nReturns the Requests tuple auth for a given url from netrc.",
+      "reason": "Modified `get_netrc_auth` lines 205-246",
+      "confidence": 0.6648382233506116,
+      "est_tokens": 72,
+      "freshness": "2026-04-28T15:36:22.571123Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "get_netrc_auth -> request",
+      "duplicates_hidden": 42,
+      "symbol_body": "def get_netrc_auth(url, raise_errors=False):\n    \"\"\"Returns the Requests tuple auth for a given url from netrc.\"\"\"\n\n    netrc_file = os.environ.get(\"NETRC\")\n    if netrc_file is not None:\n        netrc_locations = (netrc_file,)\n    else:\n        netrc_locations = (f\"~/{f}\" for f in NETRC_FILES)\n\n    try:\n        from netrc import NetrcParseError, netrc\n\n        netrc_path = None\n\n        for f in netrc_locations:\n            loc = os.path.expanduser(f)\n            if os.path.exists(loc):\n                netrc_path = loc\n                break\n\n        # Abort early if there isn't one.\n        if netrc_path is None:\n            return\n\n        ri = urlparse(url)\n        host = ri.hostname\n\n        try:\n            _netrc = netrc(netrc_path).authenticators(host)\n            if _netrc and any(_netrc):\n                # Return with login / password\n                login_i = 0 if _netrc[0] else 1\n                return (_netrc[login_i], _netrc[2])\n        except (NetrcParseError, OSError):\n            # If there was a parsing error or a permissions issue reading the file,\n            # we'll just skip netrc auth unless explicitly asked to raise errors.\n            if raise_errors:\n                raise\n\n    # App Engine hackiness.\n    except (ImportError, AttributeError):\n        pass",
+      "symbol_lines": [
+        205,
+        246
+      ]
+    },
+    {
+      "id": "397d9ea6-c85a-4d7f-91be-6fbf2b7b1fda",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+      "title": "test_empty_default_credentials_ignored (test_utils.py)",
+      "excerpt": "def test_empty_default_credentials_ignored(self, tmp_path, monkeypatch):\nEmpty default credentials should not be returned.",
+      "reason": "Modified `test_empty_default_credentials_ignored` lines 173-181",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 74,
+      "freshness": "2026-04-28T15:36:22.598747Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test_empty_default_credentials_ignored -> request",
+      "duplicates_hidden": 81,
+      "symbol_body": null,
+      "symbol_lines": [
+        173,
+        181
+      ]
+    }
+  ],
+  "total_est_tokens": 146,
+  "baseline_est_tokens": 55880,
+  "reduction_pct": 99.7,
+  "created_at": "2026-04-28T15:36:23.025060Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 16,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "b9e40cbc-7f22-494d-a680-b6fccb340b7b",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "get_netrc_auth (utils.py)",
+      "excerpt": "def get_netrc_auth(url, raise_errors=False):\nReturns the Requests tuple auth for a given url from netrc.",
+      "reason": "Modified `get_netrc_auth` lines 205-246",
+      "confidence": 0.6648382233506116,
+      "est_tokens": 72,
+      "freshness": "2026-04-28T15:36:22.571123Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "get_netrc_auth -> request",
+      "duplicates_hidden": 42,
+      "symbol_body": "def get_netrc_auth(url, raise_errors=False):\n    \"\"\"Returns the Requests tuple auth for a given url from netrc.\"\"\"\n\n    netrc_file = os.environ.get(\"NETRC\")\n    if netrc_file is not None:\n        netrc_locations = (netrc_file,)\n    else:\n        netrc_locations = (f\"~/{f}\" for f in NETRC_FILES)\n\n    try:\n        from netrc import NetrcParseError, netrc\n\n        netrc_path = None\n\n        for f in netrc_locations:\n            loc = os.path.expanduser(f)\n            if os.path.exists(loc):\n                netrc_path = loc\n                break\n\n        # Abort early if there isn't one.\n        if netrc_path is None:\n            return\n\n        ri = urlparse(url)\n        host = ri.hostname\n\n        try:\n            _netrc = netrc(netrc_path).authenticators(host)\n            if _netrc and any(_netrc):\n                # Return with login / password\n                login_i = 0 if _netrc[0] else 1\n                return (_netrc[login_i], _netrc[2])\n        except (NetrcParseError, OSError):\n            # If there was a parsing error or a permissions issue reading the file,\n            # we'll just skip netrc auth unless explicitly asked to raise errors.\n            if raise_errors:\n                raise\n\n    # App Engine hackiness.\n    except (ImportError, AttributeError):\n        pass",
+      "symbol_lines": [
+        205,
+        246
+      ]
+    },
+    {
+      "id": "397d9ea6-c85a-4d7f-91be-6fbf2b7b1fda",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+      "title": "test_empty_default_credentials_ignored (test_utils.py)",
+      "excerpt": "def test_empty_default_credentials_ignored(self, tmp_path, monkeypatch):\nEmpty default credentials should not be returned.",
+      "reason": "Modified `test_empty_default_credentials_ignored` lines 173-181",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 74,
+      "freshness": "2026-04-28T15:36:22.598747Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test_empty_default_credentials_ignored -> request",
+      "duplicates_hidden": 81,
+      "symbol_body": null,
+      "symbol_lines": [
+        173,
+        181
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 146,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

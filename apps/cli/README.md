@@ -311,7 +311,7 @@ context-router benchmark run [--project-root PATH] [--output PATH] [--json]
 context-router benchmark report [--project-root PATH] [--input PATH] [--json]
 ```
 
-See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for real numbers on the context-router codebase (**64.7% average token reduction, 131 ms average latency**).
+See [BENCHMARKS.md](../../BENCHMARKS.md) for the v4.4.3 holdout results — **89% fewer tokens vs comparable tools** (~159 avg tokens per pack), 17/18 rank-1 across 6 OSS projects in 5 languages.
 
 ---
 
@@ -576,7 +576,7 @@ Measured on the context-router codebase itself (286 files, 1 765 symbols, 3 174 
 | handover | 1 510 | −71% | 139 ms |
 | **overall** | **1 475** | **−64.7%** | **131 ms** |
 
-See [BENCHMARK_RESULTS.md](BENCHMARK_RESULTS.md) for the full per-task breakdown.
+See [BENCHMARKS.md](../../BENCHMARKS.md) for the v4.4.3 holdout breakdown across 6 OSS projects.
 
 ---
 

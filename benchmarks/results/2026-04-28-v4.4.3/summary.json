@@ -1,0 +1,202 @@
+{
+  "per_task": [
+    {
+      "repo": "gin",
+      "task_id": "gin-t1",
+      "mode": "debug",
+      "ground_truth_files": [
+        "tree.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree_test.go"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 120,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gin",
+      "task_id": "gin-t2",
+      "mode": "debug",
+      "ground_truth_files": [
+        "context.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context_test.go"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 118,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gin",
+      "task_id": "gin-t3",
+      "mode": "debug",
+      "ground_truth_files": [
+        "binding/form_mapping.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping_test.go"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 105,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "actix",
+      "task_id": "actix-t1",
+      "mode": "debug",
+      "ground_truth_files": [
+        "actix-files/src/named.rs"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/named.rs",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/tests/pre_epoch_mtime.rs"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 109,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "actix",
+      "task_id": "actix-t2",
+      "mode": "debug",
+      "ground_truth_files": [
+        "actix-web/src/route.rs"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/route.rs"
+      ],
+      "n_items": 1,
+      "est_tokens_total": 48,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "actix",
+      "task_id": "actix-t3",
+      "mode": "debug",
+      "ground_truth_files": [
+        "awc/src/client/h1proto.rs"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/tests/test_empty_stream.rs"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 118,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "django",
+      "task_id": "django-t1",
+      "mode": "debug",
+      "ground_truth_files": [
+        "django/db/models/sql/query.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/sql/query.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/aggregation_regress/tests.py"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 120,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "django",
+      "task_id": "django-t2",
+      "mode": "debug",
+      "ground_truth_files": [
+        "django/core/handlers/asgi.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/asgi.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/handlers/tests.py"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 161,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "django",
+      "task_id": "django-t3",
+      "mode": "implement",
+      "ground_truth_files": [
+        "django/db/models/fields/__init__.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/utils/deconstruct.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/views/static.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/docs/_ext/djangodocs.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/utils/autoreload.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/constraints/models.py"
+      ],
+      "n_items": 11,
+      "est_tokens_total": 771,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "rank1_hit": 0
+    }
+  ],
+  "by_repo": {
+    "gin": {
+      "n_tasks": 3,
+      "avg_precision": 0.5,
+      "avg_recall": 1.0,
+      "avg_f1": 0.6666666666666666,
+      "avg_tokens": 114.33333333333333,
+      "rank1_hits": 3
+    },
+    "actix": {
+      "n_tasks": 3,
+      "avg_precision": 0.6666666666666666,
+      "avg_recall": 1.0,
+      "avg_f1": 0.7777777777777777,
+      "avg_tokens": 91.66666666666667,
+      "rank1_hits": 3
+    },
+    "django": {
+      "n_tasks": 3,
+      "avg_precision": 0.3333333333333333,
+      "avg_recall": 0.6666666666666666,
+      "avg_f1": 0.4444444444444444,
+      "avg_tokens": 350.6666666666667,
+      "rank1_hits": 2
+    }
+  },
+  "overall": {
+    "n_tasks": 9,
+    "avg_precision": 0.5,
+    "avg_recall": 0.8888888888888888,
+    "avg_f1": 0.6296296296296297,
+    "avg_tokens": 185.55555555555554,
+    "rank1_hits": 8
+  }
+}

@@ -1,0 +1,110 @@
+{
+  "id": "cf8667f3-4ac1-4b1e-9f78-ab912dd566c2",
+  "mode": "debug",
+  "query": "panic in findCaseInsensitivePathRec when RedirectFixedPath is enabled",
+  "selected_items": [
+    {
+      "id": "7b829b44-a293-4c0b-af58-e6fc2b54d1b8",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree.go",
+      "title": "findCaseInsensitivePathRec (tree.go)",
+      "excerpt": "func (n *node) findCaseInsensitivePathRec(...)",
+      "reason": "Modified `findCaseInsensitivePathRec` lines 703-950",
+      "confidence": 0.883,
+      "est_tokens": 61,
+      "freshness": "2026-04-28T14:23:46.540031Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "findCaseInsensitivePathRec",
+      "duplicates_hidden": 22,
+      "symbol_body": "func (n *node) findCaseInsensitivePathRec(path string, ciPath []byte, rb [4]byte, fixTrailingSlash bool) []byte {\n\tnpLen := len(n.path)\n\nwalk: // Outer loop for walking the tree\n\tfor len(path) >= npLen && (npLen == 0 || strings.EqualFold(path[1:npLen], n.path[1:])) {\n\t\t// Add common prefix to result\n\t\toldPath := path\n\t\tpath = path[npLen:]\n\t\tciPath = append(ciPath, n.path...)\n\n\t\tif len(path) == 0 {\n\t\t\t// We should have reached the node containing the handle.\n\t\t\t// Check if this node has a handle registered.\n\t\t\tif n.handlers != nil {\n\t\t\t\treturn ciPath\n\t\t\t}\n\n\t\t\t// No handle found.\n\t\t\t// Try to fix the path by adding a trailing slash\n\t\t\tif fixTrailingSlash {\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\tif c == '/' {\n\t\t\t\t\t\tn = n.children[i]\n\t\t\t\t\t\tif (len(n.path) == 1 && n.handlers != nil) ||\n\t\t\t\t\t\t\t(n.nType == catchAll && n.children[0].handlers != nil) {\n\t\t\t\t\t\t\treturn append(ciPath, '/')\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn nil\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn nil\n\t\t}\n\n\t\t// If this node does not have a wildcard (param or catchAll) child,\n\t\t// we can just look up the next child node and continue to walk down\n\t\t// the tree\n\t\tif !n.wildChild {\n\t\t\t// Skip rune bytes already processed\n\t\t\trb = shiftNRuneBytes(rb, npLen)\n\n\t\t\tif rb[0] != 0 {\n\t\t\t\t// Old rune not finished\n\t\t\t\tidxc := rb[0]\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\t// continue with child node\n\t\t\t\t\t\tn = n.children[i]\n\t\t\t\t\t\tnpLen = len(n.path)\n\t\t\t\t\t\tcontinue walk\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\t// Process a new rune\n\t\t\t\tvar rv rune\n\n\t\t\t\t// Find rune start.\n\t\t\t\t// Runes are up to 4 byte long,\n\t\t\t\t// -4 would definitely be another rune.\n\t\t\t\tvar off int\n\t\t\t\tfor max_ := min(npLen, 3); off < max_; off++ {\n\t\t\t\t\tif i := npLen - off; utf8.RuneStart(oldPath[i]) {\n\t\t\t\t\t\t// read rune from cached path\n\t\t\t\t\t\trv, _ = utf8.DecodeRuneInString(oldPath[i:])\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\t// Calculate lowercase bytes of current rune\n\t\t\t\tlo := unicode.ToLower(rv)\n\t\t\t\tutf8.EncodeRune(rb[:], lo)\n\n\t\t\t\t// Skip already processed bytes\n\t\t\t\trb = shiftNRuneBytes(rb, off)\n\n\t\t\t\tidxc := rb[0]\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\t// Lowercase matches\n\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\t// must use a recursive approach since both the\n\t\t\t\t\t\t// uppercase byte and the lowercase byte might exist\n\t\t\t\t\t\t// as an index\n\t\t\t\t\t\tif out := n.children[i].findCaseInsensitivePathRec(\n\t\t\t\t\t\t\tpath, ciPath, rb, fixTrailingSlash,\n\t\t\t\t\t\t); out != nil {\n\t\t\t\t\t\t\treturn out\n\t\t\t\t\t\t}\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\t// If we found no match, the same for the uppercase rune,\n\t\t\t\t// if it differs\n\t\t\t\tif up := unicode.ToUpper(rv); up != lo {\n\t\t\t\t\tutf8.EncodeRune(rb[:], up)\n\t\t\t\t\trb = shiftNRuneBytes(rb, off)\n\n\t\t\t\t\tidxc := rb[0]\n\t\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\t\t// Uppercase matches\n\t\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\t\t// Continue with child node\n\t\t\t\t\t\t\tn = n.children[i]\n\t\t\t\t\t\t\tnpLen = len(n.path)\n\t\t\t\t\t\t\tcontinue walk\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\t// Nothing found. We can recommend to redirect to the same URL\n\t\t\t// without a trailing slash if a leaf exists for that path\n\t\t\tif fixTrailingSlash && path == \"/\" && n.handlers != nil {\n\t\t\t\treturn ciPath\n\t\t\t}\n\t\t\treturn nil\n\t\t}\n\n\t\t// When wildChild is true, try static children first (via indices)\n\t\t// before falling back to the wildcard child. This ensures that\n\t\t// case-insensitive lookups prefer static routes over param routes\n\t\t// (e.g., /PREFIX/XXX should resolve to /prefix/xxx, not match :id).\n\t\tif len(n.indices) > 0 {\n\t\t\trb = shiftNRuneBytes(rb, npLen)\n\n\t\t\tif rb[0] != 0 {\n\t\t\t\tidxc := rb[0]\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\tif out := n.children[i].findCaseInsensitivePathRec(\n\t\t\t\t\t\t\tpath, ciPath, rb, fixTrailingSlash,\n\t\t\t\t\t\t); out != nil {\n\t\t\t\t\t\t\treturn out\n\t\t\t\t\t\t}\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\tvar rv rune\n\t\t\t\tvar off int\n\t\t\t\tfor max_ := min(npLen, 3); off < max_; off++ {\n\t\t\t\t\tif i := npLen - off; utf8.RuneStart(oldPath[i]) {\n\t\t\t\t\t\trv, _ = utf8.DecodeRuneInString(oldPath[i:])\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\tlo := unicode.ToLower(rv)\n\t\t\t\tutf8.EncodeRune(rb[:], lo)\n\t\t\t\trb = shiftNRuneBytes(rb, off)\n\n\t\t\t\tidxc := rb[0]\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\tif out := n.children[i].findCaseInsensitivePathRec(\n\t\t\t\t\t\t\tpath, ciPath, rb, fixTrailingSlash,\n\t\t\t\t\t\t); out != nil {\n\t\t\t\t\t\t\treturn out\n\t\t\t\t\t\t}\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\tif up := unicode.ToUpper(rv); up != lo {\n\t\t\t\t\tutf8.EncodeRune(rb[:], up)\n\t\t\t\t\trb = shiftNRuneBytes(rb, off)\n\n\t\t\t\t\tidxc := rb[0]\n\t\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\t\tif out := n.children[i].findCaseInsensitivePathRec(\n\t\t\t\t\t\t\t\tpath, ciPath, rb, fixTrailingSlash,\n\t\t\t\t\t\t\t); out != nil {\n\t\t\t\t\t\t\t\treturn out\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\t// Fall back to wildcard child, which is always at the end of the array\n\t\tn = n.children[len(n.children)-1]\n\t\tswitch n.nType {\n\t\tcase param:\n\t\t\t// Find param end (either '/' or path end)\n\t\t\tend := 0\n\t\t\tfor end < len(path) && path[end] != '/' {\n\t\t\t\tend++\n\t\t\t}\n\n\t\t\t// Add param value to case insensitive path\n\t\t\tciPath = append(ciPath, path[:end]...)\n\n\t\t\t// We need to go deeper!\n\t\t\tif end < len(path) {\n\t\t\t\tif len(n.children) > 0 {\n\t\t\t\t\t// Continue with child node\n\t\t\t\t\tn = n.children[0]\n\t\t\t\t\tnpLen = len(n.path)\n\t\t\t\t\tpath = path[end:]\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\n\t\t\t\t// ... but we can't\n\t\t\t\tif fixTrailingSlash && len(path) == end+1 {\n\t\t\t\t\treturn ciPath\n\t\t\t\t}\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\tif n.handlers != nil {\n\t\t\t\treturn ciPath\n\t\t\t}\n\n\t\t\tif fixTrailingSlash && len(n.children) == 1 {\n\t\t\t\t// No handle found. Check if a handle for this path + a\n\t\t\t\t// trailing slash exists\n\t\t\t\tn = n.children[0]\n\t\t\t\tif n.path == \"/\" && n.handlers != nil {\n\t\t\t\t\treturn append(ciPath, '/')\n\t\t\t\t}\n\t\t\t}\n\n\t\t\treturn nil\n\n\t\tcase catchAll:\n\t\t\treturn append(ciPath, path...)\n\n\t\tdefault:\n\t\t\tpanic(\"invalid node type\")\n\t\t}\n\t}\n\n\t// Nothing found.\n\t// Try to fix the path by adding / removing a trailing slash\n\tif fixTrailingSlash {\n\t\tif path == \"/\" {\n\t\t\treturn ciPath\n\t\t}\n\t\tif len(path)+1 == npLen && n.path[len(path)] == '/' &&\n\t\t\tstrings.EqualFold(path[1:], n.path[1:len(path)]) && n.handlers != nil {\n\t\t\treturn append(ciPath, n.path...)\n\t\t}\n\t}\n\treturn nil\n}",
+      "symbol_lines": [
+        703,
+        950
+      ]
+    },
+    {
+      "id": "b9858044-1642-4a1e-a1f2-c7457c787230",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree_test.go",
+      "title": "TestTreeFindCaseInsensitivePath (tree_test.go)",
+      "excerpt": "func TestTreeFindCaseInsensitivePath(...)",
+      "reason": "Modified `TestTreeFindCaseInsensitivePath` lines 714-872",
+      "confidence": 0.4395521224017566,
+      "est_tokens": 59,
+      "freshness": "2026-04-28T14:23:46.542423Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "TestTreeFindCaseInsensitivePath",
+      "duplicates_hidden": 33,
+      "symbol_body": null,
+      "symbol_lines": [
+        714,
+        872
+      ]
+    }
+  ],
+  "total_est_tokens": 120,
+  "baseline_est_tokens": 83205,
+  "reduction_pct": 99.9,
+  "created_at": "2026-04-28T14:23:46.805829Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 0,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "7b829b44-a293-4c0b-af58-e6fc2b54d1b8",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree.go",
+      "title": "findCaseInsensitivePathRec (tree.go)",
+      "excerpt": "func (n *node) findCaseInsensitivePathRec(...)",
+      "reason": "Modified `findCaseInsensitivePathRec` lines 703-950",
+      "confidence": 0.883,
+      "est_tokens": 61,
+      "freshness": "2026-04-28T14:23:46.540031Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "findCaseInsensitivePathRec",
+      "duplicates_hidden": 22,
+      "symbol_body": "func (n *node) findCaseInsensitivePathRec(path string, ciPath []byte, rb [4]byte, fixTrailingSlash bool) []byte {\n\tnpLen := len(n.path)\n\nwalk: // Outer loop for walking the tree\n\tfor len(path) >= npLen && (npLen == 0 || strings.EqualFold(path[1:npLen], n.path[1:])) {\n\t\t// Add common prefix to result\n\t\toldPath := path\n\t\tpath = path[npLen:]\n\t\tciPath = append(ciPath, n.path...)\n\n\t\tif len(path) == 0 {\n\t\t\t// We should have reached the node containing the handle.\n\t\t\t// Check if this node has a handle registered.\n\t\t\tif n.handlers != nil {\n\t\t\t\treturn ciPath\n\t\t\t}\n\n\t\t\t// No handle found.\n\t\t\t// Try to fix the path by adding a trailing slash\n\t\t\tif fixTrailingSlash {\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\tif c == '/' {\n\t\t\t\t\t\tn = n.children[i]\n\t\t\t\t\t\tif (len(n.path) == 1 && n.handlers != nil) ||\n\t\t\t\t\t\t\t(n.nType == catchAll && n.children[0].handlers != nil) {\n\t\t\t\t\t\t\treturn append(ciPath, '/')\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn nil\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\treturn nil\n\t\t}\n\n\t\t// If this node does not have a wildcard (param or catchAll) child,\n\t\t// we can just look up the next child node and continue to walk down\n\t\t// the tree\n\t\tif !n.wildChild {\n\t\t\t// Skip rune bytes already processed\n\t\t\trb = shiftNRuneBytes(rb, npLen)\n\n\t\t\tif rb[0] != 0 {\n\t\t\t\t// Old rune not finished\n\t\t\t\tidxc := rb[0]\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\t// continue with child node\n\t\t\t\t\t\tn = n.children[i]\n\t\t\t\t\t\tnpLen = len(n.path)\n\t\t\t\t\t\tcontinue walk\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\t// Process a new rune\n\t\t\t\tvar rv rune\n\n\t\t\t\t// Find rune start.\n\t\t\t\t// Runes are up to 4 byte long,\n\t\t\t\t// -4 would definitely be another rune.\n\t\t\t\tvar off int\n\t\t\t\tfor max_ := min(npLen, 3); off < max_; off++ {\n\t\t\t\t\tif i := npLen - off; utf8.RuneStart(oldPath[i]) {\n\t\t\t\t\t\t// read rune from cached path\n\t\t\t\t\t\trv, _ = utf8.DecodeRuneInString(oldPath[i:])\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\t// Calculate lowercase bytes of current rune\n\t\t\t\tlo := unicode.ToLower(rv)\n\t\t\t\tutf8.EncodeRune(rb[:], lo)\n\n\t\t\t\t// Skip already processed bytes\n\t\t\t\trb = shiftNRuneBytes(rb, off)\n\n\t\t\t\tidxc := rb[0]\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\t// Lowercase matches\n\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\t// must use a recursive approach since both the\n\t\t\t\t\t\t// uppercase byte and the lowercase byte might exist\n\t\t\t\t\t\t// as an index\n\t\t\t\t\t\tif out := n.children[i].findCaseInsensitivePathRec(\n\t\t\t\t\t\t\tpath, ciPath, rb, fixTrailingSlash,\n\t\t\t\t\t\t); out != nil {\n\t\t\t\t\t\t\treturn out\n\t\t\t\t\t\t}\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\t// If we found no match, the same for the uppercase rune,\n\t\t\t\t// if it differs\n\t\t\t\tif up := unicode.ToUpper(rv); up != lo {\n\t\t\t\t\tutf8.EncodeRune(rb[:], up)\n\t\t\t\t\trb = shiftNRuneBytes(rb, off)\n\n\t\t\t\t\tidxc := rb[0]\n\t\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\t\t// Uppercase matches\n\t\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\t\t// Continue with child node\n\t\t\t\t\t\t\tn = n.children[i]\n\t\t\t\t\t\t\tnpLen = len(n.path)\n\t\t\t\t\t\t\tcontinue walk\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\t// Nothing found. We can recommend to redirect to the same URL\n\t\t\t// without a trailing slash if a leaf exists for that path\n\t\t\tif fixTrailingSlash && path == \"/\" && n.handlers != nil {\n\t\t\t\treturn ciPath\n\t\t\t}\n\t\t\treturn nil\n\t\t}\n\n\t\t// When wildChild is true, try static children first (via indices)\n\t\t// before falling back to the wildcard child. This ensures that\n\t\t// case-insensitive lookups prefer static routes over param routes\n\t\t// (e.g., /PREFIX/XXX should resolve to /prefix/xxx, not match :id).\n\t\tif len(n.indices) > 0 {\n\t\t\trb = shiftNRuneBytes(rb, npLen)\n\n\t\t\tif rb[0] != 0 {\n\t\t\t\tidxc := rb[0]\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\tif out := n.children[i].findCaseInsensitivePathRec(\n\t\t\t\t\t\t\tpath, ciPath, rb, fixTrailingSlash,\n\t\t\t\t\t\t); out != nil {\n\t\t\t\t\t\t\treturn out\n\t\t\t\t\t\t}\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t} else {\n\t\t\t\tvar rv rune\n\t\t\t\tvar off int\n\t\t\t\tfor max_ := min(npLen, 3); off < max_; off++ {\n\t\t\t\t\tif i := npLen - off; utf8.RuneStart(oldPath[i]) {\n\t\t\t\t\t\trv, _ = utf8.DecodeRuneInString(oldPath[i:])\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\tlo := unicode.ToLower(rv)\n\t\t\t\tutf8.EncodeRune(rb[:], lo)\n\t\t\t\trb = shiftNRuneBytes(rb, off)\n\n\t\t\t\tidxc := rb[0]\n\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\tif out := n.children[i].findCaseInsensitivePathRec(\n\t\t\t\t\t\t\tpath, ciPath, rb, fixTrailingSlash,\n\t\t\t\t\t\t); out != nil {\n\t\t\t\t\t\t\treturn out\n\t\t\t\t\t\t}\n\t\t\t\t\t\tbreak\n\t\t\t\t\t}\n\t\t\t\t}\n\n\t\t\t\tif up := unicode.ToUpper(rv); up != lo {\n\t\t\t\t\tutf8.EncodeRune(rb[:], up)\n\t\t\t\t\trb = shiftNRuneBytes(rb, off)\n\n\t\t\t\t\tidxc := rb[0]\n\t\t\t\t\tfor i, c := range []byte(n.indices) {\n\t\t\t\t\t\tif c == idxc {\n\t\t\t\t\t\t\tif out := n.children[i].findCaseInsensitivePathRec(\n\t\t\t\t\t\t\t\tpath, ciPath, rb, fixTrailingSlash,\n\t\t\t\t\t\t\t); out != nil {\n\t\t\t\t\t\t\t\treturn out\n\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\tbreak\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\n\t\t// Fall back to wildcard child, which is always at the end of the array\n\t\tn = n.children[len(n.children)-1]\n\t\tswitch n.nType {\n\t\tcase param:\n\t\t\t// Find param end (either '/' or path end)\n\t\t\tend := 0\n\t\t\tfor end < len(path) && path[end] != '/' {\n\t\t\t\tend++\n\t\t\t}\n\n\t\t\t// Add param value to case insensitive path\n\t\t\tciPath = append(ciPath, path[:end]...)\n\n\t\t\t// We need to go deeper!\n\t\t\tif end < len(path) {\n\t\t\t\tif len(n.children) > 0 {\n\t\t\t\t\t// Continue with child node\n\t\t\t\t\tn = n.children[0]\n\t\t\t\t\tnpLen = len(n.path)\n\t\t\t\t\tpath = path[end:]\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\n\t\t\t\t// ... but we can't\n\t\t\t\tif fixTrailingSlash && len(path) == end+1 {\n\t\t\t\t\treturn ciPath\n\t\t\t\t}\n\t\t\t\treturn nil\n\t\t\t}\n\n\t\t\tif n.handlers != nil {\n\t\t\t\treturn ciPath\n\t\t\t}\n\n\t\t\tif fixTrailingSlash && len(n.children) == 1 {\n\t\t\t\t// No handle found. Check if a handle for this path + a\n\t\t\t\t// trailing slash exists\n\t\t\t\tn = n.children[0]\n\t\t\t\tif n.path == \"/\" && n.handlers != nil {\n\t\t\t\t\treturn append(ciPath, '/')\n\t\t\t\t}\n\t\t\t}\n\n\t\t\treturn nil\n\n\t\tcase catchAll:\n\t\t\treturn append(ciPath, path...)\n\n\t\tdefault:\n\t\t\tpanic(\"invalid node type\")\n\t\t}\n\t}\n\n\t// Nothing found.\n\t// Try to fix the path by adding / removing a trailing slash\n\tif fixTrailingSlash {\n\t\tif path == \"/\" {\n\t\t\treturn ciPath\n\t\t}\n\t\tif len(path)+1 == npLen && n.path[len(path)] == '/' &&\n\t\t\tstrings.EqualFold(path[1:], n.path[1:len(path)]) && n.handlers != nil {\n\t\t\treturn append(ciPath, n.path...)\n\t\t}\n\t}\n\treturn nil\n}",
+      "symbol_lines": [
+        703,
+        950
+      ]
+    },
+    {
+      "id": "b9858044-1642-4a1e-a1f2-c7457c787230",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree_test.go",
+      "title": "TestTreeFindCaseInsensitivePath (tree_test.go)",
+      "excerpt": "func TestTreeFindCaseInsensitivePath(...)",
+      "reason": "Modified `TestTreeFindCaseInsensitivePath` lines 714-872",
+      "confidence": 0.4395521224017566,
+      "est_tokens": 59,
+      "freshness": "2026-04-28T14:23:46.542423Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "TestTreeFindCaseInsensitivePath",
+      "duplicates_hidden": 33,
+      "symbol_body": null,
+      "symbol_lines": [
+        714,
+        872
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 120,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

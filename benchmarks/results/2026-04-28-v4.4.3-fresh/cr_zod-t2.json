@@ -1,0 +1,110 @@
+{
+  "id": "0010bf0f-c513-4426-870d-6db3bb34053c",
+  "mode": "debug",
+  "query": "transform context is missing addIssue method when reporting issues",
+  "selected_items": [
+    {
+      "id": "0f6d7173-82da-4855-8f63-c00a5e0c1d92",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/schemas.ts",
+      "title": "transform (schemas.ts)",
+      "excerpt": "",
+      "reason": "Modified `transform` lines 1816-1823",
+      "confidence": 0.6367165784443853,
+      "est_tokens": 46,
+      "freshness": "2026-04-28T15:37:17.498919Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test_values -> transform",
+      "duplicates_hidden": 179,
+      "symbol_body": "export function transform<I = unknown, O = I>(\n  fn: (input: I, ctx: core.$RefinementCtx) => O\n): ZodTransform<Awaited<O>, I> {\n  return new ZodTransform({\n    type: \"transform\",\n    transform: fn as any,\n  }) as any;\n}",
+      "symbol_lines": [
+        1816,
+        1823
+      ]
+    },
+    {
+      "id": "03730a05-dab4-40da-9f5d-e5378a4092f6",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/transform.test.ts",
+      "title": "test_transform_context_should_have_addIssue (transform.test.ts)",
+      "excerpt": "test_transform_context_should_have_addIssue()",
+      "reason": "Modified `test_transform_context_should_have_addIssue` lines 363-378",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 60,
+      "freshness": "2026-04-28T15:37:17.563512Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 21,
+      "symbol_body": null,
+      "symbol_lines": [
+        363,
+        378
+      ]
+    }
+  ],
+  "total_est_tokens": 106,
+  "baseline_est_tokens": 243899,
+  "reduction_pct": 100.0,
+  "created_at": "2026-04-28T15:37:19.347554Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 1 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 54,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "0f6d7173-82da-4855-8f63-c00a5e0c1d92",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/schemas.ts",
+      "title": "transform (schemas.ts)",
+      "excerpt": "",
+      "reason": "Modified `transform` lines 1816-1823",
+      "confidence": 0.6367165784443853,
+      "est_tokens": 46,
+      "freshness": "2026-04-28T15:37:17.498919Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test_values -> transform",
+      "duplicates_hidden": 179,
+      "symbol_body": "export function transform<I = unknown, O = I>(\n  fn: (input: I, ctx: core.$RefinementCtx) => O\n): ZodTransform<Awaited<O>, I> {\n  return new ZodTransform({\n    type: \"transform\",\n    transform: fn as any,\n  }) as any;\n}",
+      "symbol_lines": [
+        1816,
+        1823
+      ]
+    },
+    {
+      "id": "03730a05-dab4-40da-9f5d-e5378a4092f6",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/transform.test.ts",
+      "title": "test_transform_context_should_have_addIssue (transform.test.ts)",
+      "excerpt": "test_transform_context_should_have_addIssue()",
+      "reason": "Modified `test_transform_context_should_have_addIssue` lines 363-378",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 60,
+      "freshness": "2026-04-28T15:37:17.563512Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 21,
+      "symbol_body": null,
+      "symbol_lines": [
+        363,
+        378
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 106,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}
