@@ -415,6 +415,7 @@ _REASON: dict[str, str] = {
     "entrypoint": "Public API entry point",
     "contract": "Data contract or interface definition",
     "extension_point": "Plugin or extension point",
+    "query_match": "File or symbol name matches the query",
     "file": "Referenced in codebase",
     # Debug mode
     "runtime_signal": "Mentioned in runtime error or stack trace",
@@ -472,6 +473,10 @@ _GUARANTEED_SOURCE_TYPES: frozenset[str] = frozenset({
     "past_debug",
     "blast_radius",
     "impacted_test",
+    # v4.4 Phase 3: query-driven candidate widening — files matching the
+    # query's basename or symbol-name tokens are guaranteed to survive the
+    # knapsack so the GT file isn't buried beneath BM25-noisy peers.
+    "query_match",
 })
 
 # v4.4 tuning: review and handover queries often have a sparse high-signal
