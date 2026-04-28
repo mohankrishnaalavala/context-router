@@ -22,8 +22,14 @@ Two independent holdout suites, same code, two different sets of repos.
 | **Rank-1 hits (top-1 = GT)** | **8/9** | **9/9** | **17/18 (94%)** |
 
 For comparison, `code-review-graph` (the closest publicly-benchmarked
-competitor) averages ~1,506 tokens per pack on a similar workload —
-**~89% fewer tokens for context-router**, with no recall regression.
+competitor) averages ~1,506 tokens per pack on a similar workload:
+
+- Suite B (Java / Python / TypeScript): **−91.2%** (132 → 132 tok)
+- Suite A (Go / Rust / Python): **−87.7%** (186 tok; django pulls the
+  average up at 350.7 tok per pack)
+- Combined average: **−89.4%**
+
+Up to 91% fewer tokens with no recall regression.
 
 ## Why precision sits at ~0.5
 
