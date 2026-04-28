@@ -1056,8 +1056,9 @@ class PackFeedbackRepository:
         self._conn.execute(
             """
             INSERT INTO pack_feedback
-                (id, pack_id, repo_scope, useful, missing, noisy, too_much_ctx, reason, files_read, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, pack_id, repo_scope, useful, missing, noisy, too_much_ctx, reason,
+                 files_read, query_text, query_embedding, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 fb.id,
@@ -1069,6 +1070,8 @@ class PackFeedbackRepository:
                 1 if fb.too_much_context else 0,
                 fb.reason,
                 json.dumps(fb.files_read),
+                fb.query_text,
+                fb.query_embedding if fb.query_embedding else None,
                 fb.timestamp.isoformat(),
             ),
         )
@@ -1193,19 +1196,55 @@ class PackFeedbackRepository:
 
         return result
 
+    @staticmethod
+    def _cosine_weight(current: bytes, row: bytes | None) -> float:
+        """Return the cosine-similarity weight in [0, 1] (clamped).
+
+        Returns 1.0 (full delta, legacy behaviour) when either side is
+        empty/NULL — preserves v4.4.1 unweighted semantics for rows
+        without an embedding or when the caller didn't supply one.
+        """
+        if not current or not row:
+            return 1.0
+        try:
+            import numpy as np  # type: ignore[import]
+            a = np.frombuffer(current, dtype=np.float32)
+            b = np.frombuffer(row, dtype=np.float32)
+            if a.shape != b.shape or a.size == 0:
+                return 1.0
+            denom = float(np.linalg.norm(a) * np.linalg.norm(b))
+            if denom == 0.0:
+                return 1.0
+            cos = float(np.dot(a, b) / denom)
+            # Clamp negative similarity to 0 (orthogonal/opposing
+            # queries don't get to *flip* the sign of an adjustment —
+            # they should just contribute nothing).
+            return max(0.0, min(1.0, cos))
+        except Exception:  # numpy missing, malformed bytes, etc.
+            return 1.0
+
     def get_file_adjustments(
         self,
         min_count: int = 3,
         repo_scope: str = "",
+        current_query_embedding: bytes = b"",
     ) -> dict[str, float]:
         """Return per-file confidence adjustments derived from feedback.
 
-        Three signals contribute (each gated at >= ``min_count`` occurrences):
+        Three signals contribute (each gated at >= ``min_count`` raw
+        occurrences):
           * ``missing``  → +0.05  (file should have been in the pack)
           * ``noisy``    → -0.10  (file was in the pack but irrelevant)
           * ``files_read`` → +0.03  (v4.4 Phase 4: file was in the pack AND
             actually consumed by the agent — a positive signal that the
             ranker chose well)
+
+        v4.4.2 Phase 6: when ``current_query_embedding`` is supplied,
+        each contributing row is cosine-weighted against the current
+        query's embedding. The threshold still gates on the *raw* row
+        count; the weighted-sum / count ratio scales the per-row delta.
+        Legacy rows (NULL embedding) and rows without a current
+        embedding contribute their full delta — backward-compatible.
 
         Signals compose: a file with 5 reads + 3 noisy reports nets
         ``+0.03 - 0.10 = -0.07``. The smaller magnitude on ``files_read``
@@ -1216,6 +1255,8 @@ class PackFeedbackRepository:
         Args:
             min_count: Minimum occurrences before an adjustment is applied.
             repo_scope: Optional repository scope. Includes legacy blank-scope rows.
+            current_query_embedding: Optional float32 bytes of the current
+                query embedding. Empty → unweighted (v4.4.1 behaviour).
 
         Returns:
             Dict mapping file path → confidence delta.
@@ -1223,38 +1264,54 @@ class PackFeedbackRepository:
         predicate, scope_params = self._scope_predicate(repo_scope)
         rows = self._conn.execute(
             f"""
-            SELECT missing, noisy, files_read
+            SELECT missing, noisy, files_read, query_embedding
             FROM pack_feedback
             WHERE {predicate}
             """,
             scope_params,
         ).fetchall()
 
-        missing_freq: dict[str, int] = {}
-        noisy_freq: dict[str, int] = {}
-        read_freq: dict[str, int] = {}
+        missing_w: dict[str, float] = {}
+        missing_n: dict[str, int] = {}
+        noisy_w: dict[str, float] = {}
+        noisy_n: dict[str, int] = {}
+        read_w: dict[str, float] = {}
+        read_n: dict[str, int] = {}
         for r in rows:
+            row_emb_raw = (
+                r["query_embedding"] if "query_embedding" in r.keys() else None
+            )
+            w = self._cosine_weight(current_query_embedding, row_emb_raw)
             for path in json.loads(r["missing"] or "[]"):
-                missing_freq[path] = missing_freq.get(path, 0) + 1
+                missing_w[path] = missing_w.get(path, 0.0) + w
+                missing_n[path] = missing_n.get(path, 0) + 1
             for path in json.loads(r["noisy"] or "[]"):
-                noisy_freq[path] = noisy_freq.get(path, 0) + 1
+                noisy_w[path] = noisy_w.get(path, 0.0) + w
+                noisy_n[path] = noisy_n.get(path, 0) + 1
             # files_read may be absent on rows older than migration 0007.
             files_read_raw = (
                 r["files_read"] if "files_read" in r.keys() else "[]"
             )
             for path in json.loads(files_read_raw or "[]"):
-                read_freq[path] = read_freq.get(path, 0) + 1
+                read_w[path] = read_w.get(path, 0.0) + w
+                read_n[path] = read_n.get(path, 0) + 1
 
         adjustments: dict[str, float] = {}
-        for path, count in missing_freq.items():
-            if count >= min_count:
-                adjustments[path] = adjustments.get(path, 0.0) + 0.05
-        for path, count in noisy_freq.items():
-            if count >= min_count:
-                adjustments[path] = adjustments.get(path, 0.0) - 0.10
-        for path, count in read_freq.items():
-            if count >= min_count:
-                adjustments[path] = adjustments.get(path, 0.0) + 0.03
+        for path, n in missing_n.items():
+            if n >= min_count:
+                adjustments[path] = adjustments.get(path, 0.0) + 0.05 * (
+                    missing_w[path] / n
+                )
+        for path, n in noisy_n.items():
+            if n >= min_count:
+                adjustments[path] = adjustments.get(path, 0.0) - 0.10 * (
+                    noisy_w[path] / n
+                )
+        for path, n in read_n.items():
+            if n >= min_count:
+                adjustments[path] = adjustments.get(path, 0.0) + 0.03 * (
+                    read_w[path] / n
+                )
         return adjustments
 
     def _row_to_feedback(self, row: sqlite3.Row) -> PackFeedback:
@@ -1263,6 +1320,19 @@ class PackFeedbackRepository:
         useful = None if useful_raw is None else bool(useful_raw)
         # files_read may be absent on rows created before migration 0007
         files_read_raw = row["files_read"] if "files_read" in row.keys() else "[]"
+        # query_text / query_embedding may be absent on rows created before
+        # migration 0014 (v4.4.2 Phase 6). Defensive read mirrors files_read.
+        query_text = (
+            row["query_text"]
+            if "query_text" in row.keys() and row["query_text"] is not None
+            else ""
+        )
+        query_embedding_raw = (
+            row["query_embedding"] if "query_embedding" in row.keys() else None
+        )
+        query_embedding = (
+            bytes(query_embedding_raw) if query_embedding_raw else b""
+        )
         return PackFeedback(
             id=row["id"],
             pack_id=row["pack_id"],
@@ -1273,6 +1343,8 @@ class PackFeedbackRepository:
             too_much_context=bool(row["too_much_ctx"]),
             reason=row["reason"] or "",
             files_read=json.loads(files_read_raw or "[]"),
+            query_text=query_text,
+            query_embedding=query_embedding,
             timestamp=datetime.fromisoformat(row["timestamp"]),
         )
 

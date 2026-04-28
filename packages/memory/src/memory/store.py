@@ -18,6 +18,25 @@ from storage_sqlite.database import Database
 from storage_sqlite.repositories import DecisionRepository, ObservationRepository, PackFeedbackRepository, SymbolRepository
 
 
+def _try_embed_query(query: str) -> bytes:
+    """Return MiniLM-384 float32 bytes for *query*, or empty on failure.
+
+    Reuses ranking._get_embed_model() for cache locality. Silent-
+    degrade contract: any import / inference / serialisation failure
+    returns empty bytes so the caller can store NULL.
+    """
+    try:
+        from ranking.ranker import _get_embed_model  # type: ignore[import]
+        import numpy as np  # type: ignore[import]
+        model = _get_embed_model()
+        if not model:
+            return b""
+        vec = model.encode([query])[0]
+        return np.asarray(vec, dtype=np.float32).tobytes()
+    except Exception:
+        return b""
+
+
 class ObservationStore:
     """High-level wrapper around ObservationRepository.
 
@@ -250,8 +269,18 @@ class FeedbackStore:
             UUID string of the inserted record.
         """
         feedback = fb
+        # Apply repo_scope (existing v4.4 behaviour).
         if self._repo_scope and not fb.repo_scope:
-            feedback = fb.model_copy(update={"repo_scope": self._repo_scope})
+            feedback = feedback.model_copy(update={"repo_scope": self._repo_scope})
+        # v4.4.2 Phase 6: opportunistically attach a query embedding when
+        # the caller supplied query_text but no embedding. Silent-degrade
+        # if sentence-transformers isn't available — empty bytes signal
+        # "no embedding" and the read path falls back to legacy unweighted
+        # behaviour.
+        if feedback.query_text and not feedback.query_embedding:
+            emb = _try_embed_query(feedback.query_text)
+            if emb:
+                feedback = feedback.model_copy(update={"query_embedding": emb})
         return self._repo.add(feedback)
 
     def get_for_pack(self, pack_id: str) -> list[PackFeedback]:
@@ -285,11 +314,18 @@ class FeedbackStore:
         """
         return self._repo.aggregate_stats(repo_scope=self._repo_scope)
 
-    def get_file_adjustments(self, min_count: int = 3) -> dict[str, float]:
+    def get_file_adjustments(
+        self,
+        min_count: int = 3,
+        current_query_embedding: bytes = b"",
+    ) -> dict[str, float]:
         """Return per-file confidence adjustments derived from feedback.
 
         Args:
             min_count: Minimum occurrences threshold.
+            current_query_embedding: Optional float32 bytes of the current
+                query embedding for cosine-weighted aggregation. Empty →
+                v4.4.1 unweighted behaviour.
 
         Returns:
             Dict mapping file path → confidence delta.
@@ -297,4 +333,5 @@ class FeedbackStore:
         return self._repo.get_file_adjustments(
             min_count=min_count,
             repo_scope=self._repo_scope,
+            current_query_embedding=current_query_embedding,
         )
