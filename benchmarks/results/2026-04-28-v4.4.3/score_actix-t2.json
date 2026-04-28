@@ -1,0 +1,17 @@
+{
+  "repo": "actix",
+  "task_id": "actix-t2",
+  "mode": "debug",
+  "ground_truth_files": [
+    "actix-web/src/route.rs"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/route.rs"
+  ],
+  "n_items": 1,
+  "est_tokens_total": 48,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "rank1_hit": 1
+}

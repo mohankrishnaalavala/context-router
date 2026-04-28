@@ -1,0 +1,18 @@
+{
+  "repo": "actix",
+  "task_id": "actix-t3",
+  "mode": "debug",
+  "ground_truth_files": [
+    "awc/src/client/h1proto.rs"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/tests/test_empty_stream.rs"
+  ],
+  "n_items": 2,
+  "est_tokens_total": 118,
+  "precision": 0.5,
+  "recall": 1.0,
+  "f1": 0.6666666666666666,
+  "rank1_hit": 1
+}

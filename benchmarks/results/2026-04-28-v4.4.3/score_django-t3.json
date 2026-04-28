@@ -1,0 +1,21 @@
+{
+  "repo": "django",
+  "task_id": "django-t3",
+  "mode": "implement",
+  "ground_truth_files": [
+    "django/db/models/fields/__init__.py"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/utils/deconstruct.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/views/static.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/docs/_ext/djangodocs.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/utils/autoreload.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/constraints/models.py"
+  ],
+  "n_items": 11,
+  "est_tokens_total": 771,
+  "precision": 0.0,
+  "recall": 0.0,
+  "f1": 0.0,
+  "rank1_hit": 0
+}

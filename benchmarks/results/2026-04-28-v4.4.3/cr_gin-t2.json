@@ -1,0 +1,110 @@
+{
+  "id": "0d425d17-6095-4574-a210-09b12ffeb124",
+  "mode": "debug",
+  "query": "ClientIP returns wrong address when X-Forwarded-For has multiple values",
+  "selected_items": [
+    {
+      "id": "f65992a7-09cb-4a6a-9d95-d3c7854574ee",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context.go",
+      "title": "hasRequestContext (context.go)",
+      "excerpt": "func (c *Context) hasRequestContext(...)",
+      "reason": "Modified `hasRequestContext` lines 1399-1403",
+      "confidence": 0.7643809152998833,
+      "est_tokens": 57,
+      "freshness": "2026-04-28T14:23:59.111671Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "hasRequestContext",
+      "duplicates_hidden": 145,
+      "symbol_body": "func (c *Context) hasRequestContext() bool {\n\thasFallback := c.engine != nil && c.engine.ContextWithFallback\n\thasRequestContext := c.Request != nil && c.Request.Context() != nil\n\treturn hasFallback && hasRequestContext\n}",
+      "symbol_lines": [
+        1399,
+        1403
+      ]
+    },
+    {
+      "id": "8d6829cf-a107-4be1-a97e-ff2681944453",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context_test.go",
+      "title": "TestContextClientIPWithMultipleHeaders (context_test.go)",
+      "excerpt": "func TestContextClientIPWithMultipleHeaders(...)",
+      "reason": "Modified `TestContextClientIPWithMultipleHeaders` lines 1146-1161",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 61,
+      "freshness": "2026-04-28T14:23:59.120174Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "TestContextClientIPWithMultipleHeaders",
+      "duplicates_hidden": 194,
+      "symbol_body": null,
+      "symbol_lines": [
+        1146,
+        1161
+      ]
+    }
+  ],
+  "total_est_tokens": 118,
+  "baseline_est_tokens": 78932,
+  "reduction_pct": 99.9,
+  "created_at": "2026-04-28T14:23:59.868940Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 0,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "f65992a7-09cb-4a6a-9d95-d3c7854574ee",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context.go",
+      "title": "hasRequestContext (context.go)",
+      "excerpt": "func (c *Context) hasRequestContext(...)",
+      "reason": "Modified `hasRequestContext` lines 1399-1403",
+      "confidence": 0.7643809152998833,
+      "est_tokens": 57,
+      "freshness": "2026-04-28T14:23:59.111671Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "hasRequestContext",
+      "duplicates_hidden": 145,
+      "symbol_body": "func (c *Context) hasRequestContext() bool {\n\thasFallback := c.engine != nil && c.engine.ContextWithFallback\n\thasRequestContext := c.Request != nil && c.Request.Context() != nil\n\treturn hasFallback && hasRequestContext\n}",
+      "symbol_lines": [
+        1399,
+        1403
+      ]
+    },
+    {
+      "id": "8d6829cf-a107-4be1-a97e-ff2681944453",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context_test.go",
+      "title": "TestContextClientIPWithMultipleHeaders (context_test.go)",
+      "excerpt": "func TestContextClientIPWithMultipleHeaders(...)",
+      "reason": "Modified `TestContextClientIPWithMultipleHeaders` lines 1146-1161",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 61,
+      "freshness": "2026-04-28T14:23:59.120174Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "TestContextClientIPWithMultipleHeaders",
+      "duplicates_hidden": 194,
+      "symbol_body": null,
+      "symbol_lines": [
+        1146,
+        1161
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 118,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

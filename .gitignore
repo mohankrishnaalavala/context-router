@@ -214,8 +214,12 @@ handover-chat-*.json
 # Internal review (not for public release)
 docs/REVIEW.md
 
-# Real-world benchmark validation reports (local only)
+# Real-world benchmark validation reports (local scratchpad — committed
+# evidence-of-record for releases lives at benchmarks/results/, see below).
 docs/benchmarks/
+
+# Generated graph viz output (interactive D3 HTML from `context-router graph`).
+graph.html
 
 # Ship-check generated artifacts (local only — never tracked)
 # The policy/templates live in docs/release/ and .claude/skills/ship-check/.

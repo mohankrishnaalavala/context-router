@@ -1,0 +1,110 @@
+{
+  "id": "a65b9f60-8585-4a84-9dd3-d3ff36687ac2",
+  "mode": "debug",
+  "query": "ASGIRequest.path_info wrong when script name is set",
+  "selected_items": [
+    {
+      "id": "349b99c6-5e7f-48b6-816c-b4f912af04da",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/asgi.py",
+      "title": "get_script_prefix (asgi.py)",
+      "excerpt": "def get_script_prefix(scope):\n\n    Return the script prefix to use from either the scope or a setting.",
+      "reason": "Modified `get_script_prefix` lines 30-36",
+      "confidence": 0.95,
+      "est_tokens": 69,
+      "freshness": "2026-04-28T14:27:31.045024Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 21,
+      "symbol_body": "def get_script_prefix(scope):\n    \"\"\"\n    Return the script prefix to use from either the scope or a setting.\n    \"\"\"\n    if settings.FORCE_SCRIPT_NAME:\n        return settings.FORCE_SCRIPT_NAME\n    return scope.get(\"root_path\", \"\") or \"\"",
+      "symbol_lines": [
+        30,
+        36
+      ]
+    },
+    {
+      "id": "930ae596-8139-49e1-ab99-4a91967f64f1",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/handlers/tests.py",
+      "title": "test_get_script_name_double_slashes (tests.py)",
+      "excerpt": "def test_get_script_name_double_slashes(self):\n\n        WSGI squashes multiple successive slashes in PATH_INFO, get_script_name\n        should take that into account when forming SCRIPT_NAME (#17133).",
+      "reason": "Modified `test_get_script_name_double_slashes` lines 278-289",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 92,
+      "freshness": "2026-04-28T14:27:31.056070Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 46,
+      "symbol_body": null,
+      "symbol_lines": [
+        278,
+        289
+      ]
+    }
+  ],
+  "total_est_tokens": 161,
+  "baseline_est_tokens": 645008,
+  "reduction_pct": 100.0,
+  "created_at": "2026-04-28T14:28:17.419896Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 0 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 276,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "349b99c6-5e7f-48b6-816c-b4f912af04da",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/asgi.py",
+      "title": "get_script_prefix (asgi.py)",
+      "excerpt": "def get_script_prefix(scope):\n\n    Return the script prefix to use from either the scope or a setting.",
+      "reason": "Modified `get_script_prefix` lines 30-36",
+      "confidence": 0.95,
+      "est_tokens": 69,
+      "freshness": "2026-04-28T14:27:31.045024Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 21,
+      "symbol_body": "def get_script_prefix(scope):\n    \"\"\"\n    Return the script prefix to use from either the scope or a setting.\n    \"\"\"\n    if settings.FORCE_SCRIPT_NAME:\n        return settings.FORCE_SCRIPT_NAME\n    return scope.get(\"root_path\", \"\") or \"\"",
+      "symbol_lines": [
+        30,
+        36
+      ]
+    },
+    {
+      "id": "930ae596-8139-49e1-ab99-4a91967f64f1",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/handlers/tests.py",
+      "title": "test_get_script_name_double_slashes (tests.py)",
+      "excerpt": "def test_get_script_name_double_slashes(self):\n\n        WSGI squashes multiple successive slashes in PATH_INFO, get_script_name\n        should take that into account when forming SCRIPT_NAME (#17133).",
+      "reason": "Modified `test_get_script_name_double_slashes` lines 278-289",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 92,
+      "freshness": "2026-04-28T14:27:31.056070Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 46,
+      "symbol_body": null,
+      "symbol_lines": [
+        278,
+        289
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 161,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

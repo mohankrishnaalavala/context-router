@@ -1,0 +1,18 @@
+{
+  "repo": "actix",
+  "task_id": "actix-t1",
+  "mode": "debug",
+  "ground_truth_files": [
+    "actix-files/src/named.rs"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/named.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/tests/pre_epoch_mtime.rs"
+  ],
+  "n_items": 2,
+  "est_tokens_total": 109,
+  "precision": 0.5,
+  "recall": 1.0,
+  "f1": 0.6666666666666666,
+  "rank1_hit": 1
+}

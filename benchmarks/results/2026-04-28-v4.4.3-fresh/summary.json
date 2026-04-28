@@ -1,0 +1,200 @@
+{
+  "per_task": [
+    {
+      "repo": "gson",
+      "task_id": "gson-t1",
+      "mode": "debug",
+      "ground_truth_files": [
+        "gson/src/main/java/com/google/gson/stream/JsonReader.java"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/stream/JsonReader.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/stream/JsonReaderTest.java"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 117,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gson",
+      "task_id": "gson-t2",
+      "mode": "debug",
+      "ground_truth_files": [
+        "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapTest.java"
+      ],
+      "n_items": 3,
+      "est_tokens_total": 227,
+      "precision": 0.3333333333333333,
+      "recall": 1.0,
+      "f1": 0.5,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gson",
+      "task_id": "gson-t3",
+      "mode": "debug",
+      "ground_truth_files": [
+        "gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+      ],
+      "n_items": 1,
+      "est_tokens_total": 69,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "requests",
+      "task_id": "requests-t1",
+      "mode": "debug",
+      "ground_truth_files": [
+        "src/requests/utils.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 149,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "requests",
+      "task_id": "requests-t2",
+      "mode": "debug",
+      "ground_truth_files": [
+        "src/requests/utils.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 146,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "requests",
+      "task_id": "requests-t3",
+      "mode": "debug",
+      "ground_truth_files": [
+        "src/requests/exceptions.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 136,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "zod",
+      "task_id": "zod-t1",
+      "mode": "debug",
+      "ground_truth_files": [
+        "packages/zod/src/v4/core/schemas.ts"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/schemas.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/tests/record-constructor.test.ts"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 118,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "zod",
+      "task_id": "zod-t2",
+      "mode": "debug",
+      "ground_truth_files": [
+        "packages/zod/src/v4/classic/schemas.ts"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/schemas.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/transform.test.ts"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 106,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "zod",
+      "task_id": "zod-t3",
+      "mode": "debug",
+      "ground_truth_files": [
+        "packages/zod/src/v4/core/util.ts"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/util.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/number.test.ts"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 122,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    }
+  ],
+  "by_repo": {
+    "gson": {
+      "n_tasks": 3,
+      "avg_precision": 0.611111111111111,
+      "avg_recall": 1.0,
+      "avg_f1": 0.7222222222222222,
+      "avg_tokens": 137.66666666666666,
+      "rank1_hits": 3
+    },
+    "requests": {
+      "n_tasks": 3,
+      "avg_precision": 0.5,
+      "avg_recall": 1.0,
+      "avg_f1": 0.6666666666666666,
+      "avg_tokens": 143.66666666666666,
+      "rank1_hits": 3
+    },
+    "zod": {
+      "n_tasks": 3,
+      "avg_precision": 0.5,
+      "avg_recall": 1.0,
+      "avg_f1": 0.6666666666666666,
+      "avg_tokens": 115.33333333333333,
+      "rank1_hits": 3
+    }
+  },
+  "overall": {
+    "n_tasks": 9,
+    "avg_precision": 0.537037037037037,
+    "avg_recall": 1.0,
+    "avg_f1": 0.6851851851851852,
+    "avg_tokens": 132.22222222222223,
+    "rank1_hits": 9
+  }
+}

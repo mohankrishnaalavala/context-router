@@ -1,0 +1,110 @@
+{
+  "id": "8f63510f-4f13-4e90-bd0d-c81c98ae82f1",
+  "mode": "debug",
+  "query": "awc h1 client sends Transfer-Encoding chunked even when request body is empty",
+  "selected_items": [
+    {
+      "id": "c1356cf4-36e1-4dab-a107-1ade583436a2",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+      "title": "send_body (h1proto.rs)",
+      "excerpt": "fn send_body(...)",
+      "reason": "Modified `send_body` lines 188-235",
+      "confidence": 0.6145155316649082,
+      "est_tokens": 52,
+      "freshness": "2026-04-28T14:24:55.777838Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "send_body",
+      "duplicates_hidden": 5,
+      "symbol_body": "pub(crate) async fn send_body<Io, B>(\n    mut body: Pin<&mut B>,\n    mut framed: Pin<&mut Framed<Io, h1::ClientCodec>>,\n    first_chunk: Option<Bytes>,\n) -> Result<(), SendRequestError>\nwhere\n    Io: ConnectionIo,\n    B: MessageBody,\n    B::Error: Into<BoxError>,\n{\n    if let Some(chunk) = first_chunk {\n        framed.as_mut().write(h1::Message::Chunk(Some(chunk)))?;\n    }\n\n    let mut eof = false;\n    while !eof {\n        while !eof && !framed.as_ref().is_write_buf_full() {\n            match poll_fn(|cx| body.as_mut().poll_next(cx)).await {\n                Some(Ok(chunk)) => {\n                    framed.as_mut().write(h1::Message::Chunk(Some(chunk)))?;\n                }\n                Some(Err(err)) => return Err(SendRequestError::Body(err.into())),\n                None => {\n                    eof = true;\n                    framed.as_mut().write(h1::Message::Chunk(None))?;\n                }\n            }\n        }\n\n        if !framed.as_ref().is_write_buf_empty() {\n            poll_fn(|cx| match framed.as_mut().flush(cx) {\n                Poll::Ready(Ok(_)) => Poll::Ready(Ok(())),\n                Poll::Ready(Err(err)) => Poll::Ready(Err(err)),\n                Poll::Pending => {\n                    if !framed.as_ref().is_write_buf_full() {\n                        Poll::Ready(Ok(()))\n                    } else {\n                        Poll::Pending\n                    }\n                }\n            })\n            .await?;\n        }\n    }\n\n    framed.get_mut().flush().await?;\n    Ok(())\n}",
+      "symbol_lines": [
+        188,
+        235
+      ]
+    },
+    {
+      "id": "22e4041c-2bb7-4d89-bb81-c2509f86adb1",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/tests/test_empty_stream.rs",
+      "title": "empty_body_stream_does_not_use_chunked_encoding (test_empty_stream.rs)",
+      "excerpt": "fn empty_body_stream_does_not_use_chunked_encoding(...)",
+      "reason": "Modified `empty_body_stream_does_not_use_chunked_encoding` lines 13-91",
+      "confidence": 0.48176953546695206,
+      "est_tokens": 66,
+      "freshness": "2026-04-28T14:24:55.797650Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "empty_body_stream_does_not_use_chunked_encoding",
+      "duplicates_hidden": 0,
+      "symbol_body": null,
+      "symbol_lines": [
+        13,
+        91
+      ]
+    }
+  ],
+  "total_est_tokens": 118,
+  "baseline_est_tokens": 206947,
+  "reduction_pct": 99.9,
+  "created_at": "2026-04-28T14:24:56.597260Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 0,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "c1356cf4-36e1-4dab-a107-1ade583436a2",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+      "title": "send_body (h1proto.rs)",
+      "excerpt": "fn send_body(...)",
+      "reason": "Modified `send_body` lines 188-235",
+      "confidence": 0.6145155316649082,
+      "est_tokens": 52,
+      "freshness": "2026-04-28T14:24:55.777838Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "send_body",
+      "duplicates_hidden": 5,
+      "symbol_body": "pub(crate) async fn send_body<Io, B>(\n    mut body: Pin<&mut B>,\n    mut framed: Pin<&mut Framed<Io, h1::ClientCodec>>,\n    first_chunk: Option<Bytes>,\n) -> Result<(), SendRequestError>\nwhere\n    Io: ConnectionIo,\n    B: MessageBody,\n    B::Error: Into<BoxError>,\n{\n    if let Some(chunk) = first_chunk {\n        framed.as_mut().write(h1::Message::Chunk(Some(chunk)))?;\n    }\n\n    let mut eof = false;\n    while !eof {\n        while !eof && !framed.as_ref().is_write_buf_full() {\n            match poll_fn(|cx| body.as_mut().poll_next(cx)).await {\n                Some(Ok(chunk)) => {\n                    framed.as_mut().write(h1::Message::Chunk(Some(chunk)))?;\n                }\n                Some(Err(err)) => return Err(SendRequestError::Body(err.into())),\n                None => {\n                    eof = true;\n                    framed.as_mut().write(h1::Message::Chunk(None))?;\n                }\n            }\n        }\n\n        if !framed.as_ref().is_write_buf_empty() {\n            poll_fn(|cx| match framed.as_mut().flush(cx) {\n                Poll::Ready(Ok(_)) => Poll::Ready(Ok(())),\n                Poll::Ready(Err(err)) => Poll::Ready(Err(err)),\n                Poll::Pending => {\n                    if !framed.as_ref().is_write_buf_full() {\n                        Poll::Ready(Ok(()))\n                    } else {\n                        Poll::Pending\n                    }\n                }\n            })\n            .await?;\n        }\n    }\n\n    framed.get_mut().flush().await?;\n    Ok(())\n}",
+      "symbol_lines": [
+        188,
+        235
+      ]
+    },
+    {
+      "id": "22e4041c-2bb7-4d89-bb81-c2509f86adb1",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/tests/test_empty_stream.rs",
+      "title": "empty_body_stream_does_not_use_chunked_encoding (test_empty_stream.rs)",
+      "excerpt": "fn empty_body_stream_does_not_use_chunked_encoding(...)",
+      "reason": "Modified `empty_body_stream_does_not_use_chunked_encoding` lines 13-91",
+      "confidence": 0.48176953546695206,
+      "est_tokens": 66,
+      "freshness": "2026-04-28T14:24:55.797650Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "empty_body_stream_does_not_use_chunked_encoding",
+      "duplicates_hidden": 0,
+      "symbol_body": null,
+      "symbol_lines": [
+        13,
+        91
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 118,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

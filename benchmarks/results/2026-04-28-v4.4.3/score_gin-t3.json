@@ -1,0 +1,18 @@
+{
+  "repo": "gin",
+  "task_id": "gin-t3",
+  "mode": "debug",
+  "ground_truth_files": [
+    "binding/form_mapping.go"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping_test.go"
+  ],
+  "n_items": 2,
+  "est_tokens_total": 105,
+  "precision": 0.5,
+  "recall": 1.0,
+  "f1": 0.6666666666666666,
+  "rank1_hit": 1
+}

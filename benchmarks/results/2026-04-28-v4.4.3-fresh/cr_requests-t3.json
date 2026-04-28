@@ -1,0 +1,110 @@
+{
+  "id": "a1c7f9ce-c6af-4c3f-90f6-16d6782090cf",
+  "mode": "debug",
+  "query": "JSONDecodeError raised by requests is not picklable / not deserializable",
+  "selected_items": [
+    {
+      "id": "e3378981-9d77-4b7c-9f3d-b444cea7a6dc",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+      "title": "JSONDecodeError (exceptions.py)",
+      "excerpt": "class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\nCouldn't decode the text into json",
+      "reason": "Modified `JSONDecodeError` lines 31-52",
+      "confidence": 0.7455567706638981,
+      "est_tokens": 69,
+      "freshness": "2026-04-28T15:36:35.391912Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test_json_decode_errors_are_serializable_deserializable -> JSONDecodeError",
+      "duplicates_hidden": 27,
+      "symbol_body": "class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\n    \"\"\"Couldn't decode the text into json\"\"\"\n\n    def __init__(self, *args, **kwargs):\n        \"\"\"\n        Construct the JSONDecodeError instance first with all\n        args. Then use it's args to construct the IOError so that\n        the json specific args aren't used as IOError specific args\n        and the error message from JSONDecodeError is preserved.\n        \"\"\"\n        CompatJSONDecodeError.__init__(self, *args)\n        InvalidJSONError.__init__(self, *self.args, **kwargs)\n\n    def __reduce__(self):\n        \"\"\"\n        The __reduce__ method called when pickling the object must\n        be the one from the JSONDecodeError (be it json/simplejson)\n        as it expects all the arguments for instantiation, not just\n        one like the IOError, and the MRO would by default call the\n        __reduce__ method from the IOError due to the inheritance order.\n        \"\"\"\n        return CompatJSONDecodeError.__reduce__(self)",
+      "symbol_lines": [
+        31,
+        52
+      ]
+    },
+    {
+      "id": "2c7d81a1-2aa4-4cef-ae57-217aa1499906",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+      "title": "test_json_decode_errors_are_serializable_deserializable (test_requests.py)",
+      "excerpt": "def test_json_decode_errors_are_serializable_deserializable():",
+      "reason": "Modified `test_json_decode_errors_are_serializable_deserializable` lines 2815-2822",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 67,
+      "freshness": "2026-04-28T15:36:35.422668Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test_json_decode_errors_are_serializable_deserializable -> JSONDecodeError",
+      "duplicates_hidden": 264,
+      "symbol_body": null,
+      "symbol_lines": [
+        2815,
+        2822
+      ]
+    }
+  ],
+  "total_est_tokens": 136,
+  "baseline_est_tokens": 53495,
+  "reduction_pct": 99.7,
+  "created_at": "2026-04-28T15:36:36.659319Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 17,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "e3378981-9d77-4b7c-9f3d-b444cea7a6dc",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+      "title": "JSONDecodeError (exceptions.py)",
+      "excerpt": "class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\nCouldn't decode the text into json",
+      "reason": "Modified `JSONDecodeError` lines 31-52",
+      "confidence": 0.7455567706638981,
+      "est_tokens": 69,
+      "freshness": "2026-04-28T15:36:35.391912Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test_json_decode_errors_are_serializable_deserializable -> JSONDecodeError",
+      "duplicates_hidden": 27,
+      "symbol_body": "class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\n    \"\"\"Couldn't decode the text into json\"\"\"\n\n    def __init__(self, *args, **kwargs):\n        \"\"\"\n        Construct the JSONDecodeError instance first with all\n        args. Then use it's args to construct the IOError so that\n        the json specific args aren't used as IOError specific args\n        and the error message from JSONDecodeError is preserved.\n        \"\"\"\n        CompatJSONDecodeError.__init__(self, *args)\n        InvalidJSONError.__init__(self, *self.args, **kwargs)\n\n    def __reduce__(self):\n        \"\"\"\n        The __reduce__ method called when pickling the object must\n        be the one from the JSONDecodeError (be it json/simplejson)\n        as it expects all the arguments for instantiation, not just\n        one like the IOError, and the MRO would by default call the\n        __reduce__ method from the IOError due to the inheritance order.\n        \"\"\"\n        return CompatJSONDecodeError.__reduce__(self)",
+      "symbol_lines": [
+        31,
+        52
+      ]
+    },
+    {
+      "id": "2c7d81a1-2aa4-4cef-ae57-217aa1499906",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+      "title": "test_json_decode_errors_are_serializable_deserializable (test_requests.py)",
+      "excerpt": "def test_json_decode_errors_are_serializable_deserializable():",
+      "reason": "Modified `test_json_decode_errors_are_serializable_deserializable` lines 2815-2822",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 67,
+      "freshness": "2026-04-28T15:36:35.422668Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "test_json_decode_errors_are_serializable_deserializable -> JSONDecodeError",
+      "duplicates_hidden": 264,
+      "symbol_body": null,
+      "symbol_lines": [
+        2815,
+        2822
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 136,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}
