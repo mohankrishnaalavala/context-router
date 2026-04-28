@@ -237,6 +237,10 @@ class PackFeedback(BaseModel):
     too_much_context: bool = False
     reason: str = ""
     files_read: list[str] = Field(default_factory=list)  # files the agent actually consumed
+    query_text: str = ""
+    # query_embedding is bytes (numpy float32 vector .tobytes()). Empty
+    # bytes signals "no embedding stored" (legacy rows or silent-degrade).
+    query_embedding: bytes = b""
     timestamp: datetime = Field(default_factory=_utcnow)
 
 

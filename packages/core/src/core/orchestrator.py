@@ -1165,10 +1165,19 @@ class Orchestrator:
                             )
 
             # Phase 6: load feedback-based confidence adjustments
+            # v4.4.2 Phase 6: cosine-weight historical feedback by query similarity.
+            # Silent-degrade when the bi-encoder model isn't available — the read
+            # path falls back to v4.4.1 unweighted aggregation.
+            try:
+                from memory.store import _try_embed_query
+                current_query_embedding = _try_embed_query(query) if query else b""
+            except Exception:
+                current_query_embedding = b""
             try:
                 from storage_sqlite.repositories import PackFeedbackRepository
                 feedback_adjustments = PackFeedbackRepository(db.connection).get_file_adjustments(
                     repo_scope=repo_scope,
+                    current_query_embedding=current_query_embedding,
                 )
             except Exception as exc:  # noqa: BLE001
                 _warn_optional_subsystem_failure(
