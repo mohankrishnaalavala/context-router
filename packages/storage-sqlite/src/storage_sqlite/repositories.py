@@ -1200,8 +1200,18 @@ class PackFeedbackRepository:
     ) -> dict[str, float]:
         """Return per-file confidence adjustments derived from feedback.
 
-        Files frequently in 'missing' get +0.05; frequently in 'noisy' get -0.10.
-        Only applied when a file appears in feedback >= min_count times.
+        Three signals contribute (each gated at >= ``min_count`` occurrences):
+          * ``missing``  → +0.05  (file should have been in the pack)
+          * ``noisy``    → -0.10  (file was in the pack but irrelevant)
+          * ``files_read`` → +0.03  (v4.4 Phase 4: file was in the pack AND
+            actually consumed by the agent — a positive signal that the
+            ranker chose well)
+
+        Signals compose: a file with 5 reads + 3 noisy reports nets
+        ``+0.03 - 0.10 = -0.07``. The smaller magnitude on ``files_read``
+        (vs. explicit ``noisy`` / ``missing``) reflects that "agent
+        consumed it" is a weaker positive than "agent explicitly
+        complained / praised it".
 
         Args:
             min_count: Minimum occurrences before an adjustment is applied.
@@ -1213,7 +1223,7 @@ class PackFeedbackRepository:
         predicate, scope_params = self._scope_predicate(repo_scope)
         rows = self._conn.execute(
             f"""
-            SELECT missing, noisy
+            SELECT missing, noisy, files_read
             FROM pack_feedback
             WHERE {predicate}
             """,
@@ -1222,11 +1232,18 @@ class PackFeedbackRepository:
 
         missing_freq: dict[str, int] = {}
         noisy_freq: dict[str, int] = {}
+        read_freq: dict[str, int] = {}
         for r in rows:
             for path in json.loads(r["missing"] or "[]"):
                 missing_freq[path] = missing_freq.get(path, 0) + 1
             for path in json.loads(r["noisy"] or "[]"):
                 noisy_freq[path] = noisy_freq.get(path, 0) + 1
+            # files_read may be absent on rows older than migration 0007.
+            files_read_raw = (
+                r["files_read"] if "files_read" in r.keys() else "[]"
+            )
+            for path in json.loads(files_read_raw or "[]"):
+                read_freq[path] = read_freq.get(path, 0) + 1
 
         adjustments: dict[str, float] = {}
         for path, count in missing_freq.items():
@@ -1235,6 +1252,9 @@ class PackFeedbackRepository:
         for path, count in noisy_freq.items():
             if count >= min_count:
                 adjustments[path] = adjustments.get(path, 0.0) - 0.10
+        for path, count in read_freq.items():
+            if count >= min_count:
+                adjustments[path] = adjustments.get(path, 0.0) + 0.03
         return adjustments
 
     def _row_to_feedback(self, row: sqlite3.Row) -> PackFeedback:
