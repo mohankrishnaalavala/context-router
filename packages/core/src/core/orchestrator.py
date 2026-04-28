@@ -1362,6 +1362,23 @@ class Orchestrator:
             pack_metadata["depth"] = adaptive_depth_meta["depth"]
             pack_metadata["depth_reason"] = adaptive_depth_meta["reason"]
 
+        # v4.4 Phase 4: surface the feedback-driven adjustments that fired
+        # for this pack so users can see the learning loop in action. Only
+        # entries whose path actually lands in the visible pack are listed
+        # — keeps the metadata tight and answers "which historical signal
+        # influenced this rank?". Empty dict shows up as an empty list so
+        # the key's presence still signals "the pipeline ran".
+        if feedback_adjustments:
+            visible_paths = {item.path_or_ref for item in page_items}
+            applied = [
+                {"path": path, "delta": round(delta, 4)}
+                for path, delta in sorted(feedback_adjustments.items())
+                if path in visible_paths
+            ]
+            pack_metadata["feedback_applied"] = applied
+        else:
+            pack_metadata["feedback_applied"] = []
+
         total = sum(i.est_tokens for i in page_items)
         reduction = round((baseline - sum(i.est_tokens for i in all_ranked)) / baseline * 100, 1) if baseline else 0.0
 
