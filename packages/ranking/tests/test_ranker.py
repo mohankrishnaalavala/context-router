@@ -45,8 +45,10 @@ def test_empty_input_returns_empty() -> None:
 def test_sorts_by_confidence_descending() -> None:
     # Use "debug" mode to avoid adaptive top-k trimming the low-confidence
     # tail — this test is about sort order, not filtering precision.
+    # Confidences kept >= 0.30 (debug-mode v4.4 score floor) so all three
+    # items survive the precision filter.
     items = [
-        _item(confidence=0.2, title="low"),
+        _item(confidence=0.35, title="low"),
         _item(confidence=0.9, title="high"),
         _item(confidence=0.5, title="mid"),
     ]
@@ -98,18 +100,41 @@ def test_zero_budget_returns_all_sorted() -> None:
     assert result[0].confidence == 0.9
 
 
-def test_budget_preserves_one_per_source_type() -> None:
-    """Even if budget is tiny, at least one item per source_type survives."""
-    # Use "debug" mode to avoid adaptive top-k removing the low-confidence
-    # "file" item before the budget-preservation assertion can be checked.
+def test_budget_preserves_one_per_high_signal_source_type() -> None:
+    """v4.4: high-signal source types survive even when over budget.
+
+    The per-source-type guarantee was restricted in v4.4 to only the high-
+    signal types (entrypoint, changed_file, runtime_signal, contract,
+    extension_point, failing_test, past_debug, blast_radius, impacted_test).
+    The catch-all "file" type no longer gets the guarantee — it was
+    admitting conf-0.20 noise into every pack.
+    """
     items = [
         _item(source_type="changed_file", confidence=0.9, est_tokens=500, title="cf"),
-        _item(source_type="file", confidence=0.2, est_tokens=500, title="f"),
+        _item(source_type="entrypoint", confidence=0.7, est_tokens=500, title="ep"),
     ]
     result = ContextRanker(token_budget=100).rank(items, "", "debug")
     seen_types = {i.source_type for i in result}
     assert "changed_file" in seen_types
-    assert "file" in seen_types
+    assert "entrypoint" in seen_types
+
+
+def test_file_type_loses_guarantee_when_over_budget() -> None:
+    """v4.4: 'file' items that don't fit the budget are dropped, not guaranteed.
+
+    Pre-v4.4 the per-source-type guarantee admitted at least one 'file' item
+    even at conf 0.20, which inflated packs with noise. Now the guarantee is
+    restricted to high-signal types only.
+    """
+    items = [
+        _item(source_type="changed_file", confidence=0.9, est_tokens=80, title="cf"),
+        _item(source_type="file", confidence=0.5, est_tokens=500, title="f"),
+    ]
+    result = ContextRanker(token_budget=100).rank(items, "", "debug")
+    titles = {i.title for i in result}
+    assert "cf" in titles
+    # 'file' item exceeds remaining budget AND no longer has the guarantee
+    assert "f" not in titles
 
 
 def test_all_items_fit_within_budget() -> None:
@@ -121,17 +146,25 @@ def test_all_items_fit_within_budget() -> None:
 
 
 def test_knapsack_prefers_many_small_over_one_large() -> None:
-    """Four 400-token 0.7-confidence items should beat one 2000-token 0.9."""
-    items = [_item(source_type="big", confidence=0.9, est_tokens=2000, title="big")]
+    """Four 400-token 0.7-confidence items beat one 2000-token 0.9 in admission.
+
+    Uses ``entrypoint`` for the large item (a v4.4 guaranteed source type)
+    so it still survives via the per-source-type guarantee even though it
+    exceeds the budget. Pre-v4.4 the test used a custom ``big`` source type
+    which also benefited from the (then-unrestricted) guarantee.
+    """
+    items = [
+        _item(source_type="entrypoint", confidence=0.9, est_tokens=2000, title="big")
+    ]
     items += [
-        _item(source_type="small", confidence=0.7, est_tokens=400, title=f"s{i}")
+        _item(source_type="contract", confidence=0.7, est_tokens=400, title=f"s{i}")
         for i in range(4)
     ]
     result = ContextRanker(token_budget=2000).rank(items, "", "review")
     titles = {i.title for i in result}
     assert "s0" in titles and "s1" in titles and "s2" in titles and "s3" in titles
-    assert "big" in titles
-    admitted_small_tokens = sum(i.est_tokens for i in result if i.source_type == "small")
+    assert "big" in titles  # guaranteed via entrypoint type
+    admitted_small_tokens = sum(i.est_tokens for i in result if i.source_type == "contract")
     assert admitted_small_tokens >= 1600
 
 

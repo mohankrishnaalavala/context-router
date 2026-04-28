@@ -130,8 +130,12 @@ def test_hub_boost_reuses_injected_connection(project_root: Path, seeded_db) -> 
         _item(title="hub", path=project_root / "src" / "hub.py", confidence=0.5),
         _item(title="leaf", path=project_root / "src" / "leaf.py", confidence=0.5),
     ]
+    # use_embeddings=False isolates the hub-boost connection-reuse contract
+    # from the semantic-boost path which legitimately opens its own
+    # read-only connection to look up the persistent embeddings table.
     ranker = ContextRanker(
         token_budget=0,
+        use_embeddings=False,
         use_hub_boost=True,
         db_connection=seeded_db.connection,
     )
@@ -161,8 +165,12 @@ def test_hub_boost_does_not_close_injected_connection(
         _item(title="hub", path=project_root / "src" / "hub.py", confidence=0.5),
         _item(title="leaf", path=project_root / "src" / "leaf.py", confidence=0.5),
     ]
+    # use_embeddings=False isolates the hub-boost connection-reuse contract
+    # from the semantic-boost path which legitimately opens its own
+    # read-only connection to look up the persistent embeddings table.
     ranker = ContextRanker(
         token_budget=0,
+        use_embeddings=False,
         use_hub_boost=True,
         db_connection=seeded_db.connection,
     )
@@ -196,8 +204,9 @@ def test_hub_boost_falls_back_to_fresh_connection_when_no_db_passed(
 
     # In the fallback path, the ranker DOES open a fresh connection — at
     # least one (may be more if _resolve_symbol_ids also opens one).
+    # v4.4: hub_boost is gated to handover mode only.
     with patch("sqlite3.connect", wraps=sqlite3.connect) as spy:
-        ranked = ranker.rank(items, "rank items", "implement")
+        ranked = ranker.rank(items, "rank items", "handover")
 
     assert spy.call_count >= 1, (
         "fallback path must still open sqlite3 connections when no "

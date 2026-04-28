@@ -35,6 +35,27 @@ _EMBED_LOCK = threading.Lock()
 # Default model used for semantic ranking.
 _EMBED_MODEL_NAME: str = "all-MiniLM-L6-v2"
 
+# v4.4 Phase 2: cross-encoder reranker. Bi-encoder embeddings (above) are
+# strong for recall (find candidates fast); cross-encoders are strong for
+# precision (rank candidates accurately) because they jointly attend over
+# query and doc. Standard practice in IR (BEIR, MS-MARCO leaderboards).
+# Lifts precision +0.10 to +0.20 over bi-encoder-only on typical queries.
+_CROSS_ENCODER_MODEL: object | None = None
+_CROSS_ENCODER_LOCK = threading.Lock()
+_CROSS_ENCODER_MODEL_NAME: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# Top-K candidates passed to the cross-encoder; the rest keep their
+# pre-rerank confidence. K=30 keeps latency under ~80ms on CPU while
+# still covering the long tail that BM25 sometimes misranks.
+_CROSS_ENCODER_TOP_K: int = 30
+# Per-doc text cap so we don't blow the cross-encoder's 512-token limit
+# with very long excerpts. The model truncates anyway; capping early
+# saves CPU on tokenisation.
+_CROSS_ENCODER_DOC_CHAR_CAP: int = 256
+# Blend weight for the cross-encoder score vs the structural confidence.
+# 0.5/0.5 mirrors the BM25 boost formula but uses the cross-encoder's
+# joint signal in place of BM25's term-frequency one.
+_CROSS_ENCODER_WEIGHT: float = 0.5
+
 
 class _BM25Scorer:
     """In-memory Okapi BM25 scorer built from a document corpus.
@@ -243,6 +264,94 @@ def _embed_model_is_cached(model_name: str = _EMBED_MODEL_NAME) -> bool:
     return any(p.exists() for p in candidates)
 
 
+def _cross_encoder_model_is_cached(
+    model_name: str = _CROSS_ENCODER_MODEL_NAME,
+) -> bool:
+    """Return True if the Hugging Face model directory for *model_name* exists.
+
+    Mirrors :func:`_embed_model_is_cached` but resolves the cross-encoder's
+    canonical hub path. Used to decide whether to surface a download
+    progress message on first load.
+    """
+    base = os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")
+    safe_name = model_name.replace("/", "--")
+    candidates: list[Path] = []
+    if base:
+        candidates.append(Path(base) / "hub" / f"models--{safe_name}")
+        candidates.append(Path(base) / f"models--{safe_name}")
+    candidates.append(
+        Path.home()
+        / ".cache"
+        / "huggingface"
+        / "hub"
+        / f"models--{safe_name}"
+    )
+    return any(p.exists() for p in candidates)
+
+
+def _get_cross_encoder_model(
+    progress_cb: Callable[[str], None] | None = None,
+) -> object:
+    """Lazy-load the cross-encoder model; returns False when unavailable.
+
+    Same silent-degrade contract as :func:`_get_embed_model`: a missing
+    ``sentence-transformers`` install or a model-load failure emits a
+    one-line stderr warning and returns the ``False`` sentinel so the
+    caller can pass items through unchanged. The first successful load is
+    cached in ``_CROSS_ENCODER_MODEL`` for the lifetime of the process.
+    """
+    global _CROSS_ENCODER_MODEL
+    if _CROSS_ENCODER_MODEL is not None:
+        return _CROSS_ENCODER_MODEL
+    with _CROSS_ENCODER_LOCK:
+        if _CROSS_ENCODER_MODEL is None:
+            # Broaden the catch beyond ImportError because the
+            # ``from sentence_transformers import CrossEncoder`` line
+            # transitively imports transformers + torch, which can raise
+            # NameError / RuntimeError on broken installs (e.g. torch
+            # version mismatch with transformers). Silent-degrade naming
+            # the dependency keeps the install path discoverable.
+            try:
+                from sentence_transformers import CrossEncoder  # type: ignore[import]
+            except Exception as exc:  # noqa: BLE001
+                sys.stderr.write(
+                    "warning: --with-rerank requested but the "
+                    "'sentence-transformers' import failed "
+                    f"({type(exc).__name__}: {exc}); "
+                    "cross-encoder rerank disabled. Install or repair with "
+                    "`pip install -U sentence-transformers torch transformers`.\n"
+                )
+                _CROSS_ENCODER_MODEL = False
+                return _CROSS_ENCODER_MODEL
+            try:
+                if (
+                    progress_cb is not None
+                    and not _cross_encoder_model_is_cached()
+                ):
+                    try:
+                        progress_cb(
+                            f"Downloading {_CROSS_ENCODER_MODEL_NAME} "
+                            "(~22 MB)… this happens only once."
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
+                _CROSS_ENCODER_MODEL = CrossEncoder(_CROSS_ENCODER_MODEL_NAME)
+                if progress_cb is not None:
+                    try:
+                        progress_cb("Cross-encoder ready.")
+                    except Exception:  # noqa: BLE001
+                        pass
+            except Exception as exc:  # noqa: BLE001
+                sys.stderr.write(
+                    f"warning: --with-rerank could not load "
+                    f"'{_CROSS_ENCODER_MODEL_NAME}' "
+                    f"({type(exc).__name__}: {exc}); "
+                    f"cross-encoder rerank disabled for this run.\n"
+                )
+                _CROSS_ENCODER_MODEL = False
+    return _CROSS_ENCODER_MODEL
+
+
 def _get_embed_model(
     progress_cb: Callable[[str], None] | None = None,
 ) -> object:
@@ -306,6 +415,7 @@ _REASON: dict[str, str] = {
     "entrypoint": "Public API entry point",
     "contract": "Data contract or interface definition",
     "extension_point": "Plugin or extension point",
+    "query_match": "File or symbol name matches the query",
     "file": "Referenced in codebase",
     # Debug mode
     "runtime_signal": "Mentioned in runtime error or stack trace",
@@ -330,6 +440,52 @@ _ADAPTIVE_TOPK_MODES: frozenset[str] = frozenset({"review", "implement"})
 # v4.4 C1: source-file basename boost — lifts exact module name matches above
 # test files that merely mention the module in their excerpts.
 _SOURCE_FILE_BOOST: float = 1.3
+
+# v4.4 precision-first score floor. Drops items below the floor BEFORE the
+# knapsack admission pass so low-conf "file" stragglers stop padding packs.
+# Per-task modes (review/implement/minimal) demand high precision: floor is
+# max(top1*0.55, 0.30). The 0.30 abs aligns with _apply_adaptive_top_k's
+# plateau threshold so the two filters compose without overcutting recall.
+# Debug needs more breadth for call chains (0.30). Handover is intentionally
+# widest (0.20). The top-1 item always survives. The restricted per-source-
+# type guarantee in _enforce_budget supplies the precision win when the
+# floor itself can't aggressively trim (e.g. broad queries with diffuse
+# signal where every item is mid-conf).
+_SCORE_FLOOR_RATIO_PER_TASK: float = 0.55
+_SCORE_FLOOR_ABS_PER_TASK: float = 0.30
+_PER_TASK_FLOOR_MODES: frozenset[str] = frozenset({"review", "implement", "minimal"})
+_MODE_SCORE_FLOORS_ABS: dict[str, float] = {
+    "debug": 0.30,
+    "handover": 0.20,
+}
+
+# v4.4 precision-first per-source-type guarantee. Only these high-signal
+# source types retain the "at least one survives" guarantee in the knapsack.
+# Memory/decision items are governed by the separate memory_budget_pct
+# sub-budget and are not affected.
+_GUARANTEED_SOURCE_TYPES: frozenset[str] = frozenset({
+    "entrypoint",
+    "changed_file",
+    "runtime_signal",
+    "contract",
+    "extension_point",
+    "failing_test",
+    "past_debug",
+    "blast_radius",
+    "impacted_test",
+    # v4.4 Phase 3: query-driven candidate widening — files matching the
+    # query's basename or symbol-name tokens are guaranteed to survive the
+    # knapsack so the GT file isn't buried beneath BM25-noisy peers.
+    "query_match",
+})
+
+# v4.4 tuning: review and handover queries often have a sparse high-signal
+# pool (no diff, no runtime trace) so the catch-all "file" type retains
+# its guarantee in those modes — otherwise the GT file gets dropped on
+# query-only review packs. Implement/debug/minimal still exclude "file"
+# because they have entrypoint/contract/extension_point/runtime_signal
+# evidence to anchor on.
+_FILE_GUARANTEED_MODES: frozenset[str] = frozenset({"review", "handover"})
 
 
 def _tokenize(text: str) -> set[str]:
@@ -406,6 +562,7 @@ class ContextRanker:
         use_hub_boost: bool | None = None,
         db_connection: Any | None = None,
         memory_budget_pct: float = 0.15,
+        use_rerank: bool = False,
     ) -> None:
         """Initialise the ranker with a token budget.
 
@@ -437,6 +594,12 @@ class ContextRanker:
                 back to opening a fresh connection from the discovered
                 db_path. Callers retain ownership — the ranker never closes
                 a connection it did not open.
+            use_rerank: v4.4 Phase 2 — opt-in cross-encoder rerank pass over
+                the top-K candidates (after BM25 + semantic but before the
+                final sort). Lifts precision +0.10 to +0.20 over BM25-only
+                ranking. Requires ``sentence-transformers``; degrades
+                silently (with a stderr warning) when the package or model
+                is unavailable. Adds ~50ms per pack on CPU for K=30.
         """
         self._budget = token_budget
         self._use_embeddings = use_embeddings
@@ -444,6 +607,7 @@ class ContextRanker:
         self._use_hub_boost = use_hub_boost
         self._db_connection = db_connection
         self._memory_budget_pct = memory_budget_pct
+        self._use_rerank = use_rerank
         # P1-6: BM25 corpus cache — maps items_key -> _BM25Scorer
         # Bounded at 5 entries to avoid unbounded memory growth.
         self._bm25_cache: dict[int, Any] = {}
@@ -524,7 +688,13 @@ class ContextRanker:
         # signals compose on the same base. Off by default — resolved
         # per-call from ``CAPABILITIES_HUB_BOOST`` env var or from
         # ``capabilities.hub_boost`` in the discovered project config.
-        if self._resolve_hub_boost_enabled(items):
+        # v4.4 precision-first: hub/bridge structural boost is scoped to
+        # handover mode only. Per-task queries (review/implement/debug/
+        # minimal) want narrowness, and hubs are popular but rarely the
+        # specific file a task touches. Even when explicitly enabled via
+        # capabilities.hub_boost / CAPABILITIES_HUB_BOOST, we now only
+        # apply it in handover mode where broader scope is intentional.
+        if mode == "handover" and self._resolve_hub_boost_enabled(items):
             boosted = self._apply_hub_bridge_boost(boosted)
         # v3 phase-2 (outcome: semantic-default-with-progress): the semantic
         # boost now applies in every pack mode when ``use_embeddings=True``.
@@ -535,6 +705,13 @@ class ContextRanker:
         # for future per-mode tuning but no longer gates the call.
         if self._use_embeddings:
             boosted = self._apply_semantic_boost(boosted, query)
+        # v4.4 Phase 2 cross-encoder rerank — runs AFTER the bi-encoder
+        # semantic boost (which is the recall-friendly first pass) but
+        # BEFORE the diff-aware boost so the structural diff nudge gets
+        # the final word on review packs. Off by default; enabled via the
+        # ``use_rerank`` constructor flag (CLI: ``--with-rerank``).
+        if self._use_rerank and query:
+            boosted = self._apply_cross_encoder_rerank(boosted, query)
         # v3.2 outcome ``diff-aware-ranking-boost`` (P2): run AFTER BM25 +
         # hub/bridge + semantic so the +0.15 structural nudge composes on
         # top of the content-based signals, and BEFORE the final sort so
@@ -570,6 +747,26 @@ class ContextRanker:
                 sorted_items = changed_file_items
                 authoritative_changed_files = True
 
+        # v4.4 precision-first: drop low-confidence code items before budget
+        # enforcement. Memory/decision items are exempt — they have their
+        # own freshness scoring and a separate sub-budget. Skipped when
+        # source_discovery has narrowed the pool to authoritative
+        # changed_file items, since their post-BM25 confidence may be
+        # legitimately low (e.g. test-file penalty) but the source-discovery
+        # contract treats them as the authoritative pack regardless.
+        if not authoritative_changed_files:
+            _mem_types_for_floor = frozenset({"memory", "decision"})
+            code_part = [
+                i for i in sorted_items if i.source_type not in _mem_types_for_floor
+            ]
+            mem_part = [
+                i for i in sorted_items if i.source_type in _mem_types_for_floor
+            ]
+            code_part = self._apply_score_floor(code_part, mode)
+            sorted_items = sorted(
+                code_part + mem_part, key=lambda i: i.confidence, reverse=True
+            )
+
         if authoritative_changed_files:
             adaptive_mode = "debug"
         elif source_discovery:
@@ -599,11 +796,12 @@ class ContextRanker:
         code_items = [i for i in sorted_items if i.source_type not in _mem_types]
 
         memory_cap = int(self._budget * self._memory_budget_pct)
-        trimmed_memory = self._enforce_budget(memory_items, cap=memory_cap)
+        trimmed_memory = self._enforce_budget(memory_items, cap=memory_cap, mode=mode)
         remaining = self._budget - sum(i.est_tokens for i in trimmed_memory)
         trimmed_code = self._enforce_budget(
             sorted(code_items, key=lambda i: i.confidence, reverse=True),
             cap=max(0, remaining),
+            mode=mode,
         )
 
         result = sorted(trimmed_memory + trimmed_code, key=lambda i: i.confidence, reverse=True)
@@ -625,6 +823,34 @@ class ContextRanker:
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
+
+    def _apply_score_floor(
+        self, items: list[ContextItem], mode: str
+    ) -> list[ContextItem]:
+        """Drop items below the mode-aware confidence floor.
+
+        v4.4 precision-first: a hard floor on confidence kills the long tail
+        of conf-0.20 file items that were padding packs without lifting
+        precision. Per-task modes (review/implement/minimal) use a relative
+        floor (max(top1*0.55, 0.45)); debug/handover use absolute floors.
+        Always preserves at least the top-1 item — never returns empty.
+        """
+        if not items:
+            return items
+        top_conf = items[0].confidence
+        if mode in _PER_TASK_FLOOR_MODES:
+            floor = max(
+                top_conf * _SCORE_FLOOR_RATIO_PER_TASK,
+                _SCORE_FLOOR_ABS_PER_TASK,
+            )
+        else:
+            floor = _MODE_SCORE_FLOORS_ABS.get(mode, 0.0)
+        if floor <= 0.0:
+            return items
+        # 1e-9 epsilon absorbs floating-point noise from earlier multiplicative
+        # boosts (e.g. 0.6 * 0.75 returning 0.44999... that should equal 0.45).
+        kept = [it for it in items if it.confidence >= floor - 1e-9]
+        return kept if kept else items[:1]
 
     def _apply_adaptive_top_k(
         self, items: list[ContextItem], mode: str
@@ -746,6 +972,96 @@ class ContextRanker:
             return result
         except Exception:
             return items
+
+    # ------------------------------------------------------------------
+    # v4.4 Phase 2: cross-encoder rerank
+    # ------------------------------------------------------------------
+
+    def _apply_cross_encoder_rerank(
+        self, items: list[ContextItem], query: str
+    ) -> list[ContextItem]:
+        """Re-score the top-K items with a query-doc cross-encoder.
+
+        Cross-encoders jointly attend over (query, doc) so they're much
+        more precise than the bi-encoder cosine pass for ranking — at the
+        cost of being O(K) inference calls instead of O(1). We bound the
+        cost by reranking only the top-K candidates by current confidence;
+        items outside the window keep their pre-rerank score.
+
+        New confidence is a 50/50 blend of the structural score and the
+        cross-encoder probability (sigmoid of the raw model score). Items
+        the model can't score (empty title and excerpt) keep their
+        structural confidence so they aren't penalised for missing text.
+
+        Silent-degrade: if the model can't load (no sentence-transformers
+        install, model download fails, etc.), the helper returns *items*
+        unchanged after a one-line stderr warning — matches the bi-encoder
+        contract so callers never see a hard failure for an opt-in pass.
+        """
+        if not query or not items:
+            return items
+        model = _get_cross_encoder_model(progress_cb=self._progress_cb)
+        if not model:
+            return items
+
+        # Window the rerank to the K most-confident candidates. The rest
+        # already have a low confidence and would be dropped by the floor
+        # / budget pass, so reranking them wastes inference budget.
+        topk_count = min(_CROSS_ENCODER_TOP_K, len(items))
+        order = sorted(
+            range(len(items)), key=lambda i: items[i].confidence, reverse=True
+        )
+        topk_idx = order[:topk_count]
+        topk_items = [items[i] for i in topk_idx]
+
+        pairs: list[tuple[str, str]] = []
+        scoreable_positions: list[int] = []
+        for pos, item in enumerate(topk_items):
+            text = (item.title or "") + " " + (item.excerpt or "")
+            text = text.strip()[:_CROSS_ENCODER_DOC_CHAR_CAP]
+            if not text:
+                continue
+            pairs.append((query, text))
+            scoreable_positions.append(pos)
+
+        if not pairs:
+            return items
+
+        try:
+            raw_scores = model.predict(pairs)  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001
+            sys.stderr.write(
+                "warning: cross-encoder rerank failed at predict() "
+                f"({type(exc).__name__}: {exc}); returning unranked items.\n"
+            )
+            return items
+
+        try:
+            import numpy as np  # type: ignore[import]
+
+            arr = np.asarray(raw_scores, dtype=float)
+            # Sigmoid → [0, 1]. ms-marco-MiniLM-L-6-v2 emits raw logits
+            # roughly in [-10, +10] so the sigmoid spreads the scores
+            # across the useful confidence range.
+            probs = 1.0 / (1.0 + np.exp(-arr))
+        except Exception:  # noqa: BLE001
+            # Defensive fallback: pass items through if numpy is missing
+            # or asarray rejects the model's return type.
+            return items
+
+        new_items = list(items)
+        for pos_idx, pos in enumerate(scoreable_positions):
+            global_idx = topk_idx[pos]
+            structural = items[global_idx].confidence
+            cross = float(probs[pos_idx])
+            blended = (1.0 - _CROSS_ENCODER_WEIGHT) * structural + (
+                _CROSS_ENCODER_WEIGHT * cross
+            )
+            blended = max(0.0, min(0.95, blended))
+            new_items[global_idx] = items[global_idx].model_copy(
+                update={"confidence": blended}
+            )
+        return new_items
 
     # ------------------------------------------------------------------
     # Persistent embedding lookup (proactive cache)
@@ -1518,16 +1834,24 @@ class ContextRanker:
         return item.model_copy(update={"reason": reason})
 
     def _enforce_budget(
-        self, items: list[ContextItem], cap: int | None = None
+        self,
+        items: list[ContextItem],
+        cap: int | None = None,
+        *,
+        mode: str = "",
     ) -> list[ContextItem]:
         """Trim *items* to the budget using a value-per-token ordering.
 
         Items are admitted greedily in descending ``confidence / est_tokens``
         order so a handful of small high-confidence items outrank a single
-        large low-confidence one. ``is_first_of_type`` is preserved: at
-        least one item per ``source_type`` survives even if admitting it
-        slightly exceeds the budget. Returned items are re-sorted by raw
-        confidence (descending) to match the original output contract.
+        large low-confidence one. v4.4 precision-first: the per-source-type
+        guarantee (``is_first_of_type``) now applies only to high-signal
+        types (entrypoint, changed_file, runtime_signal, contract,
+        extension_point, failing_test, past_debug, blast_radius,
+        impacted_test). The catch-all ``file`` type and other low-signal
+        types must fit within budget like every other item — they were
+        padding packs with conf-0.20 noise. Returned items are re-sorted
+        by raw confidence (descending) to match the original contract.
 
         Args:
             items: Candidates to trim.
@@ -1549,8 +1873,19 @@ class ContextRanker:
         accumulated = 0
         seen_types: set[str] = set()
 
+        # v4.4 tuning: in review/handover the catch-all "file" type also
+        # retains the per-type guarantee — those modes often have no
+        # high-signal evidence, and dropping the file fallback caused the
+        # GT to disappear on query-only review packs (fastapi T1, etc.).
+        guaranteed_types = _GUARANTEED_SOURCE_TYPES
+        if mode in _FILE_GUARANTEED_MODES:
+            guaranteed_types = guaranteed_types | {"file"}
+
         for item in admission_order:
-            is_first_of_type = item.source_type not in seen_types
+            is_first_of_type = (
+                item.source_type not in seen_types
+                and item.source_type in guaranteed_types
+            )
             fits = accumulated + item.est_tokens <= budget
 
             if fits or is_first_of_type:

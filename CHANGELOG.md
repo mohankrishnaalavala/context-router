@@ -9,6 +9,39 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.4.1] — 2026-04-27
+
+> Precision-first release. v4.4.0 was tagged as the carrying version; v4.4.1 is the first release where the full four-phase redesign (PRs #107–#110) is merged into `main`. See [`docs/release/v4.4.1-notes.md`](docs/release/v4.4.1-notes.md) for the long-form story and benchmark numbers.
+
+### Added
+- **Phase 1 — per-mode `mode_budgets` config** (`packages/contracts/src/contracts/config.py`). Defaults: `review`/`implement` 1500, `debug` 2500, `handover` 4000, `minimal` 800. Partial user overrides merge with defaults; `--max-tokens` still wins. Replaces the implicit 8000-everywhere default.
+- **Phase 1 — score floor in `_enforce_budget`** (`packages/ranking/src/ranking/ranker.py`). Drops items below `max(top1 * 0.55, 0.30)` for review/implement/minimal; 0.30 for debug; 0.20 for handover. Pre-knapsack noise filter.
+- **Phase 1 — restricted per-source-type guarantee.** New `_GUARANTEED_SOURCE_TYPES` frozenset (entrypoint, changed_file, runtime_signal, contract, extension_point, failing_test, past_debug, blast_radius, impacted_test, query_match). The catch-all `file` guarantee survives only in `review`/`handover` modes (`_FILE_GUARANTEED_MODES`).
+- **Phase 2 — `--with-rerank` / `--no-rerank` cross-encoder rerank** (`packages/ranking/src/ranking/ranker.py:_apply_cross_encoder_rerank`). Top-30 candidates rescored with `cross-encoder/ms-marco-MiniLM-L-6-v2` (~22 MB, lazy-downloaded), 50/50 blend with structural confidence, sigmoid-normalized. Falls back silently when sentence-transformers is missing. ~50 ms latency cost.
+- **Phase 3 — query-driven candidate widening** (`packages/core/src/core/orchestrator.py:_review_candidates`). When `changed_files` is empty, tokenizes the query (CamelCase + snake_case + stop-word filter) and admits files whose stems match. New `query_match` source type with confidence 0.55. No-op when an authoritative diff is present.
+- **Phase 3 — adaptive depth metadata.** Every pack now carries `metadata.depth` (narrow/standard/broad) and `metadata.depth_reason`. Classified from top-1 confidence + gap-to-top-2; thresholds locked at `_DEPTH_NARROW_TOP1=0.75`, `_DEPTH_NARROW_GAP=0.15`, `_DEPTH_STANDARD_TOP1=0.55`.
+- **Phase 4 — `files_read` positive feedback signal** (`packages/storage-sqlite/src/storage_sqlite/repositories.py:get_file_adjustments`). After ≥3 reports for a file, `files_read` adds **+0.03** to confidence. Combines additively with missing/noisy.
+- **Phase 4 — `pack.metadata.feedback_applied` audit list.** Each pack exposes `[{path, delta}, …]` for adjustments that shaped the visible items. Adjustments for files not selected are filtered out.
+- **Phase 5 — top-1-only symbol-body inlining** (`packages/core/src/core/orchestrator.py:_enrich_with_symbol_bodies`). Only the rank-1 symbol body is inlined; all other items ship as file pointers with `lines: [start, end]`. Largest single token-cost reduction in the release.
+- New tests: `packages/ranking/tests/test_score_floor.py` (11), `packages/ranking/tests/test_cross_encoder_rerank.py` (7 with `_StubCrossEncoder`), `packages/core/tests/test_phase3_widening_and_depth.py` (14), `packages/core/tests/test_phase4_feedback_metadata.py` (4).
+
+### Changed
+- Hub/bridge structural boost (`capabilities.hub_boost`) and community-cohesion +0.10 are now scoped to `handover` mode only — per-task modes get cleaner ranking signal.
+- Pack cache key (L1 TTLCache + L2 SQLite) now includes `use_rerank` so reranked packs aren't served from a non-rerank cached entry.
+
+### Performance (12-task tuning benchmark vs `code-review-graph`)
+- Avg F1: 0.378 → **0.611** (+62%)
+- Avg precision: 0.279 → **0.625** (+124%)
+- Avg tokens: 3,416 → **1,860** (−46%)
+- Rank-1 = GT file: 8/12 → **10/12**
+- Beats `code-review-graph` on 2/4 repos.
+
+### Deferred (documented as future phases in `docs/superpowers/plans/2026-04-27-performance-enhancements.md`)
+- Phase 6 — query-conditional feedback (cosine-weight per-query adjustments).
+- Phase 7 — "treat docs-only diffs as no-diff" heuristic for fastapi-style PRs.
+
+---
+
 ## [4.3.0] — 2026-04-25
 
 ### Added

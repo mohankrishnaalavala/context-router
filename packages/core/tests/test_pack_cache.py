@@ -46,6 +46,7 @@ class TestPackCache:
             False,
             orch._compute_items_hash(error_file=None, page=0, page_size=0),
             orch._canonical_hub_boost_flag(),
+            False,  # v4.4 Phase 2: use_rerank tail position
         )
         pack = _make_pack()
         orch._pack_cache[key] = pack
@@ -76,6 +77,14 @@ class TestPackCache:
                 (),
                 {
                     "token_budget": 8_000,
+                    # v4.4 precision-first: per-mode budgets seed the cache key.
+                    "mode_budgets": {
+                        "review": 1_500,
+                        "implement": 1_500,
+                        "debug": 2_500,
+                        "handover": 4_000,
+                        "minimal": 800,
+                    },
                     "modes": {},
                     "confidence_weights": {},
                     "capabilities": type("C", (), {"llm_summarization": False})(),
@@ -86,15 +95,17 @@ class TestPackCache:
         )
 
         # Recompute the key against the current DB mtime so the pre-populated
-        # entry is actually found.
+        # entry is actually found. v4.4: review mode now resolves to 1500
+        # tokens via config.mode_budgets["review"] instead of token_budget.
         key = (
             orch._compute_repo_id(),
             "review",
             __import__("hashlib").sha256(b"q").hexdigest(),
-            8_000,
+            1_500,
             False,
             orch._compute_items_hash(error_file=None, page=0, page_size=0),
             orch._canonical_hub_boost_flag(),
+            False,  # v4.4 Phase 2: use_rerank tail position
         )
         orch._pack_cache[key] = pack
 

@@ -136,7 +136,7 @@ class TestTokenBudgetPrecedence:
 
 
 class TestReviewModeDefaults:
-    """Review mode should default to a tight 5-item / 4000-token pack."""
+    """Review mode should default to a tight 5-item / 1500-token pack (v4.4)."""
 
     def test_defaults_apply_when_flags_omitted(self, tmp_path: Path) -> None:
         _init(tmp_path)
@@ -151,10 +151,11 @@ class TestReviewModeDefaults:
         )
         assert result.exit_code == 0, result.stdout + (result.stderr or "")
         # The stderr advisory names both defaults so the user can repro.
+        # v4.4: review default tightened from 4000 → 1500 tokens.
         stderr = result.stderr or ""
         assert "review-mode defaults applied" in stderr
         assert "--top-k 5" in stderr
-        assert "--max-tokens 4000" in stderr
+        assert "--max-tokens 1500" in stderr
         # Post-rank cap cannot exceed 5 items regardless of candidate count.
         payload = json.loads(result.stdout)
         assert len(payload["selected_items"]) <= 5

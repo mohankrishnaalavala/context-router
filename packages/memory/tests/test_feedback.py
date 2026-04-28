@@ -131,6 +131,44 @@ class TestGetFileAdjustments:
         # +0.05 - 0.10 = -0.05
         assert adj["utils.py"] == pytest.approx(-0.05)
 
+    # ------------------------------------------------------------------
+    # v4.4 Phase 4: files_read positive signal
+    # ------------------------------------------------------------------
+
+    def test_files_read_below_threshold_no_adjustment(self, store: FeedbackStore):
+        """Two read reports — below the default min_count=3 threshold."""
+        for _ in range(2):
+            store.add(PackFeedback(pack_id="p", files_read=["good.py"]))
+        adj = store.get_file_adjustments(min_count=3)
+        assert "good.py" not in adj
+
+    def test_files_read_positive_boost_above_threshold(self, store: FeedbackStore):
+        """Three read reports → +0.03 positive signal (smaller than missing)."""
+        for _ in range(3):
+            store.add(PackFeedback(pack_id="p", files_read=["good.py"]))
+        adj = store.get_file_adjustments(min_count=3)
+        assert "good.py" in adj
+        assert adj["good.py"] == pytest.approx(0.03)
+
+    def test_files_read_combines_with_noisy(self, store: FeedbackStore):
+        """A frequently-read file that is also flagged noisy nets to a small
+        negative — explicit noisy outweighs implicit-read."""
+        for _ in range(5):
+            store.add(PackFeedback(pack_id="p", files_read=["x.py"]))
+        for _ in range(3):
+            store.add(PackFeedback(pack_id="p", noisy=["x.py"]))
+        adj = store.get_file_adjustments(min_count=3)
+        # +0.03 (read) - 0.10 (noisy) = -0.07
+        assert adj["x.py"] == pytest.approx(-0.07)
+
+    def test_files_read_combines_with_missing(self, store: FeedbackStore):
+        """Read + missing both lift the file confidence."""
+        for _ in range(3):
+            store.add(PackFeedback(pack_id="p", files_read=["y.py"], missing=["y.py"]))
+        adj = store.get_file_adjustments(min_count=3)
+        # +0.05 (missing) + +0.03 (read) = +0.08
+        assert adj["y.py"] == pytest.approx(0.08)
+
 
 class TestFeedbackStoreScopes:
     def test_add_applies_store_repo_scope(self, db: Database):
