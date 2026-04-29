@@ -1,0 +1,48 @@
+# Holdout fixtures — kubernetes/kubernetes (197K symbols, polyglot).
+# NEVER tune the ranker against these tasks.
+# Clone: git clone https://github.com/kubernetes/kubernetes.git
+#
+# Three tasks chosen to exercise:
+#   - the >10K-symbol cap (no diff anchor case, query-only anchor)
+#   - cross-package retrieval (review with --pre-fix anchor)
+#   - source-prior multiplier (review at the fix SHA — easy config)
+#
+# Run all three anchors per task (single SHA list, three sweeps):
+#   bash benchmark/run-holdout.sh --repo kubernetes=/path/to/k8s --anchor fix-sha
+#   bash benchmark/run-holdout.sh --repo kubernetes=/path/to/k8s --anchor parent-sha-with-diff
+#   bash benchmark/run-holdout.sh --repo kubernetes=/path/to/k8s --anchor query-only
+#
+# TODO(v4.4.4 Phase 2): the SHAs below are placeholders. The plan
+# (`.handover/work/v4.4.4-plan.md`) refers to "the 3 k8s SHAs from prior
+# session" — those numbers were not committed before the prior session
+# was interrupted. Before publishing benchmark numbers, paste the 3 real
+# SHAs + ground-truth files here. Until that happens, the runner skips
+# tasks with `sha: TODO_…` (see PRECONDITION below).
+#
+# PRECONDITION: every task with a `sha: TODO_…` value must be filled in
+# before running this fixture. The runner will fail fast on unresolved
+# SHAs (git checkout TODO_… returns non-zero) — not a silent skip.
+tasks:
+  - id: k8s-t1
+    sha: TODO_K8S_SHA_1
+    description: "fix(kubelet/dra): error handling in unprepareResources (placeholder — fill from prior session)"
+    ground_truth_files:
+      - pkg/kubelet/cm/dra/manager.go
+    cr_query: "kubelet dra unprepareResources error handling"
+    cr_mode: review
+
+  - id: k8s-t2
+    sha: TODO_K8S_SHA_2
+    description: "(placeholder — fill from prior session)"
+    ground_truth_files:
+      - TODO_K8S_GT_2
+    cr_query: "TODO_K8S_QUERY_2"
+    cr_mode: review
+
+  - id: k8s-t3
+    sha: TODO_K8S_SHA_3
+    description: "(placeholder — fill from prior session)"
+    ground_truth_files:
+      - TODO_K8S_GT_3
+    cr_query: "TODO_K8S_QUERY_3"
+    cr_mode: review

@@ -32,6 +32,7 @@ REPO_PATHS=()
 ORIG_REFS=()
 OUTPUT_DIR="${REPO_ROOT}/docs/benchmarks/holdout-runs/$(date +%Y-%m-%d)"
 MODE_OVERRIDE=""
+ANCHOR="fix-sha"
 
 usage() {
   cat <<EOF
@@ -47,6 +48,20 @@ Optional:
                           Default: docs/benchmarks/holdout-runs/<today>
   --mode-override <mode>  Force every task to use a single mode (debug,
                           implement, review, handover). Default: per-task.
+  --anchor <kind>         How retrieval is anchored. One of:
+                            fix-sha            (default; checkout fix SHA,
+                                                use task's cr_mode — easy
+                                                config, the input contains
+                                                the answer for review tasks)
+                            parent-sha-with-diff (checkout fix-SHA^, force
+                                                review mode, pass --pre-fix
+                                                <fix-sha> so the pack is
+                                                ranked from the diff —
+                                                fair config)
+                            query-only         (checkout fix-SHA^, force
+                                                implement mode with the
+                                                task's cr_query and no
+                                                diff anchor — hard config)
   -h, --help              Show this help and exit.
 EOF
 }
@@ -64,12 +79,18 @@ while [[ $# -gt 0 ]]; do
       shift 2 ;;
     --output-dir)      [[ $# -ge 2 ]] || die "--output-dir needs a value"; OUTPUT_DIR="$2"; shift 2 ;;
     --mode-override)   [[ $# -ge 2 ]] || die "--mode-override needs a value"; MODE_OVERRIDE="$2"; shift 2 ;;
+    --anchor)          [[ $# -ge 2 ]] || die "--anchor needs a value"; ANCHOR="$2"; shift 2 ;;
     -h|--help)         usage; exit 0 ;;
     *)                 echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
 [[ ${#REPO_NAMES[@]} -ge 1 ]] || die "at least one --repo NAME=PATH is required"
+
+case "${ANCHOR}" in
+  fix-sha|parent-sha-with-diff|query-only) ;;
+  *) die "--anchor must be one of: fix-sha | parent-sha-with-diff | query-only (got '${ANCHOR}')" ;;
+esac
 
 # Validate every repo + tasks.yaml + remember original ref.
 for i in "${!REPO_NAMES[@]}"; do
@@ -99,6 +120,7 @@ command -v jq      >/dev/null 2>&1 || die "jq not on PATH"
 mkdir -p "${OUTPUT_DIR}"
 
 echo "output-dir:     ${OUTPUT_DIR}"
+echo "anchor:         ${ANCHOR}"
 for i in "${!REPO_NAMES[@]}"; do
   echo "repo[${i}]: ${REPO_NAMES[$i]} = ${REPO_PATHS[$i]}"
 done
@@ -157,11 +179,36 @@ while IFS=$'\t' read -r NAME ROOT TID SHA QUERY MODE; do
 
   init_repo_once "${ROOT}"
 
-  echo "── ${TID} ── ${NAME} sha=${SHA:0:10} mode=${MODE}"
-  echo "   query: ${QUERY}"
+  # Resolve checkout target + pack invocation per anchor.
+  # Effective mode is what we actually pass to context-router pack; it may
+  # override the per-task cr_mode when anchor demands a specific mode.
+  CHECKOUT_REF="${SHA}"
+  EFFECTIVE_MODE="${MODE}"
+  PACK_EXTRA=()
+  case "${ANCHOR}" in
+    fix-sha)
+      # Default — checkout the fix and use the task's mode as-is.
+      :
+      ;;
+    parent-sha-with-diff)
+      # Fair retrieval test: working tree pre-fix, --pre-fix anchors the
+      # ranker on the actual change-set diff (sha^..sha).
+      CHECKOUT_REF="${SHA}^"
+      EFFECTIVE_MODE="review"
+      PACK_EXTRA=(--pre-fix "${SHA}")
+      ;;
+    query-only)
+      # Hard retrieval test: pre-fix tree, no diff anchor, query only.
+      CHECKOUT_REF="${SHA}^"
+      EFFECTIVE_MODE="implement"
+      ;;
+  esac
 
-  if ! git -C "${ROOT}" checkout --quiet "${SHA}" 2>/dev/null; then
-    echo "   error: cannot checkout ${SHA} in ${ROOT}" >&2
+  echo "── ${TID} ── ${NAME} sha=${SHA:0:10} anchor=${ANCHOR} mode=${EFFECTIVE_MODE}"
+  echo "   checkout: ${CHECKOUT_REF}  query: ${QUERY}"
+
+  if ! git -C "${ROOT}" checkout --quiet "${CHECKOUT_REF}" 2>/dev/null; then
+    echo "   error: cannot checkout ${CHECKOUT_REF} in ${ROOT}" >&2
     exit 1
   fi
 
@@ -173,10 +220,11 @@ while IFS=$'\t' read -r NAME ROOT TID SHA QUERY MODE; do
   CR_OUT="${OUTPUT_DIR}/cr_${TID}.json"
   echo "   [context-router pack] -> ${CR_OUT}"
   if ! "${CR[@]}" pack \
-        --mode "${MODE}" \
+        --mode "${EFFECTIVE_MODE}" \
         --query "${QUERY}" \
         --project-root "${ROOT}" \
         --json \
+        "${PACK_EXTRA[@]}" \
         >"${CR_OUT}" 2>/dev/null; then
     echo "   error: context-router pack failed for ${TID}" >&2
     exit 1
@@ -192,14 +240,16 @@ for name in "${REPO_NAMES[@]}"; do
   SCORE_ARGS+=("${name}")
 done
 
+export CR_BENCHMARK_ANCHOR="${ANCHOR}"
 python3 - "${SCORE_ARGS[@]}" <<'PY'
-import json, sys
+import json, os, sys
 from pathlib import Path
 import yaml
 
 script_dir = Path(sys.argv[1])
 out_dir    = Path(sys.argv[2])
 repo_names = sys.argv[3:]
+anchor     = os.environ.get("CR_BENCHMARK_ANCHOR", "fix-sha")
 REPOS = [(name, script_dir / "holdout" / name / "tasks.yaml") for name in repo_names]
 
 def score_one(pred_paths, gt_paths):
@@ -250,10 +300,19 @@ for name, yaml_path in REPOS:
         if tokens is None:
             tokens = sum(it.get("est_tokens", 0) for it in items)
         precision, recall, f1, rank1 = score_one(pred_paths, gt)
+        cr_mode = task.get("cr_mode", "debug")
+        if anchor == "parent-sha-with-diff":
+            effective_mode = "review"
+        elif anchor == "query-only":
+            effective_mode = "implement"
+        else:
+            effective_mode = cr_mode
         per_task.append({
             "repo": name,
             "task_id": tid,
-            "mode": task.get("cr_mode", "debug"),
+            "anchor": anchor,
+            "mode": cr_mode,
+            "effective_mode": effective_mode,
             "ground_truth_files": gt,
             "predicted_top5": pred_paths[:5],
             "n_items": len(items),
@@ -269,7 +328,7 @@ def agg(rows, key):
     vals = [r[key] for r in rows if r[key] is not None]
     return (sum(vals) / len(vals)) if vals else 0.0
 
-summary = {"per_task": per_task, "by_repo": {}, "overall": {}}
+summary = {"anchor": anchor, "per_task": per_task, "by_repo": {}, "overall": {}}
 for name, _ in REPOS:
     rows = [r for r in per_task if r["repo"] == name]
     summary["by_repo"][name] = {
@@ -296,6 +355,8 @@ def fmt(x, n=3):
 
 lines = []
 lines.append("# context-router holdout benchmark")
+lines.append("")
+lines.append(f"**Anchor:** `{anchor}`")
 lines.append("")
 lines.append("## Aggregate")
 lines.append("")
