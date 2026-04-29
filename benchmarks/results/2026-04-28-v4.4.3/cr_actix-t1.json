@@ -1,0 +1,110 @@
+{
+  "id": "45a4d876-1dca-4857-977d-2b88178d9515",
+  "mode": "debug",
+  "query": "actix-files panics when serving a file with mtime before the unix epoch",
+  "selected_items": [
+    {
+      "id": "e2c90f7f-f8a3-4f70-9bd2-ea1144b9625d",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/named.rs",
+      "title": "file (named.rs)",
+      "excerpt": "fn file(...)",
+      "reason": "Modified `file` lines 255-257",
+      "confidence": 0.6096460549411975,
+      "est_tokens": 48,
+      "freshness": "2026-04-28T14:24:25.737859Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "file",
+      "duplicates_hidden": 32,
+      "symbol_body": "    pub fn file(&self) -> &File {\n        &self.file\n    }",
+      "symbol_lines": [
+        255,
+        257
+      ]
+    },
+    {
+      "id": "4a233d3a-f0e3-4263-bf22-68985cc5a5a3",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/tests/pre_epoch_mtime.rs",
+      "title": "serves_file_with_pre_epoch_mtime (pre_epoch_mtime.rs)",
+      "excerpt": "fn serves_file_with_pre_epoch_mtime(...)",
+      "reason": "Modified `serves_file_with_pre_epoch_mtime` lines 12-49",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 61,
+      "freshness": "2026-04-28T14:24:25.743776Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "serves_file_with_pre_epoch_mtime",
+      "duplicates_hidden": 0,
+      "symbol_body": null,
+      "symbol_lines": [
+        12,
+        49
+      ]
+    }
+  ],
+  "total_est_tokens": 109,
+  "baseline_est_tokens": 209976,
+  "reduction_pct": 99.9,
+  "created_at": "2026-04-28T14:24:26.847432Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 0,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "e2c90f7f-f8a3-4f70-9bd2-ea1144b9625d",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/named.rs",
+      "title": "file (named.rs)",
+      "excerpt": "fn file(...)",
+      "reason": "Modified `file` lines 255-257",
+      "confidence": 0.6096460549411975,
+      "est_tokens": 48,
+      "freshness": "2026-04-28T14:24:25.737859Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "file",
+      "duplicates_hidden": 32,
+      "symbol_body": "    pub fn file(&self) -> &File {\n        &self.file\n    }",
+      "symbol_lines": [
+        255,
+        257
+      ]
+    },
+    {
+      "id": "4a233d3a-f0e3-4263-bf22-68985cc5a5a3",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/tests/pre_epoch_mtime.rs",
+      "title": "serves_file_with_pre_epoch_mtime (pre_epoch_mtime.rs)",
+      "excerpt": "fn serves_file_with_pre_epoch_mtime(...)",
+      "reason": "Modified `serves_file_with_pre_epoch_mtime` lines 12-49",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 61,
+      "freshness": "2026-04-28T14:24:25.743776Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "serves_file_with_pre_epoch_mtime",
+      "duplicates_hidden": 0,
+      "symbol_body": null,
+      "symbol_lines": [
+        12,
+        49
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 109,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

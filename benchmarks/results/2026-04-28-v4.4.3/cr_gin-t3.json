@@ -1,0 +1,110 @@
+{
+  "id": "ef19237c-1872-4f26-8bbd-2fcf96504a7a",
+  "mode": "debug",
+  "query": "form binding fails on empty slice or array fields",
+  "selected_items": [
+    {
+      "id": "d59f839a-c82d-4f7e-9fae-a4d29edb4f3a",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping.go",
+      "title": "setArray (form_mapping.go)",
+      "excerpt": "func setArray(...)",
+      "reason": "Modified `setArray` lines 457-465",
+      "confidence": 0.8560675797544992,
+      "est_tokens": 51,
+      "freshness": "2026-04-28T14:24:11.663499Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "setArray",
+      "duplicates_hidden": 25,
+      "symbol_body": "func setArray(vals []string, value reflect.Value, field reflect.StructField) error {\n\tfor i, s := range vals {\n\t\terr := setWithProperType(s, value.Index(i), field)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}",
+      "symbol_lines": [
+        457,
+        465
+      ]
+    },
+    {
+      "id": "f2962b16-7594-40c8-ac43-6efe0fe2f4dd",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping_test.go",
+      "title": "TestMappingArray (form_mapping_test.go)",
+      "excerpt": "func TestMappingArray(...)",
+      "reason": "Modified `TestMappingArray` lines 264-285",
+      "confidence": 0.47454392684042457,
+      "est_tokens": 54,
+      "freshness": "2026-04-28T14:24:11.666047Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "TestMappingArray",
+      "duplicates_hidden": 45,
+      "symbol_body": null,
+      "symbol_lines": [
+        264,
+        285
+      ]
+    }
+  ],
+  "total_est_tokens": 105,
+  "baseline_est_tokens": 77143,
+  "reduction_pct": 99.9,
+  "created_at": "2026-04-28T14:24:12.013755Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 2 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 0,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "d59f839a-c82d-4f7e-9fae-a4d29edb4f3a",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping.go",
+      "title": "setArray (form_mapping.go)",
+      "excerpt": "func setArray(...)",
+      "reason": "Modified `setArray` lines 457-465",
+      "confidence": 0.8560675797544992,
+      "est_tokens": 51,
+      "freshness": "2026-04-28T14:24:11.663499Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "setArray",
+      "duplicates_hidden": 25,
+      "symbol_body": "func setArray(vals []string, value reflect.Value, field reflect.StructField) error {\n\tfor i, s := range vals {\n\t\terr := setWithProperType(s, value.Index(i), field)\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t}\n\treturn nil\n}",
+      "symbol_lines": [
+        457,
+        465
+      ]
+    },
+    {
+      "id": "f2962b16-7594-40c8-ac43-6efe0fe2f4dd",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping_test.go",
+      "title": "TestMappingArray (form_mapping_test.go)",
+      "excerpt": "func TestMappingArray(...)",
+      "reason": "Modified `TestMappingArray` lines 264-285",
+      "confidence": 0.47454392684042457,
+      "est_tokens": 54,
+      "freshness": "2026-04-28T14:24:11.666047Z",
+      "tags": [],
+      "risk": "none",
+      "flow": "TestMappingArray",
+      "duplicates_hidden": 45,
+      "symbol_body": null,
+      "symbol_lines": [
+        264,
+        285
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 105,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

@@ -26,7 +26,7 @@ Run this checklist before every release. Each item maps to a step below.
 - [ ] **CHANGELOG updated** — move `[Unreleased]` items to a versioned section
 - [ ] **Version bumped** — all `pyproject.toml` files updated (see "Bump version" below)
 - [ ] **README updated** — feature table, install instructions, any new commands documented
-- [ ] **Benchmark results updated** — run `context-router benchmark run` and update `BENCHMARK_RESULTS.md`
+- [ ] **Benchmark results updated** — run `bash benchmark/run-holdout.sh ...` (and/or `context-router benchmark run`) and update `BENCHMARKS.md` + `benchmarks/results/<date>-<version>/`
 - [ ] **No TODO/FIXME left in release-critical paths** — `grep -r "TODO\|FIXME" packages/core packages/contracts packages/ranking`
 
 ### Release

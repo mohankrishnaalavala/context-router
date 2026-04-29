@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -10,8 +11,14 @@ import typer
 
 setup_app = typer.Typer(help="Configure AI coding agents to use context-router.")
 
-# Sentinel written into each managed block so we never double-append.
-_MARKER = "<!-- context-router: setup -->"
+# Versioned sentinels — bracket every managed block so --upgrade can replace
+# in-place without disturbing surrounding user-authored content.
+_MARKER_OPEN = "<!-- context-router: setup v2 -->"
+_MARKER_CLOSE = "<!-- /context-router: setup v2 -->"
+
+# Earlier marker formats kept here so --upgrade can detect+replace legacy
+# (single-line sentinel) blocks shipped by v4.4.2 and earlier.
+_LEGACY_MARKERS = ("<!-- context-router: setup -->",)
 
 # ── MCP server entry ────────────────────────────────────────────────────────
 
@@ -22,123 +29,270 @@ _MCP_ENTRY: dict = {
 }
 
 # ── Instruction blocks ───────────────────────────────────────────────────────
+#
+# Every block opens with `_MARKER_OPEN` and closes with `_MARKER_CLOSE` so
+# `setup --upgrade` can replace exactly the managed section.
+#
+# Each block enforces the same five-rule contract — the format differs per
+# agent culture (Claude/AGENTS.md/Codex tolerate long markdown; Copilot,
+# Cursor, Windsurf prefer compact rules because their instruction files
+# are truncated aggressively).
 
-_CLAUDE_MD_BLOCK = """\
+_CLAUDE_MD_BLOCK = f"""\
 
-## context-router <!-- context-router: setup -->
+## context-router {_MARKER_OPEN}
 
-Use context-router MCP tools for every coding task — it selects the minimum relevant context
-from the indexed codebase so you work with ranked, token-budgeted files instead of grepping.
+context-router is the MCP server registered in `.mcp.json`. It indexes
+this repo (symbols, edges, communities, freshness) and persists project
+memory (observations + decisions) under `.context-router/memory/`. Use
+its MCP tools for every coding task — pack first, grep last. **The
+rules below are non-negotiable in this repo.**
 
-### When to use context-router FIRST
-- **Starting any task**: `get_context_pack(mode="implement", query="your task")`
-- **Debugging**: `get_debug_pack(query="error description")`
-- **Resuming work**: `get_context_pack(mode="handover")` + `search_memory(query="...")`
-- **Looking up decisions**: `get_decisions(query="...")`
+### Session checklist (run in order)
 
-### Key MCP tools
-| Tool | Use when |
-|------|----------|
-| `get_context_pack` | Starting review / implement / handover task |
-| `get_debug_pack` | Debugging a failure |
-| `search_memory` | Finding past observations |
-| `get_decisions` | Looking up architectural decisions |
-| `save_observation` | Persisting task learnings after completion |
+1. `search_memory({{query}})` with terms from the user's request.
+2. `get_decisions({{query}})` if the task touches an architectural area.
+3. `get_context_pack({{mode, query}})` (or `get_debug_pack` for a
+   failure, `get_minimal_context` for triage). Capture the `id` from
+   the response — you will need it for `record_feedback`.
+4. Read the returned items. **Do NOT** Grep/Glob the repo.
+5. Make the change.
+6. `save_observation({{summary, task_type, files_touched}})` for any
+   non-trivial learning (skip the per-edit auto-save — see hooks below).
+7. `save_decision({{title, decision, context, consequences, status}})`
+   if you chose a library, pattern, or schema. Use
+   `mark_decision_superseded` when reversing a prior decision.
+8. `record_feedback({{pack_id, useful, missing, noisy}})` using the
+   `pack_id` from step 3.
 
-### Workflow
-1. `get_context_pack` → ranked files for the task (token-budgeted starting point)
-2. Read selected items before touching code
-3. After task: `save_observation(summary="...", task_type="...", files_touched=[...])`
+### Five rules — MUST follow
+
+1. You **MUST** call `search_memory` before exploring an unfamiliar area.
+2. You **MUST** call `get_context_pack` / `get_debug_pack` /
+   `get_minimal_context` before reading files. **Multi-file Grep/Glob
+   without a prior pack call is a contract violation in this repo.**
+   Single-file `Read` calls on paths returned by a pack are fine.
+3. You **MUST** call `save_observation` after non-trivial work (bug
+   root-causes, perf wins, gotchas, design rationale). **MUST NOT**
+   save observations for trivial work (typos, formatter runs, dep
+   bumps).
+4. You **MUST** call `save_decision` for library / pattern / schema
+   choices, and `mark_decision_superseded` when reversing.
+5. You **MUST** call `record_feedback` after consuming a pack — the
+   `pack_id` is the `id` field on the pack response.
+
+### Hooks coexistence policy
+
+If the post-commit hook is installed (check `.git/hooks/post-commit`),
+commits auto-save an observation — you do **not** need to manually
+save per commit. If the Claude Code PostToolUse hook is registered
+(check `.claude/settings.json` for `hooks.PostToolUse` containing
+`context-router memory capture`), every Edit/Write auto-saves an
+observation — you **MUST NOT** call `save_observation` per edit, only
+for synthesis (root causes, abandoned approaches, gotchas).
+
+### Tool → trigger map
+
+| Tool | Call when |
+|---|---|
+| `search_memory` | Session start, before exploring an unfamiliar area |
+| `get_decisions` | Before re-deciding an architectural choice |
+| `get_context_pack` | Starting a review / implement / handover task |
+| `get_debug_pack` | Tracing a failure, parsing an error log |
+| `get_minimal_context` | Quick triage — ≤5 items + `next_tool_suggestion` |
+| `get_context_summary` | Compact recap of the last pack |
+| `generate_handover` | Onboarding / sprint summary |
+| `explain_selection` | Understanding why an item was selected |
+| `save_observation` | After bug fixes, perf wins, gotchas, mid-session learnings |
+| `save_decision` | After library / pattern / schema choices |
+| `mark_decision_superseded` | When reversing a prior decision |
+| `record_feedback` | After consuming any pack (use the pack `id`) |
+| `get_call_chain` | Walking call edges from a seed symbol |
+| `suggest_next_files` | Planning the next file to open |
+| `list_memory` / `build_index` / `update_index` | Housekeeping |
+
+### When in doubt
+
+Call `get_minimal_context({{query}})` first — it returns ≤5 items plus
+a `next_tool_suggestion` that names the right follow-up tool.
+
+See [`AGENT_GUIDE.md`](AGENT_GUIDE.md) for the full feature reference.
+{_MARKER_CLOSE}
 """
 
-_COPILOT_BLOCK = """\
+_COPILOT_BLOCK = f"""\
 
-<!-- context-router: setup -->
+{_MARKER_OPEN}
 ## context-router
 
-Before starting any coding task, get a ranked context pack:
+These rules are **non-negotiable** in this repo. Use the context-router MCP tools — pack first, grep last.
 
-```bash
-context-router pack --mode implement --query "your task description"
-# modes: review | implement | debug | handover
-```
+**Session checklist (MUST run in order):**
+1. `search_memory({{query}})` — before exploring.
+2. `get_decisions({{query}})` — if the task touches an architectural area.
+3. `get_context_pack({{mode, query}})` (or `get_debug_pack` / `get_minimal_context`) — capture the `id` from the response.
+4. Read the returned items. **MUST NOT** Grep/Glob multiple files without a prior pack call.
+5. `save_observation({{summary, task_type, files_touched}})` — after non-trivial work (skip per-edit if PostToolUse / post-commit hook is installed; reserve for synthesis like root causes and gotchas).
+6. `save_decision({{title, decision, context, status}})` — after lib / pattern / schema choices; `mark_decision_superseded` when reversing.
+7. `record_feedback({{pack_id, useful, missing, noisy}})` — `pack_id` is the `id` from step 3.
 
-This indexes code structure, dependency edges, and project memory to surface the most relevant
-files within a token budget (typically 64–80% token reduction vs naive full-codebase prompts).
-Use the output to guide your edits instead of reading the whole repo.
+**Modes:** `review` (1500 tok) · `implement` (1500) · `debug` (2500) · `handover` (4000) · `minimal` (800).
+
+**MUST NOT:** multi-file Grep/Glob without first calling a pack tool. Save observations for trivial work (typos, formatter runs).
+
+**When unsure which tool:** call `get_minimal_context({{query}})` — it returns a `next_tool_suggestion`.
+
+CLI fallback (no MCP): `context-router pack --mode <mode> --query "..."`. Full reference: `AGENT_GUIDE.md`.
+{_MARKER_CLOSE}
 """
 
-_CURSOR_BLOCK = """\
+_CURSOR_BLOCK = f"""\
 
-# context-router <!-- context-router: setup -->
+# context-router {_MARKER_OPEN}
 
-Before starting any task, run context-router to get a ranked context pack:
+context-router is registered as an MCP server. These rules are non-negotiable in this repo — pack first, grep last.
 
-    context-router pack --mode implement --query "your task description"
-    # modes: review | implement | debug | handover
+Session checklist (MUST run in order):
+1. ALWAYS call `search_memory(query)` before exploring a new area.
+2. ALWAYS call `get_decisions(query)` if the task touches an architectural area.
+3. ALWAYS call `get_context_pack(mode, query)` (or `get_debug_pack` for failures, `get_minimal_context` for triage) before reading files. Capture the `id` from the response.
+4. Read the returned items. MUST NOT Grep/Glob multiple files without a prior pack call. Single-file reads on pack-returned paths are fine.
+5. After non-trivial work, call `save_observation(summary, task_type, files_touched)`. If `.git/hooks/post-commit` or `.claude/settings.json` PostToolUse hook is installed, those auto-save — skip per-edit saves and reserve manual saves for synthesis (root causes, gotchas, abandoned approaches).
+6. After choosing a library, pattern, or schema, call `save_decision(title, decision, context, status)`. Reversing? `mark_decision_superseded`.
+7. After consuming a pack, call `record_feedback(pack_id, useful, missing, noisy)` using the pack `id` from step 3.
 
-The output lists the top-ranked files with confidence scores and source types
-(changed_file, blast_radius, failing_test, entrypoint, etc.). Use these as your
-starting point — context-router selects the minimum relevant context within a
-configurable token budget.
+Pack modes: review (1500 tok), implement (1500), debug (2500), handover (4000), minimal (800).
 
-For debug tasks, pass the error file for better signal:
+Other MCP tools you may need: `generate_handover` (sprint summary), `explain_selection` (why was this picked), `get_call_chain` (downstream callees), `suggest_next_files` (next file to open), `get_context_summary` (compact recap).
+
+When unsure which tool: call `get_minimal_context(query)` — its `next_tool_suggestion` field names the right follow-up.
+
+CLI fallback if MCP unavailable:
     context-router pack --mode debug --query "error description" --error-file error.log
+    context-router memory capture "what was learned" --task-type debug --files "src/foo.py"
+
+MUST NOT grep/glob the whole repo when an MCP pack tool would answer the same question. See AGENT_GUIDE.md for the full reference.
+{_MARKER_CLOSE}
 """
 
-_WINDSURF_BLOCK = """\
+_WINDSURF_BLOCK = f"""\
 
-# context-router <!-- context-router: setup -->
+# context-router {_MARKER_OPEN}
 
-Use context-router to get ranked, token-budgeted context before any coding task:
+context-router is registered as an MCP server. These rules are non-negotiable in this repo — pack first, grep last.
 
-    context-router pack --mode implement --query "your task description"
-    # modes: review | implement | debug | handover
+Session checklist (MUST run in order):
+1. `search_memory(query)` — before exploring a new area.
+2. `get_decisions(query)` — if the task touches an architectural area.
+3. `get_context_pack(mode, query)` / `get_debug_pack(query)` / `get_minimal_context(query)` — before reading files. Capture the `id` from the response.
+4. Read the returned items. MUST NOT Grep/Glob multiple files without a prior pack call.
+5. `save_observation(summary, task_type, files_touched)` — after non-trivial work. If a post-commit or PostToolUse hook is installed (check `.git/hooks/post-commit` and `.claude/settings.json`), those auto-save — skip per-edit saves; reserve manual saves for synthesis (root causes, gotchas, abandoned approaches).
+6. `save_decision(title, decision, context, status)` — after lib/pattern/schema choices; `mark_decision_superseded` when reversing.
+7. `record_feedback(pack_id, useful, missing, noisy)` — `pack_id` is the `id` from step 3.
 
-This surfaces the most structurally relevant files from the indexed codebase so you work with
-focused context rather than the whole project. Typical reduction: 64–80% fewer tokens vs naive.
+Pack modes: review (1500 tok), implement (1500), debug (2500), handover (4000), minimal (800).
 
-After completing a task, save what you learned for future sessions:
-    context-router memory capture "Brief summary" --task-type implement --files "file1.py"
+Optional flags (need the `[semantic]` extra installed): `--with-rerank` for cross-encoder precision, `--with-semantic` for bi-encoder cosine.
+
+Other MCP tools: `generate_handover`, `explain_selection`, `get_call_chain`, `suggest_next_files`, `get_context_summary`.
+
+When unsure which tool to call: `get_minimal_context(query)` returns a `next_tool_suggestion`.
+
+CLI fallback:
+    context-router pack --mode implement --query "your task" --with-rerank
+    context-router memory capture "summary" --task-type implement --files "path1 path2"
+
+MUST NOT grep/glob the whole repo when an MCP pack tool would answer the same question. Full reference: AGENT_GUIDE.md.
+{_MARKER_CLOSE}
 """
 
-_AGENTS_MD_BLOCK = """\
+_AGENTS_MD_BLOCK = f"""\
 
-## context-router <!-- context-router: setup -->
+## context-router {_MARKER_OPEN}
 
-Before starting any coding task, get a ranked context pack to identify the most relevant files:
+context-router is the MCP server registered for this repo (configure via
+`.codex/mcp.json` for Codex, `~/.gemini/settings.json` for Gemini, or your
+agent's MCP config — server command: `context-router mcp`, transport
+`stdio`). It indexes code structure (symbols + edges + communities) and
+persists project memory (observations + decisions) under `.context-router/memory/`.
+
+**The rules below are non-negotiable in this repo.**
+
+### Session checklist (MUST run in order)
+
+1. `search_memory({{query}})` — before exploring an unfamiliar area.
+2. `get_decisions({{query}})` — if the task touches an architectural area.
+3. `get_context_pack({{mode, query}})` / `get_debug_pack` / `get_minimal_context` — capture the `id` from the response.
+4. Read the returned items. MUST NOT Grep/Glob multiple files without a prior pack call.
+5. Make the change.
+6. `save_observation({{summary, task_type, files_touched}})` for non-trivial learnings.
+7. `save_decision({{title, decision, context, consequences, status}})` for lib/pattern/schema choices; `mark_decision_superseded` when reversing.
+8. `record_feedback({{pack_id, useful, missing, noisy}})` using the `pack_id` from step 3.
+
+### Hooks coexistence policy
+
+If `.git/hooks/post-commit` is the context-router hook, commits auto-save
+an observation — do **not** manually save per commit. If
+`.claude/settings.json` registers a context-router PostToolUse hook,
+every Edit/Write auto-saves — **MUST NOT** call `save_observation`
+per edit; only for synthesis (root causes, abandoned approaches, gotchas).
+
+### Pack modes & flags
+
+| Mode | Use when | Default budget |
+|---|---|---:|
+| `review` | Diff / PR review | 1,500 |
+| `implement` | Writing new code per a query | 1,500 |
+| `debug` | Tracing a failure | 2,500 |
+| `handover` | Onboarding (or `--wiki` for deterministic markdown) | 4,000 |
+| `minimal` | Quick triage — ≤5 items + `next_tool_suggestion` | 800 |
+
+Flags: `--with-rerank` (cross-encoder, +0.10–0.20 precision; needs the
+`[semantic]` extra), `--with-semantic` (bi-encoder cosine; same extra),
+`--max-tokens N`, `--inline-bodies {{top1|all|none}}`, `--json`.
+
+### Other MCP tools
+
+`generate_handover` (sprint summary), `explain_selection` (why was an
+item picked), `get_call_chain` (downstream callees from a seed),
+`suggest_next_files` (next file based on graph adjacency),
+`get_context_summary` (compact recap of the last pack), `list_memory`,
+`build_index` / `update_index` (housekeeping).
+
+### When in doubt
+
+Call `get_minimal_context({{query}})` — its `next_tool_suggestion`
+field names the right follow-up tool.
+
+### CLI fallback (when MCP unavailable)
 
 ```bash
-context-router pack --mode implement --query "your task description"
-# modes: review | implement | debug | handover
+context-router pack --mode debug --query "..." --error-file err.log
+context-router memory capture "summary" --task-type debug --files "f1 f2"
+context-router decisions add "title" --decision "..." --status accepted
+context-router feedback record --pack-id ID --useful yes --missing "..."
 ```
 
-context-router indexes code structure, dependency edges, call graphs, and project memory,
-then ranks and serves the minimum relevant context within a token budget (64–80% reduction).
+### MUST NOT
 
-For debug tasks, pass an error log for better signal:
-```bash
-context-router pack --mode debug --query "error description" --error-file error.log
-```
+- Multi-file Grep/Glob without a prior pack call.
+- Skip `save_observation` because "git log has it".
+- Save observations for trivial work (typos, formatter runs, dep bumps).
 
-After completing a task, save learnings for future sessions:
-```bash
-context-router memory capture "Brief summary of what was done and why" \\
-  --task-type implement \\
-  --files "path/to/file1.py path/to/file2.py"
-```
+Full reference: [`AGENT_GUIDE.md`](AGENT_GUIDE.md).
+{_MARKER_CLOSE}
 """
 
 # ── Agent configuration functions ───────────────────────────────────────────
 
-def _already_configured(file_path: Path) -> bool:
-    """Return True if the file already contains the context-router sentinel."""
+def _already_configured(file_path: Path, marker: str = _MARKER_OPEN) -> bool:
+    """Return True if the file already contains *marker* (default: v2 sentinel)."""
     if not file_path.exists():
         return False
-    return _MARKER in file_path.read_text(encoding="utf-8")
+    return marker in file_path.read_text(encoding="utf-8")
 
 
-def _configure_claude(root: Path, dry_run: bool) -> list[str]:
+def _configure_claude(root: Path, dry_run: bool, upgrade: bool = False) -> list[str]:
     """Configure Claude Code: .mcp.json + CLAUDE.md."""
     changed: list[str] = []
 
@@ -153,75 +307,31 @@ def _configure_claude(root: Path, dry_run: bool) -> list[str]:
 
     # ── CLAUDE.md ──────────────────────────────────────────────────────────
     claude_md = root / "CLAUDE.md"
-    if not _already_configured(claude_md):
-        if dry_run:
-            changed.append(f"[dry-run] would append context-router section to {claude_md}")
-        else:
-            _append_block(claude_md, _CLAUDE_MD_BLOCK)
-            changed.append(str(claude_md))
-
+    changed.extend(_apply_block(claude_md, _CLAUDE_MD_BLOCK, dry_run, upgrade))
     return changed
 
 
-def _configure_copilot(root: Path, dry_run: bool) -> list[str]:
+def _configure_copilot(root: Path, dry_run: bool, upgrade: bool = False) -> list[str]:
     """Configure GitHub Copilot: .github/copilot-instructions.md."""
-    changed: list[str] = []
     target = root / ".github" / "copilot-instructions.md"
-
-    if not _already_configured(target):
-        if dry_run:
-            changed.append(f"[dry-run] would append context-router section to {target}")
-        else:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            _append_block(target, _COPILOT_BLOCK)
-            changed.append(str(target))
-
-    return changed
+    if not target.exists() and not dry_run:
+        target.parent.mkdir(parents=True, exist_ok=True)
+    return _apply_block(target, _COPILOT_BLOCK, dry_run, upgrade)
 
 
-def _configure_cursor(root: Path, dry_run: bool) -> list[str]:
+def _configure_cursor(root: Path, dry_run: bool, upgrade: bool = False) -> list[str]:
     """Configure Cursor: .cursorrules."""
-    changed: list[str] = []
-    target = root / ".cursorrules"
-
-    if not _already_configured(target):
-        if dry_run:
-            changed.append(f"[dry-run] would append context-router section to {target}")
-        else:
-            _append_block(target, _CURSOR_BLOCK)
-            changed.append(str(target))
-
-    return changed
+    return _apply_block(root / ".cursorrules", _CURSOR_BLOCK, dry_run, upgrade)
 
 
-def _configure_windsurf(root: Path, dry_run: bool) -> list[str]:
+def _configure_windsurf(root: Path, dry_run: bool, upgrade: bool = False) -> list[str]:
     """Configure Windsurf: .windsurfrules."""
-    changed: list[str] = []
-    target = root / ".windsurfrules"
-
-    if not _already_configured(target):
-        if dry_run:
-            changed.append(f"[dry-run] would append context-router section to {target}")
-        else:
-            _append_block(target, _WINDSURF_BLOCK)
-            changed.append(str(target))
-
-    return changed
+    return _apply_block(root / ".windsurfrules", _WINDSURF_BLOCK, dry_run, upgrade)
 
 
-def _configure_codex(root: Path, dry_run: bool) -> list[str]:
+def _configure_codex(root: Path, dry_run: bool, upgrade: bool = False) -> list[str]:
     """Configure OpenAI Codex: AGENTS.md."""
-    changed: list[str] = []
-    target = root / "AGENTS.md"
-
-    if not _already_configured(target):
-        if dry_run:
-            changed.append(f"[dry-run] would append context-router section to {target}")
-        else:
-            _append_block(target, _AGENTS_MD_BLOCK)
-            changed.append(str(target))
-
-    return changed
+    return _apply_block(root / "AGENTS.md", _AGENTS_MD_BLOCK, dry_run, upgrade)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -252,6 +362,42 @@ def _merge_mcp_json(mcp_path: Path) -> None:
     mcp_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
+def _apply_block(
+    target: Path,
+    block: str,
+    dry_run: bool,
+    upgrade: bool,
+) -> list[str]:
+    """Append, replace, or skip the managed block in *target*.
+
+    - Fresh install (no marker present): append the block.
+    - Already current (v2 marker present, upgrade=False): skip.
+    - Legacy block present and upgrade=True: strip the legacy block and
+      append the v2 block in its place.
+    - v2 block present and upgrade=True: replace between v2 markers.
+    """
+    has_v2 = _already_configured(target, marker=_MARKER_OPEN)
+    has_legacy = any(_already_configured(target, marker=m) for m in _LEGACY_MARKERS)
+
+    # Fresh install — nothing managed yet.
+    if not has_v2 and not has_legacy:
+        if dry_run:
+            return [f"[dry-run] would append context-router block to {target}"]
+        _append_block(target, block)
+        return [str(target)]
+
+    # Already managed (v2 or legacy). Skip unless --upgrade is requested.
+    if not upgrade:
+        return []
+
+    # Upgrade path: replace the existing block (legacy or v2) with the new one.
+    if dry_run:
+        kind = "v2 → v2 (refresh)" if has_v2 else "legacy → v2"
+        return [f"[dry-run] would upgrade context-router block in {target} ({kind})"]
+    _replace_block(target, block)
+    return [str(target)]
+
+
 def _append_block(target: Path, block: str) -> None:
     """Append *block* to *target*, creating the file if it does not exist."""
     if target.exists():
@@ -259,6 +405,51 @@ def _append_block(target: Path, block: str) -> None:
         target.write_text(existing.rstrip("\n") + "\n" + block, encoding="utf-8")
     else:
         target.write_text(block.lstrip("\n"), encoding="utf-8")
+
+
+def _replace_block(target: Path, block: str) -> None:
+    """Strip any existing managed block (v2 or legacy) and append the new one.
+
+    v2 blocks are bracketed by `_MARKER_OPEN` … `_MARKER_CLOSE` so deletion is
+    exact. Legacy blocks (single-line marker, no closing tag) are stripped
+    from the marker to the next top-level heading or end-of-file.
+    """
+    if not target.exists():
+        target.write_text(block.lstrip("\n"), encoding="utf-8")
+        return
+
+    text = target.read_text(encoding="utf-8")
+
+    # Strip v2 blocks first — exact bracketed regions.
+    v2_pat = re.compile(
+        r"\n*##? [^\n]*?"
+        + re.escape(_MARKER_OPEN)
+        + r".*?"
+        + re.escape(_MARKER_CLOSE)
+        + r"\n*",
+        re.DOTALL,
+    )
+    text = v2_pat.sub("\n", text)
+
+    # Also strip a bare bracketed v2 block (e.g. Copilot's no-heading variant).
+    bare_v2_pat = re.compile(
+        re.escape(_MARKER_OPEN) + r".*?" + re.escape(_MARKER_CLOSE) + r"\n*",
+        re.DOTALL,
+    )
+    text = bare_v2_pat.sub("", text)
+
+    # Strip legacy blocks: from the legacy marker line back to the previous
+    # blank line, forward to the next H2 (`\n## `), H1 (`\n# `), or EOF.
+    for legacy in _LEGACY_MARKERS:
+        legacy_pat = re.compile(
+            r"(?:\n*##? [^\n]*?)?"
+            + re.escape(legacy)
+            + r".*?(?=\n##? |\Z)",
+            re.DOTALL,
+        )
+        text = legacy_pat.sub("", text)
+
+    target.write_text(text.rstrip("\n") + "\n" + block, encoding="utf-8")
 
 
 _AGENT_CHOICES = ("claude", "copilot", "cursor", "windsurf", "codex", "all")
@@ -298,18 +489,14 @@ _CLAUDE_CODE_HOOK_ENTRY = {
 }
 
 
-def _install_hooks(root: Path, dry_run: bool) -> list[str]:
-    """Install post-commit git hook and Claude Code PostToolUse hook.
+def _install_hooks(root: Path, dry_run: bool, upgrade: bool = False) -> list[str]:
+    """Install (or upgrade) post-commit git hook and Claude Code PostToolUse hook.
 
     The git hook runs ``context-router memory capture`` after every commit.
     The Claude Code hook captures file edits during agent sessions.
 
-    Args:
-        root: Project root directory.
-        dry_run: If True, only report what would change.
-
-    Returns:
-        List of paths that were (or would be) modified.
+    When *upgrade* is True, existing hooks are overwritten with the current
+    bundled script / entry, rather than left in place.
     """
     import shutil
     import stat
@@ -320,39 +507,43 @@ def _install_hooks(root: Path, dry_run: bool) -> list[str]:
     git_hooks_dir = root / ".git" / "hooks"
     if git_hooks_dir.is_dir():
         post_commit = git_hooks_dir / "post-commit"
-        # Find the bundled hook script
-        hook_source = Path(__file__).parent.parent.parent.parent.parent.parent / \
-            "core" / "src" / "core" / "hooks" / "post_commit.py"
-        # Fallback: try importlib
-        if not hook_source.exists():
-            try:
-                import importlib.resources as _ir
-                hook_source = Path(str(_ir.files("core.hooks"))) / "post_commit.py"
-            except Exception:  # noqa: BLE001
-                hook_source = None
+        already_present = post_commit.exists() and _HOOK_SENTINEL in post_commit.read_text(
+            encoding="utf-8", errors="ignore"
+        )
 
-        if dry_run:
-            changed.append(f"[dry-run] would install git post-commit hook to {post_commit}")
+        if already_present and not upgrade:
+            pass  # current hook is in place; nothing to do
         else:
-            if hook_source and hook_source.exists():
-                shutil.copy2(str(hook_source), str(post_commit))
+            hook_source = Path(__file__).parent.parent.parent.parent.parent.parent / \
+                "core" / "src" / "core" / "hooks" / "post_commit.py"
+            if not hook_source.exists():
+                try:
+                    import importlib.resources as _ir
+                    hook_source = Path(str(_ir.files("core.hooks"))) / "post_commit.py"
+                except Exception:  # noqa: BLE001
+                    hook_source = None
+
+            verb = "upgrade" if already_present else "install"
+            if dry_run:
+                changed.append(f"[dry-run] would {verb} git post-commit hook at {post_commit}")
             else:
-                # Write a minimal inline hook
-                post_commit.write_text(
-                    "#!/usr/bin/env python3\n"
-                    "import subprocess, sys\n"
-                    "try:\n"
-                    "    msg = subprocess.check_output(['git','log','-1','--pretty=%s'],text=True).strip()\n"
-                    "    files = subprocess.check_output(['git','diff-tree','--no-commit-id','-r','--name-only','HEAD'],text=True).strip().splitlines()\n"
-                    "    cmd = ['context-router','memory','capture',f'Committed: {msg}','--task-type','implement']\n"
-                    "    for f in files[:10]: cmd += ['--files', f]\n"
-                    "    subprocess.run(cmd, check=False, capture_output=True)\n"
-                    "except Exception: pass\n",
-                    encoding="utf-8",
-                )
-            # Make executable
-            post_commit.chmod(post_commit.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-            changed.append(str(post_commit))
+                if hook_source and hook_source.exists():
+                    shutil.copy2(str(hook_source), str(post_commit))
+                else:
+                    post_commit.write_text(
+                        "#!/usr/bin/env python3\n"
+                        "import subprocess, sys\n"
+                        "try:\n"
+                        "    msg = subprocess.check_output(['git','log','-1','--pretty=%s'],text=True).strip()\n"
+                        "    files = subprocess.check_output(['git','diff-tree','--no-commit-id','-r','--name-only','HEAD'],text=True).strip().splitlines()\n"
+                        "    cmd = ['context-router','memory','capture',f'Committed: {msg}','--task-type','implement']\n"
+                        "    for f in files[:10]: cmd += ['--files', f]\n"
+                        "    subprocess.run(cmd, check=False, capture_output=True)\n"
+                        "except Exception: pass\n",
+                        encoding="utf-8",
+                    )
+                post_commit.chmod(post_commit.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                changed.append(str(post_commit))
     else:
         if not dry_run:
             typer.echo("  (skipping git hook — no .git/hooks/ directory found)")
@@ -361,16 +552,20 @@ def _install_hooks(root: Path, dry_run: bool) -> list[str]:
     claude_settings = root / ".claude" / "settings.json"
     if claude_settings.exists() or (root / ".claude").is_dir():
         if dry_run:
-            changed.append(f"[dry-run] would add PostToolUse hook to {claude_settings}")
+            verb = "refresh" if upgrade else "add"
+            changed.append(f"[dry-run] would {verb} PostToolUse hook in {claude_settings}")
         else:
-            _merge_claude_code_hook(claude_settings)
-            changed.append(str(claude_settings))
+            if _merge_claude_code_hook(claude_settings, upgrade=upgrade):
+                changed.append(str(claude_settings))
 
     return changed
 
 
-def _merge_claude_code_hook(settings_path: Path) -> None:
-    """Add context-router PostToolUse hook to .claude/settings.json, idempotent."""
+def _merge_claude_code_hook(settings_path: Path, upgrade: bool = False) -> bool:
+    """Add (or replace) context-router PostToolUse hook in .claude/settings.json.
+
+    Returns True iff the file was written.
+    """
     if settings_path.exists():
         try:
             data = json.loads(settings_path.read_text(encoding="utf-8"))
@@ -380,15 +575,24 @@ def _merge_claude_code_hook(settings_path: Path) -> None:
         data = {}
         settings_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Check if already installed
     hooks = data.setdefault("hooks", {})
     post_tool_use = hooks.setdefault("PostToolUse", [])
-    already_installed = any(
-        _HOOK_SENTINEL in json.dumps(entry) for entry in post_tool_use
-    )
-    if not already_installed:
+    cr_indices = [
+        i for i, entry in enumerate(post_tool_use)
+        if _HOOK_SENTINEL in json.dumps(entry)
+    ]
+
+    if cr_indices and not upgrade:
+        return False  # current hook is in place; nothing to do
+
+    if cr_indices and upgrade:
+        # Replace the (last) existing context-router hook entry in-place.
+        post_tool_use[cr_indices[-1]] = _CLAUDE_CODE_HOOK_ENTRY
+    else:
         post_tool_use.append(_CLAUDE_CODE_HOOK_ENTRY)
-        settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    settings_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    return True
 
 
 # ── CLI command ───────────────────────────────────────────────────────────────
@@ -429,6 +633,18 @@ def setup(
             ),
         ),
     ] = False,
+    upgrade: Annotated[
+        bool,
+        typer.Option(
+            "--upgrade",
+            help=(
+                "Replace any existing context-router instruction blocks (legacy or "
+                "current) with the latest contract. Without --upgrade, files that "
+                "already contain a managed block are skipped. Pair with --with-hooks "
+                "to also overwrite the installed hook scripts."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Configure AI coding agents to use context-router.
 
@@ -436,13 +652,16 @@ def setup(
     (CLAUDE.md, .mcp.json, .github/copilot-instructions.md, .cursorrules,
     .windsurfrules, AGENTS.md) based on which agents are detected or specified.
 
-    Idempotent — safe to run multiple times; skips files already configured.
+    Idempotent — safe to run multiple times; skips files already configured
+    unless --upgrade is passed.
 
     Examples:
 
         context-router setup
         context-router setup --agent claude
         context-router setup --agent all --with-hooks
+        context-router setup --upgrade                  # refresh every managed block
+        context-router setup --with-hooks --upgrade     # also refresh hook scripts
         context-router setup --project-root /path/to/project --dry-run
 
     Exit codes:
@@ -484,24 +703,26 @@ def setup(
 
     any_changed = False
     for name in agents:
-        changed = _configurators[name](root, dry_run)
+        changed = _configurators[name](root, dry_run, upgrade=upgrade)
         if changed:
             for path in changed:
                 typer.echo(f"  {'[dry-run] ' if dry_run else ''}✓ {name}: {path}")
             any_changed = True
         else:
-            typer.echo(f"  - {name}: already configured, skipped")
+            note = "already current, skipped (use --upgrade to refresh)" if not upgrade else "no managed block found, skipped"
+            typer.echo(f"  - {name}: {note}")
 
     # ── Install hooks (optional) ──────────────────────────────────────────
     if with_hooks:
-        typer.echo("\nInstalling auto-capture hooks:")
-        hook_changes = _install_hooks(root, dry_run)
+        verb = "Refreshing" if upgrade else "Installing"
+        typer.echo(f"\n{verb} auto-capture hooks:")
+        hook_changes = _install_hooks(root, dry_run, upgrade=upgrade)
         if hook_changes:
             for path in hook_changes:
                 typer.echo(f"  ✓ hook: {path}")
             any_changed = True
         else:
-            typer.echo("  - hooks: already installed, skipped")
+            typer.echo("  - hooks: already current, skipped (use --upgrade to refresh)")
 
     if not dry_run:
         if any_changed:

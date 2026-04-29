@@ -1,0 +1,110 @@
+{
+  "id": "48c60138-3ea4-4ef6-9c76-0da69380f059",
+  "mode": "debug",
+  "query": "z.record validation iterates non-enumerable properties causing wrong errors",
+  "selected_items": [
+    {
+      "id": "b0bc3cee-8e7e-40ec-b4ee-505017ceef08",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/schemas.ts",
+      "title": "$ZodNonOptional (schemas.ts)",
+      "excerpt": "",
+      "reason": "Modified `$ZodNonOptional` lines 3601-3603",
+      "confidence": 0.6339916023680735,
+      "est_tokens": 50,
+      "freshness": "2026-04-28T15:36:56.404683Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 298,
+      "symbol_body": "export interface $ZodNonOptional<T extends SomeType = $ZodType> extends $ZodType {\n  _zod: $ZodNonOptionalInternals<T>;\n}",
+      "symbol_lines": [
+        3601,
+        3603
+      ]
+    },
+    {
+      "id": "e9687af2-2b33-424a-8245-eca2fc7b0e27",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/tests/record-constructor.test.ts",
+      "title": "test_record_should_skip_non_enumerable_own_properties (record-constructor.test.ts)",
+      "excerpt": "test_record_should_skip_non_enumerable_own_properties()",
+      "reason": "Modified `test_record_should_skip_non_enumerable_own_properties` lines 69-86",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 68,
+      "freshness": "2026-04-28T15:36:56.241294Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 7,
+      "symbol_body": null,
+      "symbol_lines": [
+        69,
+        86
+      ]
+    }
+  ],
+  "total_est_tokens": 118,
+  "baseline_est_tokens": 244779,
+  "reduction_pct": 100.0,
+  "created_at": "2026-04-28T15:36:58.973050Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 0 of top 2 items; consider re-indexing or widening the query",
+    "external_dropped": 54,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "b0bc3cee-8e7e-40ec-b4ee-505017ceef08",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/schemas.ts",
+      "title": "$ZodNonOptional (schemas.ts)",
+      "excerpt": "",
+      "reason": "Modified `$ZodNonOptional` lines 3601-3603",
+      "confidence": 0.6339916023680735,
+      "est_tokens": 50,
+      "freshness": "2026-04-28T15:36:56.404683Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 298,
+      "symbol_body": "export interface $ZodNonOptional<T extends SomeType = $ZodType> extends $ZodType {\n  _zod: $ZodNonOptionalInternals<T>;\n}",
+      "symbol_lines": [
+        3601,
+        3603
+      ]
+    },
+    {
+      "id": "e9687af2-2b33-424a-8245-eca2fc7b0e27",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/tests/record-constructor.test.ts",
+      "title": "test_record_should_skip_non_enumerable_own_properties (record-constructor.test.ts)",
+      "excerpt": "test_record_should_skip_non_enumerable_own_properties()",
+      "reason": "Modified `test_record_should_skip_non_enumerable_own_properties` lines 69-86",
+      "confidence": 0.49205000000000004,
+      "est_tokens": 68,
+      "freshness": "2026-04-28T15:36:56.241294Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 7,
+      "symbol_body": null,
+      "symbol_lines": [
+        69,
+        86
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 118,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

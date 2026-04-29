@@ -14,7 +14,8 @@ runner = CliRunner()
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-MARKER = "<!-- context-router: setup -->"
+MARKER = "<!-- context-router: setup v2 -->"
+LEGACY_MARKER = "<!-- context-router: setup -->"
 
 
 def _init_root(tmp_path: Path) -> Path:
@@ -293,6 +294,68 @@ class TestCodex:
             app, ["setup", "--project-root", str(tmp_path), "--agent", "codex"]
         )
         assert (tmp_path / "AGENTS.md").read_text().count(MARKER) == 1
+
+
+# ── upgrade path ──────────────────────────────────────────────────────────────
+
+
+class TestUpgrade:
+    """Cover the --upgrade flag: replaces legacy + v2 blocks in-place."""
+
+    LEGACY_BLOCK = (
+        "\n## context-router <!-- context-router: setup -->\n\n"
+        "Old guidance from a previous release.\n"
+        "Use context-router for stuff.\n"
+    )
+
+    def test_upgrade_replaces_legacy_block_in_claude_md(self, tmp_path):
+        claude = tmp_path / "CLAUDE.md"
+        claude.write_text("# Project\n\nUser content.\n" + self.LEGACY_BLOCK)
+        result = runner.invoke(
+            app,
+            [
+                "setup",
+                "--project-root",
+                str(tmp_path),
+                "--agent",
+                "claude",
+                "--upgrade",
+            ],
+        )
+        assert result.exit_code == 0
+        text = claude.read_text()
+        # Legacy single-line marker is gone; v2 bracketed pair is present.
+        assert LEGACY_MARKER not in text
+        assert MARKER in text
+        assert "<!-- /context-router: setup v2 -->" in text
+        # User content is preserved.
+        assert "# Project" in text
+        assert "User content." in text
+
+    def test_upgrade_refreshes_v2_block(self, tmp_path):
+        runner.invoke(
+            app, ["setup", "--project-root", str(tmp_path), "--agent", "claude"]
+        )
+        result = runner.invoke(
+            app,
+            ["setup", "--project-root", str(tmp_path), "--agent", "claude", "--upgrade"],
+        )
+        assert result.exit_code == 0
+        text = (tmp_path / "CLAUDE.md").read_text()
+        # Single managed block remains — refresh did not duplicate it.
+        assert text.count(MARKER) == 1
+        assert text.count("<!-- /context-router: setup v2 -->") == 1
+
+    def test_no_upgrade_skips_existing(self, tmp_path):
+        claude = tmp_path / "CLAUDE.md"
+        claude.write_text("# Existing\n\n" + self.LEGACY_BLOCK)
+        result = runner.invoke(
+            app, ["setup", "--project-root", str(tmp_path), "--agent", "claude"]
+        )
+        assert result.exit_code == 0
+        # Without --upgrade, the legacy block survives untouched.
+        assert LEGACY_MARKER in claude.read_text()
+        assert MARKER not in claude.read_text()
 
 
 # ── dry-run ───────────────────────────────────────────────────────────────────

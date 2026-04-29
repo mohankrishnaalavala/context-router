@@ -1,0 +1,68 @@
+{
+  "id": "886f4530-f90b-4649-a124-cc5d254abe0f",
+  "mode": "debug",
+  "query": "ParameterizedType typeArguments array not cloned when owner changed",
+  "selected_items": [
+    {
+      "id": "5548f728-44c2-4b66-9872-87d4e9882952",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/$Gson$Types.java",
+      "title": "ParameterizedTypeImpl ($Gson$Types.java)",
+      "excerpt": "public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments)",
+      "reason": "Modified `ParameterizedTypeImpl` lines 521-537",
+      "confidence": 0.883,
+      "est_tokens": 69,
+      "freshness": "2026-04-28T15:35:55.159654Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 39,
+      "symbol_body": "    public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments) {\n      // TODO: Should this enforce that rawType is a Class? See JDK implementation of\n      // the ParameterizedType interface and https://bugs.openjdk.org/browse/JDK-8250659\n      requireNonNull(rawType);\n      if (ownerType == null && requiresOwnerType(rawType)) {\n        throw new IllegalArgumentException(\"Must specify owner type for \" + rawType);\n      }\n\n      this.ownerType = ownerType == null ? null : canonicalize(ownerType);\n      this.rawType = canonicalize(rawType);\n      this.typeArguments = typeArguments.clone();\n      for (int t = 0, length = this.typeArguments.length; t < length; t++) {\n        requireNonNull(this.typeArguments[t]);\n        checkNotPrimitive(this.typeArguments[t]);\n        this.typeArguments[t] = canonicalize(this.typeArguments[t]);\n      }\n    }",
+      "symbol_lines": [
+        521,
+        537
+      ]
+    }
+  ],
+  "total_est_tokens": 69,
+  "baseline_est_tokens": 294244,
+  "reduction_pct": 100.0,
+  "created_at": "2026-04-28T15:35:56.448058Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "note": "flows available for only 0 of top 1 items; consider re-indexing or widening the query",
+    "external_dropped": 53,
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "5548f728-44c2-4b66-9872-87d4e9882952",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/$Gson$Types.java",
+      "title": "ParameterizedTypeImpl ($Gson$Types.java)",
+      "excerpt": "public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments)",
+      "reason": "Modified `ParameterizedTypeImpl` lines 521-537",
+      "confidence": 0.883,
+      "est_tokens": 69,
+      "freshness": "2026-04-28T15:35:55.159654Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 39,
+      "symbol_body": "    public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments) {\n      // TODO: Should this enforce that rawType is a Class? See JDK implementation of\n      // the ParameterizedType interface and https://bugs.openjdk.org/browse/JDK-8250659\n      requireNonNull(rawType);\n      if (ownerType == null && requiresOwnerType(rawType)) {\n        throw new IllegalArgumentException(\"Must specify owner type for \" + rawType);\n      }\n\n      this.ownerType = ownerType == null ? null : canonicalize(ownerType);\n      this.rawType = canonicalize(rawType);\n      this.typeArguments = typeArguments.clone();\n      for (int t = 0, length = this.typeArguments.length; t < length; t++) {\n        requireNonNull(this.typeArguments[t]);\n        checkNotPrimitive(this.typeArguments[t]);\n        this.typeArguments[t] = canonicalize(this.typeArguments[t]);\n      }\n    }",
+      "symbol_lines": [
+        521,
+        537
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 69,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

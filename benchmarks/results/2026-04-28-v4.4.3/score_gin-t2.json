@@ -1,0 +1,18 @@
+{
+  "repo": "gin",
+  "task_id": "gin-t2",
+  "mode": "debug",
+  "ground_truth_files": [
+    "context.go"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context_test.go"
+  ],
+  "n_items": 2,
+  "est_tokens_total": 118,
+  "precision": 0.5,
+  "recall": 1.0,
+  "f1": 0.6666666666666666,
+  "rank1_hit": 1
+}

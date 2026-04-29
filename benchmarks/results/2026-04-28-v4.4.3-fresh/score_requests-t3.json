@@ -1,0 +1,18 @@
+{
+  "repo": "requests",
+  "task_id": "requests-t3",
+  "mode": "debug",
+  "ground_truth_files": [
+    "src/requests/exceptions.py"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py"
+  ],
+  "n_items": 2,
+  "est_tokens_total": 136,
+  "precision": 0.5,
+  "recall": 1.0,
+  "f1": 0.6666666666666666,
+  "rank1_hit": 1
+}

@@ -1,0 +1,18 @@
+{
+  "repo": "gson",
+  "task_id": "gson-t1",
+  "mode": "debug",
+  "ground_truth_files": [
+    "gson/src/main/java/com/google/gson/stream/JsonReader.java"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/stream/JsonReader.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/stream/JsonReaderTest.java"
+  ],
+  "n_items": 2,
+  "est_tokens_total": 117,
+  "precision": 0.5,
+  "recall": 1.0,
+  "f1": 0.6666666666666666,
+  "rank1_hit": 1
+}
