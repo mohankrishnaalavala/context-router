@@ -177,6 +177,51 @@ class TestDoctorRegistered:
         assert "doctor" in combined or "health" in combined
 
 
+class TestPackagedAnalyzerExtensions:
+    """v4.4.4 — every wheel must register at least the documented extension set.
+
+    Without these assertions, a future pyproject.toml refactor could silently
+    drop an entry point and the wheel would re-introduce the v3.2.0 / pre-4.4.4
+    "fresh install indexes zero Go/Rust/Ruby/PHP/SQL files" footgun. The
+    `[all-languages]` extra docs in the README and AGENT_GUIDE.md promise
+    exactly the extensions enumerated below.
+    """
+
+    # Default install (no extras) must register these — analyzer source is
+    # bundled in the wheel and the parser is either bundled (tree-sitter for
+    # py/java/ts/cs/yaml) or unnecessary (sql is regex-only).
+    DEFAULT_EXTENSIONS = frozenset(
+        {"py", "java", "ts", "tsx", "js", "jsx", "mjs", "cjs", "cs", "yaml", "yml", "sql"}
+    )
+    # The remaining extensions ship as entry points unconditionally; their
+    # parsers come in via `[all-languages]`. The entry-point registration is
+    # what we assert here — parser-availability is a separate doctor check.
+    ALL_LANGUAGES_EXTENSIONS = frozenset({"go", "rs", "rb", "php"})
+
+    def test_entry_points_cover_every_promised_extension(self) -> None:
+        """Live entry-point registry must include the v4.4.4 set."""
+        from importlib.metadata import entry_points
+
+        registered = {
+            ep.name
+            for ep in entry_points(group="context_router.language_analyzers")
+        }
+        missing_default = self.DEFAULT_EXTENSIONS - registered
+        missing_all = self.ALL_LANGUAGES_EXTENSIONS - registered
+        assert not missing_default, (
+            f"Default install is missing analyzer entry points: {sorted(missing_default)}. "
+            f"Either the apps/cli/pyproject.toml entry-point block was edited, or the "
+            f"wheel build dropped a force-include. Both are regressions of the v4.4.4 "
+            f"all-languages contract."
+        )
+        assert not missing_all, (
+            f"`[all-languages]` analyzer entry points missing from registry: "
+            f"{sorted(missing_all)}. These must register unconditionally so the "
+            f"PluginLoader can emit a stderr warning when the optional parser is "
+            f"absent — silent skipping is forbidden by the no-silent-failure policy."
+        )
+
+
 class TestPluginLoaderWarns:
     """The refactored PluginLoader must no longer silently swallow failures."""
 

@@ -44,9 +44,15 @@ Pick one:
 
 ```bash
 # uv (recommended — installs into an isolated tool environment)
+# Default: Python · TypeScript / JavaScript · Java · C# · YAML · SQL.
 uv tool install context-router-cli
+# Add Go · Rust · Ruby · PHP analyzers (extra tree-sitter parsers,
+# ~5 MB) — recommended for polyglot or monorepo users:
+uv tool install 'context-router-cli[all-languages]'
 # Add semantic / rerank support (~22 MB sentence-transformers weights):
 uv tool install 'context-router-cli[semantic]'
+# Combine extras when you want everything:
+uv tool install 'context-router-cli[all-languages,semantic]'
 
 # Homebrew (macOS / Linux)
 brew tap mohankrishnaalavala/context-router

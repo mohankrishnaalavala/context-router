@@ -245,6 +245,12 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all-languages = [
+    { name = "tree-sitter-go" },
+    { name = "tree-sitter-php" },
+    { name = "tree-sitter-ruby" },
+    { name = "tree-sitter-rust" },
+]
 semantic = [
     { name = "sentence-transformers" },
 ]
@@ -259,13 +265,17 @@ requires-dist = [
     { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=2.2" },
     { name = "tree-sitter", specifier = ">=0.21" },
     { name = "tree-sitter-c-sharp", specifier = ">=0.21" },
+    { name = "tree-sitter-go", marker = "extra == 'all-languages'", specifier = ">=0.21" },
     { name = "tree-sitter-java", specifier = ">=0.21" },
+    { name = "tree-sitter-php", marker = "extra == 'all-languages'", specifier = ">=0.21" },
     { name = "tree-sitter-python", specifier = ">=0.21" },
+    { name = "tree-sitter-ruby", marker = "extra == 'all-languages'", specifier = ">=0.21" },
+    { name = "tree-sitter-rust", marker = "extra == 'all-languages'", specifier = ">=0.21" },
     { name = "tree-sitter-typescript", specifier = ">=0.21" },
     { name = "typer", specifier = ">=0.12" },
     { name = "watchdog", specifier = ">=4.0" },
 ]
-provides-extras = ["semantic"]
+provides-extras = ["semantic", "all-languages"]
 
 [[package]]
 name = "context-router-contracts"
