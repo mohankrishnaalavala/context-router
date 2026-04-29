@@ -45,6 +45,8 @@ Pick one:
 ```bash
 # uv (recommended — installs into an isolated tool environment)
 uv tool install context-router-cli
+# Add semantic / rerank support (~22 MB sentence-transformers weights):
+uv tool install 'context-router-cli[semantic]'
 
 # Homebrew (macOS / Linux)
 brew tap mohankrishnaalavala/context-router
@@ -109,7 +111,7 @@ context-router pack --mode debug --error-file err.log   # for a failure
 | Cursor | `.cursorrules` | Imperative one-liners |
 | Windsurf | `.windsurfrules` | Rules + 1–2 invocation examples |
 | Codex / OpenAI agents | `AGENTS.md` | Markdown block, same contract |
-| Gemini CLI | (same as Claude — reads `CLAUDE.md` or `AGENTS.md`) | No dedicated block today |
+| Gemini CLI | (no dedicated block — reads `AGENTS.md`, also works with `CLAUDE.md`) | Run `setup --agent codex` to populate `AGENTS.md`; configure MCP server in `~/.gemini/settings.json` (see § 4) |
 
 Re-running `context-router setup` is idempotent (skips files already
 configured). To **upgrade** existing instruction blocks to the latest
@@ -166,11 +168,35 @@ For other agents, here is the canonical config (copy-paste):
 }
 ```
 
-### GitHub Copilot
+### GitHub Copilot — `.github/copilot-instructions.md` (written by `setup`)
 
-Copilot reads `.github/copilot-instructions.md` (written by `setup`).
-The MCP server is reached via the stdio command above when Copilot's
-MCP support is enabled in your IDE.
+Copilot's MCP support is configured in your IDE (VS Code: workspace
+`settings.json` under `"github.copilot.chat.mcp.servers"`):
+
+```json
+{
+  "github.copilot.chat.mcp.servers": {
+    "context-router": { "command": "context-router", "args": ["mcp"] }
+  }
+}
+```
+
+The instruction block written to `.github/copilot-instructions.md`
+tells Copilot to call the MCP tools.
+
+### Codex / OpenAI agents — `AGENTS.md` block + workspace MCP config
+
+`context-router setup --agent codex` writes the instruction block to
+`AGENTS.md`. Codex picks up MCP servers from your shell environment or
+a workspace `.codex/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "context-router": { "command": "context-router", "args": ["mcp"], "type": "stdio" }
+  }
+}
+```
 
 ### Gemini CLI — `~/.gemini/settings.json`
 
@@ -181,6 +207,9 @@ MCP support is enabled in your IDE.
   }
 }
 ```
+
+Gemini reads the same instruction text from `AGENTS.md` (or `CLAUDE.md`
+if present) — `setup --agent codex` covers both Codex and Gemini.
 
 Verify the server is reachable from your agent — you should see
 context-router's tools listed under MCP. From Claude Code, run `/mcp`.
@@ -225,18 +254,22 @@ non-negotiable when working in a context-router-enabled repo.
    ≥3 reports per file the ranker self-tunes. Skipping this leaves the
    ranker blind.
 
-### Negative rules — DO NOT
+### Negative rules — MUST NOT
 
-- **Do NOT use `Grep`/`Glob`/`Read` for codebase exploration when
-  `get_context_pack` / `get_debug_pack` / `search_memory` would answer
-  the same question.** Use the pack first; fall back to file walking
-  only when the pack is genuinely insufficient.
-- **Do NOT skip `save_observation` because "the user can read git log".**
-  Memory is queryable, summarized, and survives across repos and
-  sessions; commits are not.
-- **Do NOT save observations for trivial work** (typo fixes, formatter
+- **Multi-file `Grep`/`Glob` without a prior pack call is a contract
+  violation in this repo.** Single-file `Read` calls on paths returned
+  by a pack are fine; whole-repo searches are not.
+- **MUST NOT skip `save_observation` because "the user can read git log".**
+  Memory is queryable, summarised, decay-scored, and survives across
+  repos and sessions; commits are not.
+- **MUST NOT save observations for trivial work** (typo fixes, formatter
   runs, dependency bumps). Save what a future agent would benefit from
-  knowing — bug root-causes, perf wins, gotchas, design decisions.
+  knowing — bug root-causes, perf wins, gotchas, design rationale.
+
+### When in doubt
+
+Call `get_minimal_context(query)` first — it returns ≤5 items plus a
+`next_tool_suggestion` field that names the right follow-up tool.
 
 ### When auto-capture hooks are installed
 
@@ -244,12 +277,22 @@ non-negotiable when working in a context-router-enabled repo.
 
 - A **git post-commit hook** that auto-saves an observation per commit
   with the commit message + changed files.
-- A **Claude Code PostToolUse hook** that auto-saves on every
-  `Edit`/`Write`/`MultiEdit` tool call.
+- A **Claude Code PostToolUse hook** (`.claude/settings.json`) that
+  auto-saves on every `Edit`/`Write`/`MultiEdit` tool call.
 
-You should still call `save_observation` manually mid-session for
-learnings that don't map to a single commit (e.g. "tried approach X,
-hit error Y, fell back to approach Z").
+**Hooks coexistence policy** — important to avoid double-saves:
+
+- If the post-commit hook is installed, the agent should **not** call
+  `save_observation` per commit. The hook handles it.
+- If the PostToolUse hook is installed, the agent **MUST NOT** call
+  `save_observation` per file edit. The hook handles it.
+- Manual `save_observation` calls should be reserved for **synthesis** —
+  root causes, gotchas, abandoned approaches, design rationale — that
+  no single edit or commit captures.
+
+To check which hooks are installed: read `.git/hooks/post-commit` and
+`.claude/settings.json` (look for `hooks.PostToolUse` containing
+`context-router memory capture`).
 
 ---
 
@@ -278,10 +321,12 @@ exists.
 | `pack --mode handover` (`generate_handover`) | Onboarding / sprint summary — recent changes + memory + decisions | 4,000 |
 | `pack --mode handover --wiki` | Deterministic markdown subsystem wiki (no ranker, no LLM) — top communities → key files + hub symbols | n/a |
 | `pack --mode minimal --query "..."` (`get_minimal_context`) | ≤5 items under 800 tokens + `next_tool_suggestion` hint | 800 |
+| (MCP only) `get_context_summary` | Compact summary of the last pack — paths + reasons, no item bodies | n/a |
+| (MCP only) `suggest_next_files` | Suggest likely-next files based on graph adjacency from a seed file | n/a |
 
 **Pack flags:**
-- `--with-rerank` — second-stage cross-encoder rerank over top-30 candidates (~22 MB model, ~50 ms latency, +0.10–0.20 precision lift on query-driven packs)
-- `--with-semantic` — semantic boost via bi-encoder (cosine similarity over pre-computed embeddings; off-the-shelf when `embeddings` table empty)
+- `--with-rerank` — second-stage cross-encoder rerank over top-30 candidates (~22 MB model, ~50 ms latency, +0.10–0.20 precision lift on query-driven packs). **Requires the `[semantic]` extra** — install with `uv tool install 'context-router-cli[semantic]'` or `pipx install 'context-router-cli[semantic]'`. Without it the flag logs a warning and silently falls through to the structural ranker.
+- `--with-semantic` — semantic boost via bi-encoder (cosine similarity over pre-computed embeddings; off-the-shelf when `embeddings` table empty). Same `[semantic]` extra required.
 - `--max-tokens N` — single-call budget override
 - `--inline-bodies {top1|all|none}` — inline symbol bodies into the pack response (top-1 default; `all` opts in to bigger packs)
 - `--json` — machine-readable output (recommended for agent consumption)
@@ -503,8 +548,9 @@ issue.
 From the v4.4.3 holdout benchmark (18 tasks across 6 OSS projects in
 5 languages):
 
-- **Avg pack size:** 159 tokens (vs ~1,506 for `code-review-graph` —
-  ~89% reduction, no recall regression).
+- **Avg pack size:** 159 tokens combined (vs ~1,506 for
+  `code-review-graph` — **−89.4% combined, up to −91.2% on Suite B**;
+  no recall regression).
 - **Rank-1 hit rate:** 17/18 (94%) — top item is the ground-truth file.
 - **Avg recall (file-level):** 94% (Suite B: 100%).
 - **Latency (typical CLI):** index <30s on most repos; pack <500ms

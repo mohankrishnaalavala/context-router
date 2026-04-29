@@ -7,12 +7,13 @@
 [![Tests](https://github.com/mohankrishnaalavala/context-router/actions/workflows/ci.yml/badge.svg)](https://github.com/mohankrishnaalavala/context-router/actions)
 
 > **Memory-aware context engine for AI coding agents.**
-> 89% fewer tokens · 17/18 rank-1 across 6 OSS projects · MCP-native, multi-repo, local-first.
+> Persistent project memory · multi-repo workspaces · up to **91% fewer tokens** (89% combined avg across 6 OSS projects, 17/18 rank-1) · MCP-native, local-first.
 
 context-router is **more than a context picker**. It indexes your code,
-remembers what your team learned, and gives every coding agent the
-*minimum useful* slice of both — so each session compounds on the last
-instead of starting from zero.
+**remembers what your team learned** (observations + decisions, shared
+via git), and gives every coding agent the *minimum useful* slice of
+both — so each session compounds on the last instead of starting from
+zero.
 
 ```text
 ┌─ your repo ──────────────────────┐    ┌─ pack (~159 tokens) ────────┐
@@ -55,15 +56,15 @@ cross-repo edges from Python imports + OpenAPI / protobuf / GraphQL
 contracts; `workspace pack` returns a unified ranked pack with
 `[repo]` labels and warns when edges cross community boundaries.
 
-### ⚡ 89% token reduction without losing recall
+### ⚡ Up to 91% token reduction without losing recall
 
 Latest holdout against six OSS projects in five languages:
 
-| Suite | Repos | Avg F1 | Rank-1 | Avg tokens / pack |
-|---|---|---:|---:|---:|
-| A | gin · actix-web · django | 0.630 | 8/9 | 186 |
-| B | gson · requests · zod | **0.685** | **9/9** | **132** |
-| **Combined** | 6 projects, 5 languages | **0.658** | **17/18 (94%)** | **159** |
+| Suite | Repos | Avg F1 | Rank-1 | Avg tokens / pack | vs ~1,506 baseline |
+|---|---|---:|---:|---:|---:|
+| A | gin · actix-web · django | 0.630 | 8/9 | 186 | **−87.7%** |
+| B | gson · requests · zod | **0.685** | **9/9** | **132** | **−91.2%** |
+| **Combined** | 6 projects, 5 languages | **0.658** | **17/18 (94%)** | **159** | **−89.4%** |
 
 Comparable tools average ~1,506 tokens per pack on the same workload.
 Full per-task breakdown + reproduction in [`BENCHMARKS.md`](BENCHMARKS.md).
@@ -110,6 +111,12 @@ Optional flags: `--with-rerank` (cross-encoder, +0.10–0.20 precision),
 `--inline-bodies {top1|all|none}`, `--json`. Pack metadata exposes
 `depth` (`narrow`/`standard`/`broad`) and `feedback_applied` so you
 can see which historical signals shaped the result.
+
+> `--with-rerank` and `--with-semantic` need the optional `[semantic]`
+> extra (~22 MB cross-encoder + bi-encoder weights, downloaded once):
+> `uv tool install 'context-router-cli[semantic]'` (or `pipx install
+> 'context-router-cli[semantic]'`). Without it, both flags log a warning
+> and silently fall through to the structural ranker.
 
 ---
 

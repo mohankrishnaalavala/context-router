@@ -9,6 +9,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.4.3] — 2026-04-28
+
+> Holdout regressions caught by the v4.4.2 benchmark, fixed surgically without disturbing v4.4.2 behaviour on small repos. README/docs reorganised around three pillars (memory, multi-repo, token reduction) with a hand-to-an-agent `AGENT_GUIDE.md`.
+
+### Fixed
+- **`SymbolRepository.get_for_files`** + `Orchestrator._load_symbols_with_paths` (`packages/storage-sqlite/src/storage_sqlite/repositories.py`, `packages/core/src/core/orchestrator.py`). The stock `get_all` capped at 10,000 rows with no `ORDER BY` — silently invisible on django (43k symbols) so any file outside the first 10k never reached the candidate builder, including `changed_file` ground truth for django-t1 / django-t2. The orchestrator now unions `get_all` with a targeted lookup over `changed_files | blast_radius_files | signal_paths` in `_review_candidates` / `_debug_candidates` / `_handover_candidates`. No behaviour change on small repos (gin / actix-web / gson / requests / zod / fastapi).
+- **Source-prior multiplier reachable without `--with-rerank`** (`packages/core/src/core/orchestrator.py`). Reuses v4.4.2's `_RERANK_SOURCE_PRIOR_MULT` / `_RERANK_TEST_PRIOR_MULT` constants and `_is_test_or_script_path` classifier, but applies the ×1.15 / ×0.85 asymmetry directly to `changed_file` confidence — not just inside the opt-in `_apply_cross_encoder_rerank` path. Restores v3.3.1's behaviour: when both source and test of a co-changed pair compete, the source wins on neutral lexical signal.
+
+### Added
+- **`benchmark/run-holdout.sh`** generalised to accept any number of `--repo NAME=PATH` pairs (was hardcoded to gin/actix-web/django in v4.4.2).
+- **Suite B holdout** — `benchmark/holdout/{gson,requests,zod}/tasks.yaml`. 9 real upstream commits covering Java / Python / TypeScript. Validates that v4.4.3's fixes generalise beyond Suite A.
+- **Holdout results committed at `benchmarks/results/`** (was gitignored under `docs/benchmarks/holdout-runs/` in v4.4.2). Per-task JSON + scoring + summary for both suites.
+- **`AGENT_GUIDE.md`** (root, ~518 lines) — install, first-time setup, MCP registration for every supported agent, full feature reference (every CLI command + MCP tool), the **five-rule agent contract** (search-memory-first, pack-before-read, save-observations, record-decisions, close-the-loop-with-feedback), explicit DO-NOT rules, multi-repo workflow, troubleshooting, three worked examples.
+- **`BENCHMARKS.md`** (root, ~180 lines) — Suite A + Suite B summary, per-task tables, reproduction commands, fixture provenance.
+- **`context-router setup --upgrade`** — replaces existing managed instruction blocks (legacy single-line marker from v4.4.2 and earlier, or v2 bracketed marker) in-place with the latest contract. With `--with-hooks --upgrade`, also overwrites the installed git post-commit and Claude Code PostToolUse hook scripts. Idempotent; safe to re-run.
+- **Versioned setup sentinels** — every managed block is now bracketed by `<!-- context-router: setup v2 -->` … `<!-- /context-router: setup v2 -->` so future upgrades can detect+replace exactly the managed section without disturbing user-authored content.
+
+### Changed
+- **README rewritten** (~250 lines, down from ~870). Hero leads with memory + multi-repo + token reduction; three-pillar framing; collapsible MCP config per agent; cuts long Phase-7/wiki-mode prose and exhaustive flag listings (now in `AGENT_GUIDE.md`).
+- **All five `setup.py` instruction blocks rewritten format-aware** — long+structured for Claude Code / AGENTS.md; compact imperative rules for Copilot / Cursor / Windsurf. Every block enforces the same five-rule contract with MUST/MUST-NOT framing and explicit anti-grep guidance.
+- **License badge** in README: MIT → Apache 2.0 (LICENSE was always Apache; badge was wrong).
+- **`docs/benchmarks/`** kept gitignored as the local scratchpad; release-grade artifacts now live at `benchmarks/results/<date>-<version>/`.
+
+### Removed
+- `ROADMAP.md` (stamped v0.2.2 — superseded by CHANGELOG + GitHub Releases).
+- `PLAN.md` (auto-emitted handover artifact; questions long-resolved).
+- `BENCHMARK_RESULTS.md` (v3.3.1-era; superseded by `BENCHMARKS.md`).
+
+### Holdout results (v4.4.3 vs v4.4.2 baseline)
+
+| Suite | Repos | Languages | F1 | Rank-1 | Avg tokens / pack |
+|---|---|---|---:|---:|---:|
+| A (rewritten) | gin · actix-web · django | Go / Rust / Python | 0.481 → **0.630** | 4/9 → **8/9** | 186 |
+| B (new) | gson · requests · zod | Java / Python / TS | — | **9/9** | **132** |
+| **Combined** | 6 OSS projects | 5 languages | **0.658** | **17/18 (94%)** | **159** |
+
+Up to **91%** fewer tokens than the closest comparable tool (`code-review-graph`, ~1,506 avg per pack); 89% combined average across both suites. Single known miss: `django-t3` (implement mode, no `changed_files` context — the GT file falls outside the 10k cap and there's no diff to anchor the targeted lookup). Tracked as a follow-up.
+
+---
+
 ## [4.4.2] — 2026-04-28
 
 > Precision follow-ups to v4.4.1: closes the rank-1 regression caused by `--with-rerank`, ships the two deferred phases (Phase 6 query-conditional feedback, Phase 7 docs-only-diff heuristic). See [`docs/release/v4.4.2-notes.md`](docs/release/v4.4.2-notes.md).

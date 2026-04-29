@@ -45,57 +45,76 @@ _CLAUDE_MD_BLOCK = f"""\
 context-router is the MCP server registered in `.mcp.json`. It indexes
 this repo (symbols, edges, communities, freshness) and persists project
 memory (observations + decisions) under `.context-router/memory/`. Use
-its MCP tools for every coding task — pack first, grep last.
+its MCP tools for every coding task — pack first, grep last. **The
+rules below are non-negotiable in this repo.**
 
-### Five rules — non-negotiable
+### Session checklist (run in order)
 
-1. **Search memory first.** Before exploring the repo for an unfamiliar
-   topic, call `search_memory` with terms from the user's request. Past
-   observations frequently contain the answer or a strong pointer.
-2. **Pack before you read.** Call `get_context_pack`, `get_debug_pack`,
-   or `get_minimal_context` for the task. Read the returned items.
-   Do **not** start with `Grep`/`Glob` over the repo — packs are
-   typically 10–100× cheaper in tokens and surface the structurally
-   relevant files.
-3. **Save observations after non-trivial work.** Call `save_observation`
-   with a 1-line summary, the `task_type`, and `files_touched`. The
-   git post-commit hook (if installed) auto-saves on commit, but
-   mid-session learnings need an explicit save.
-4. **Record decisions when you make them.** When you choose a library,
-   adopt a pattern, or change a schema, call `save_decision`. When
-   reversing a previous decision, call `mark_decision_superseded` to
-   link old → new.
-5. **Close the loop with feedback.** After consuming a pack, call
-   `record_feedback` with `useful: yes/no` and (if relevant) the
-   `missing` and `noisy` file lists. After ≥3 reports per file the
-   ranker self-tunes.
+1. `search_memory({{query}})` with terms from the user's request.
+2. `get_decisions({{query}})` if the task touches an architectural area.
+3. `get_context_pack({{mode, query}})` (or `get_debug_pack` for a
+   failure, `get_minimal_context` for triage). Capture the `id` from
+   the response — you will need it for `record_feedback`.
+4. Read the returned items. **Do NOT** Grep/Glob the repo.
+5. Make the change.
+6. `save_observation({{summary, task_type, files_touched}})` for any
+   non-trivial learning (skip the per-edit auto-save — see hooks below).
+7. `save_decision({{title, decision, context, consequences, status}})`
+   if you chose a library, pattern, or schema. Use
+   `mark_decision_superseded` when reversing a prior decision.
+8. `record_feedback({{pack_id, useful, missing, noisy}})` using the
+   `pack_id` from step 3.
+
+### Five rules — MUST follow
+
+1. You **MUST** call `search_memory` before exploring an unfamiliar area.
+2. You **MUST** call `get_context_pack` / `get_debug_pack` /
+   `get_minimal_context` before reading files. **Multi-file Grep/Glob
+   without a prior pack call is a contract violation in this repo.**
+   Single-file `Read` calls on paths returned by a pack are fine.
+3. You **MUST** call `save_observation` after non-trivial work (bug
+   root-causes, perf wins, gotchas, design rationale). **MUST NOT**
+   save observations for trivial work (typos, formatter runs, dep
+   bumps).
+4. You **MUST** call `save_decision` for library / pattern / schema
+   choices, and `mark_decision_superseded` when reversing.
+5. You **MUST** call `record_feedback` after consuming a pack — the
+   `pack_id` is the `id` field on the pack response.
+
+### Hooks coexistence policy
+
+If the post-commit hook is installed (check `.git/hooks/post-commit`),
+commits auto-save an observation — you do **not** need to manually
+save per commit. If the Claude Code PostToolUse hook is registered
+(check `.claude/settings.json` for `hooks.PostToolUse` containing
+`context-router memory capture`), every Edit/Write auto-saves an
+observation — you **MUST NOT** call `save_observation` per edit, only
+for synthesis (root causes, abandoned approaches, gotchas).
 
 ### Tool → trigger map
 
 | Tool | Call when |
 |---|---|
-| `search_memory` | Session start, or before exploring an unfamiliar area |
+| `search_memory` | Session start, before exploring an unfamiliar area |
+| `get_decisions` | Before re-deciding an architectural choice |
 | `get_context_pack` | Starting a review / implement / handover task |
 | `get_debug_pack` | Tracing a failure, parsing an error log |
-| `get_minimal_context` | Quick triage — ≤5 items under a tight budget |
+| `get_minimal_context` | Quick triage — ≤5 items + `next_tool_suggestion` |
+| `get_context_summary` | Compact recap of the last pack |
 | `generate_handover` | Onboarding / sprint summary |
 | `explain_selection` | Understanding why an item was selected |
-| `save_observation` | After fixing a bug, adding a feature, learning a non-obvious constraint |
-| `save_decision` | After a library / pattern / schema choice |
+| `save_observation` | After bug fixes, perf wins, gotchas, mid-session learnings |
+| `save_decision` | After library / pattern / schema choices |
 | `mark_decision_superseded` | When reversing a prior decision |
-| `record_feedback` | After consuming any pack |
+| `record_feedback` | After consuming any pack (use the pack `id`) |
 | `get_call_chain` | Walking call edges from a seed symbol |
 | `suggest_next_files` | Planning the next file to open |
+| `list_memory` / `build_index` / `update_index` | Housekeeping |
 
-### DO NOT
+### When in doubt
 
-- Use `Grep`/`Glob`/`Read` for codebase exploration when an MCP pack
-  tool would answer the same question.
-- Skip `save_observation` because "the user can read git log" — memory
-  is queryable, summarised, and survives across repos and sessions.
-- Save observations for trivial work (typo fixes, formatter runs).
-  Save what a future agent would benefit from: bug root-causes, perf
-  wins, gotchas, design decisions.
+Call `get_minimal_context({{query}})` first — it returns ≤5 items plus
+a `next_tool_suggestion` that names the right follow-up tool.
 
 See [`AGENT_GUIDE.md`](AGENT_GUIDE.md) for the full feature reference.
 {_MARKER_CLOSE}
@@ -106,20 +125,24 @@ _COPILOT_BLOCK = f"""\
 {_MARKER_OPEN}
 ## context-router
 
-Use context-router MCP tools for every coding task in this repo. Pack first; grep last.
+These rules are **non-negotiable** in this repo. Use the context-router MCP tools — pack first, grep last.
 
-**Required calls (in order):**
-1. `search_memory({{query}})` — before exploring; past observations may answer it.
-2. `get_context_pack({{mode, query}})` (or `get_debug_pack` / `get_minimal_context`) — before reading files.
-3. `save_observation({{summary, task_type, files_touched}})` — after non-trivial work.
-4. `save_decision({{title, decision, context, status}})` — after lib / pattern / schema choices.
-5. `record_feedback({{pack_id, useful, missing, noisy}})` — after consuming a pack.
+**Session checklist (MUST run in order):**
+1. `search_memory({{query}})` — before exploring.
+2. `get_decisions({{query}})` — if the task touches an architectural area.
+3. `get_context_pack({{mode, query}})` (or `get_debug_pack` / `get_minimal_context`) — capture the `id` from the response.
+4. Read the returned items. **MUST NOT** Grep/Glob multiple files without a prior pack call.
+5. `save_observation({{summary, task_type, files_touched}})` — after non-trivial work (skip per-edit if PostToolUse / post-commit hook is installed; reserve for synthesis like root causes and gotchas).
+6. `save_decision({{title, decision, context, status}})` — after lib / pattern / schema choices; `mark_decision_superseded` when reversing.
+7. `record_feedback({{pack_id, useful, missing, noisy}})` — `pack_id` is the `id` from step 3.
 
-**Modes:** `review` (1500 tok) · `implement` (1500 tok) · `debug` (2500 tok) · `handover` (4000 tok) · `minimal` (800 tok).
+**Modes:** `review` (1500 tok) · `implement` (1500) · `debug` (2500) · `handover` (4000) · `minimal` (800).
 
-**Do NOT** use repo-wide grep/glob when an MCP pack tool would answer the same question — packs are 10–100× cheaper.
+**MUST NOT:** multi-file Grep/Glob without first calling a pack tool. Save observations for trivial work (typos, formatter runs).
 
-CLI fallback (no MCP): `context-router pack --mode <mode> --query "..."`. Full reference in `AGENT_GUIDE.md`.
+**When unsure which tool:** call `get_minimal_context({{query}})` — it returns a `next_tool_suggestion`.
+
+CLI fallback (no MCP): `context-router pack --mode <mode> --query "..."`. Full reference: `AGENT_GUIDE.md`.
 {_MARKER_CLOSE}
 """
 
@@ -127,22 +150,28 @@ _CURSOR_BLOCK = f"""\
 
 # context-router {_MARKER_OPEN}
 
-Use context-router (registered as MCP server) for every coding task. Pack first, grep last.
+context-router is registered as an MCP server. These rules are non-negotiable in this repo — pack first, grep last.
 
-Required workflow:
-1. ALWAYS call `search_memory` before exploring a new area — past observations may already answer the question.
-2. ALWAYS call `get_context_pack` (or `get_debug_pack` for failures, `get_minimal_context` for triage) before reading files. Do not grep the whole repo.
-3. After non-trivial work, call `save_observation` with summary + task_type + files_touched.
-4. After choosing a library, pattern, or schema, call `save_decision`. Reversing? `mark_decision_superseded`.
-5. After consuming a pack, call `record_feedback` (useful/missing/noisy). After ≥3 reports per file, the ranker self-tunes.
+Session checklist (MUST run in order):
+1. ALWAYS call `search_memory(query)` before exploring a new area.
+2. ALWAYS call `get_decisions(query)` if the task touches an architectural area.
+3. ALWAYS call `get_context_pack(mode, query)` (or `get_debug_pack` for failures, `get_minimal_context` for triage) before reading files. Capture the `id` from the response.
+4. Read the returned items. MUST NOT Grep/Glob multiple files without a prior pack call. Single-file reads on pack-returned paths are fine.
+5. After non-trivial work, call `save_observation(summary, task_type, files_touched)`. If `.git/hooks/post-commit` or `.claude/settings.json` PostToolUse hook is installed, those auto-save — skip per-edit saves and reserve manual saves for synthesis (root causes, gotchas, abandoned approaches).
+6. After choosing a library, pattern, or schema, call `save_decision(title, decision, context, status)`. Reversing? `mark_decision_superseded`.
+7. After consuming a pack, call `record_feedback(pack_id, useful, missing, noisy)` using the pack `id` from step 3.
 
 Pack modes: review (1500 tok), implement (1500), debug (2500), handover (4000), minimal (800).
+
+Other MCP tools you may need: `generate_handover` (sprint summary), `explain_selection` (why was this picked), `get_call_chain` (downstream callees), `suggest_next_files` (next file to open), `get_context_summary` (compact recap).
+
+When unsure which tool: call `get_minimal_context(query)` — its `next_tool_suggestion` field names the right follow-up.
 
 CLI fallback if MCP unavailable:
     context-router pack --mode debug --query "error description" --error-file error.log
     context-router memory capture "what was learned" --task-type debug --files "src/foo.py"
 
-DO NOT grep/glob the whole repo when an MCP pack tool would answer the same question. See AGENT_GUIDE.md for the full reference.
+MUST NOT grep/glob the whole repo when an MCP pack tool would answer the same question. See AGENT_GUIDE.md for the full reference.
 {_MARKER_CLOSE}
 """
 
@@ -150,22 +179,30 @@ _WINDSURF_BLOCK = f"""\
 
 # context-router {_MARKER_OPEN}
 
-context-router is registered as an MCP server. Use its tools for every coding task — pack first, grep last.
+context-router is registered as an MCP server. These rules are non-negotiable in this repo — pack first, grep last.
 
-Five required calls:
+Session checklist (MUST run in order):
 1. `search_memory(query)` — before exploring a new area.
-2. `get_context_pack(mode, query)` / `get_debug_pack` / `get_minimal_context` — before reading files. Do not grep the whole repo.
-3. `save_observation(summary, task_type, files_touched)` — after non-trivial work.
-4. `save_decision(title, decision, context, status)` — after lib/pattern/schema choices; `mark_decision_superseded` when reversing.
-5. `record_feedback(pack_id, useful, missing, noisy)` — after consuming a pack.
+2. `get_decisions(query)` — if the task touches an architectural area.
+3. `get_context_pack(mode, query)` / `get_debug_pack(query)` / `get_minimal_context(query)` — before reading files. Capture the `id` from the response.
+4. Read the returned items. MUST NOT Grep/Glob multiple files without a prior pack call.
+5. `save_observation(summary, task_type, files_touched)` — after non-trivial work. If a post-commit or PostToolUse hook is installed (check `.git/hooks/post-commit` and `.claude/settings.json`), those auto-save — skip per-edit saves; reserve manual saves for synthesis (root causes, gotchas, abandoned approaches).
+6. `save_decision(title, decision, context, status)` — after lib/pattern/schema choices; `mark_decision_superseded` when reversing.
+7. `record_feedback(pack_id, useful, missing, noisy)` — `pack_id` is the `id` from step 3.
 
-Pack modes: review (1500 tok), implement (1500), debug (2500), handover (4000), minimal (800). Optional flags: `--with-rerank` for higher precision, `--with-semantic` for cosine boost.
+Pack modes: review (1500 tok), implement (1500), debug (2500), handover (4000), minimal (800).
+
+Optional flags (need the `[semantic]` extra installed): `--with-rerank` for cross-encoder precision, `--with-semantic` for bi-encoder cosine.
+
+Other MCP tools: `generate_handover`, `explain_selection`, `get_call_chain`, `suggest_next_files`, `get_context_summary`.
+
+When unsure which tool to call: `get_minimal_context(query)` returns a `next_tool_suggestion`.
 
 CLI fallback:
     context-router pack --mode implement --query "your task" --with-rerank
     context-router memory capture "summary" --task-type implement --files "path1 path2"
 
-DO NOT grep/glob the whole repo when an MCP pack tool would answer the same question. Full reference: AGENT_GUIDE.md.
+MUST NOT grep/glob the whole repo when an MCP pack tool would answer the same question. Full reference: AGENT_GUIDE.md.
 {_MARKER_CLOSE}
 """
 
@@ -173,25 +210,32 @@ _AGENTS_MD_BLOCK = f"""\
 
 ## context-router {_MARKER_OPEN}
 
-context-router is the MCP server registered for this repo. It indexes
-code structure (symbols + edges + communities) and persists project
-memory (observations + decisions) under `.context-router/memory/`.
+context-router is the MCP server registered for this repo (configure via
+`.codex/mcp.json` for Codex, `~/.gemini/settings.json` for Gemini, or your
+agent's MCP config — server command: `context-router mcp`, transport
+`stdio`). It indexes code structure (symbols + edges + communities) and
+persists project memory (observations + decisions) under `.context-router/memory/`.
 
-### Five rules — non-negotiable
+**The rules below are non-negotiable in this repo.**
 
-1. **Search memory first.** Before exploring an unfamiliar area, call
-   `search_memory` with terms from the user's request.
-2. **Pack before you read.** Call `get_context_pack` (review/implement/handover),
-   `get_debug_pack` (failures), or `get_minimal_context` (triage) for the task.
-   Do not grep the whole repo when a pack would answer the question.
-3. **Save observations** after non-trivial work via `save_observation`
-   (`summary`, `task_type`, `files_touched`). The git post-commit hook
-   covers commits; mid-session learnings need an explicit save.
-4. **Record decisions** via `save_decision` (`title`, `decision`,
-   `context`, `consequences`, `status`). Reversing a prior decision?
-   `mark_decision_superseded` links old → new.
-5. **Close the loop** with `record_feedback` after consuming any pack
-   (`useful`, `missing`, `noisy`). After ≥3 reports the ranker self-tunes.
+### Session checklist (MUST run in order)
+
+1. `search_memory({{query}})` — before exploring an unfamiliar area.
+2. `get_decisions({{query}})` — if the task touches an architectural area.
+3. `get_context_pack({{mode, query}})` / `get_debug_pack` / `get_minimal_context` — capture the `id` from the response.
+4. Read the returned items. MUST NOT Grep/Glob multiple files without a prior pack call.
+5. Make the change.
+6. `save_observation({{summary, task_type, files_touched}})` for non-trivial learnings.
+7. `save_decision({{title, decision, context, consequences, status}})` for lib/pattern/schema choices; `mark_decision_superseded` when reversing.
+8. `record_feedback({{pack_id, useful, missing, noisy}})` using the `pack_id` from step 3.
+
+### Hooks coexistence policy
+
+If `.git/hooks/post-commit` is the context-router hook, commits auto-save
+an observation — do **not** manually save per commit. If
+`.claude/settings.json` registers a context-router PostToolUse hook,
+every Edit/Write auto-saves — **MUST NOT** call `save_observation`
+per edit; only for synthesis (root causes, abandoned approaches, gotchas).
 
 ### Pack modes & flags
 
@@ -203,9 +247,22 @@ memory (observations + decisions) under `.context-router/memory/`.
 | `handover` | Onboarding (or `--wiki` for deterministic markdown) | 4,000 |
 | `minimal` | Quick triage — ≤5 items + `next_tool_suggestion` | 800 |
 
-Flags: `--with-rerank` (cross-encoder, +0.10–0.20 precision),
-`--with-semantic` (bi-encoder cosine), `--max-tokens N`,
-`--inline-bodies {{top1|all|none}}`, `--json`.
+Flags: `--with-rerank` (cross-encoder, +0.10–0.20 precision; needs the
+`[semantic]` extra), `--with-semantic` (bi-encoder cosine; same extra),
+`--max-tokens N`, `--inline-bodies {{top1|all|none}}`, `--json`.
+
+### Other MCP tools
+
+`generate_handover` (sprint summary), `explain_selection` (why was an
+item picked), `get_call_chain` (downstream callees from a seed),
+`suggest_next_files` (next file based on graph adjacency),
+`get_context_summary` (compact recap of the last pack), `list_memory`,
+`build_index` / `update_index` (housekeeping).
+
+### When in doubt
+
+Call `get_minimal_context({{query}})` — its `next_tool_suggestion`
+field names the right follow-up tool.
 
 ### CLI fallback (when MCP unavailable)
 
@@ -216,11 +273,11 @@ context-router decisions add "title" --decision "..." --status accepted
 context-router feedback record --pack-id ID --useful yes --missing "..."
 ```
 
-### DO NOT
+### MUST NOT
 
-- Use grep/glob over the whole repo when an MCP pack tool would answer.
+- Multi-file Grep/Glob without a prior pack call.
 - Skip `save_observation` because "git log has it".
-- Save observations for trivial work (typos, formatter runs).
+- Save observations for trivial work (typos, formatter runs, dep bumps).
 
 Full reference: [`AGENT_GUIDE.md`](AGENT_GUIDE.md).
 {_MARKER_CLOSE}
