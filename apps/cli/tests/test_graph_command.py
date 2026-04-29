@@ -103,12 +103,159 @@ class TestGraphCommand:
     def test_json_output(self, tmp_path):
         _init_and_index(tmp_path)
         result = runner.invoke(
-            app, ["graph", "--project-root", str(tmp_path), "--json"]
+            app, ["graph", "--project-root", str(tmp_path), "--json", "--no-open"]
         )
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert "nodes" in data
         assert "links" in data
+        assert "meta" in data, (
+            "v4.4.4 contract: graph JSON exposes a `meta` block with truncation "
+            "diagnostics (total_symbols, rendered_nodes, truncated, max_nodes, "
+            "include_low_signal). Without it consumers can't tell whether the "
+            "displayed graph is complete or capped."
+        )
+
+    def test_json_default_excludes_low_signal_kinds(self, tmp_path):
+        """external/file/import nodes must be filtered unless --include-low-signal."""
+        _init_and_index(tmp_path)
+        result = runner.invoke(
+            app, ["graph", "--project-root", str(tmp_path), "--json", "--no-open"]
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        for node in data["nodes"]:
+            assert node["kind"] not in {"external", "file", "import"}, (
+                f"low-signal kind {node['kind']!r} leaked into default graph; "
+                f"these should require --include-low-signal"
+            )
+
+    def test_json_include_low_signal_returns_them(self, tmp_path):
+        _init_and_index(tmp_path)
+        result = runner.invoke(
+            app,
+            [
+                "graph",
+                "--project-root",
+                str(tmp_path),
+                "--json",
+                "--no-open",
+                "--include-low-signal",
+            ],
+        )
+        assert result.exit_code == 0
+        # Tiny tmp repo may not actually have low-signal symbols; the
+        # contract is "flag is accepted, no crash, meta block records it".
+        data = json.loads(result.output)
+        assert data["meta"]["include_low_signal"] is True
+
+    def test_max_nodes_caps_render(self, tmp_path):
+        """--max-nodes truncates by descending degree and warns to stderr."""
+        # Truncation emits a WARN to stderr. We use the module's runner and
+        # rely on click 8.2+ keeping `.stdout` and `.stderr` separately
+        # populated on the Result object.
+        # Seed a fixture file with one hub function calling many leaves, then
+        # let `context-router index` populate the DB the same way it would in
+        # production. This avoids re-encoding the storage schema in the test.
+        (tmp_path / "seed.py").write_text(
+            "def leaf1(): pass\n"
+            "def leaf2(): pass\n"
+            "def leaf3(): pass\n"
+            "def leaf4(): pass\n"
+            "def leaf5(): pass\n"
+            "def leaf6(): pass\n"
+            "def leaf7(): pass\n"
+            "def leaf8(): pass\n"
+            "def leaf9(): pass\n"
+            "def hub():\n"
+            "    leaf1(); leaf2(); leaf3(); leaf4(); leaf5();\n"
+            "    leaf6(); leaf7(); leaf8(); leaf9()\n"
+        )
+        _init_and_index(tmp_path)
+
+        result = runner.invoke(
+            app,
+            [
+                "graph",
+                "--project-root",
+                str(tmp_path),
+                "--json",
+                "--no-open",
+                "--max-nodes",
+                "3",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        # Click 8.2+ keeps stderr separate; older versions merge into stdout.
+        # Slice off any non-JSON prefix (the WARN lines start with "WARN:").
+        stdout_text = getattr(result, "stdout", result.output)
+        json_payload = stdout_text[stdout_text.index("{"):]
+        data = json.loads(json_payload)
+        combined_streams = stdout_text + getattr(result, "stderr", "")
+        assert "graph truncated" in combined_streams.lower(), (
+            f"truncation must emit a WARN; got streams={combined_streams!r}"
+        )
+        # Top-3 by degree: `hub` (degree 9) wins; the remaining two slots go
+        # to whichever leaves the indexer produced first (deterministic via
+        # the stable-tie-break in _truncate_by_degree).
+        node_names = {n["name"] for n in data["nodes"]}
+        assert "hub" in node_names, (
+            f"highest-degree node 'hub' must survive truncation; got {node_names}"
+        )
+        assert len(data["nodes"]) <= 3
+        assert data["meta"]["truncated"] >= 1, data["meta"]
+
+    def test_max_nodes_zero_disables_truncation(self, tmp_path):
+        _init_and_index(tmp_path)
+        result = runner.invoke(
+            app,
+            [
+                "graph",
+                "--project-root",
+                str(tmp_path),
+                "--json",
+                "--no-open",
+                "--max-nodes",
+                "0",
+            ],
+        )
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data["meta"]["truncated"] == 0
+        assert data["meta"]["max_nodes"] == 0
+
+    def test_no_open_flag_suppresses_browser(self, tmp_path, monkeypatch):
+        """--no-open is the contract for headless / CI use."""
+        import webbrowser
+
+        opened: list[str] = []
+        monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
+        _init_and_index(tmp_path)
+        result = runner.invoke(
+            app, ["graph", "--project-root", str(tmp_path), "--no-open"]
+        )
+        assert result.exit_code == 0
+        assert opened == [], (
+            "webbrowser.open must NOT fire when --no-open is passed — "
+            f"got {opened}"
+        )
+
+    def test_cr_graph_no_open_env_overrides_default(self, tmp_path, monkeypatch):
+        """CR_GRAPH_NO_OPEN=1 also blocks browser launch even at default."""
+        import webbrowser
+
+        opened: list[str] = []
+        monkeypatch.setattr(webbrowser, "open", lambda url: opened.append(url))
+        monkeypatch.setenv("CR_GRAPH_NO_OPEN", "1")
+        _init_and_index(tmp_path)
+        result = runner.invoke(
+            app, ["graph", "--project-root", str(tmp_path)]
+        )
+        assert result.exit_code == 0
+        assert opened == [], (
+            "CR_GRAPH_NO_OPEN=1 must short-circuit webbrowser.open even when "
+            "--open defaults true; otherwise CI runs spawn browsers."
+        )
 
 
 # ---------------------------------------------------------------------------

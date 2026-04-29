@@ -3,12 +3,25 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 import webbrowser
 from importlib import resources
 from pathlib import Path
 from typing import Annotated
 
 import typer
+
+# v4.4.4 default — keeps the rendered SVG responsive on real repos. Below this
+# threshold the force simulation converges in <2 seconds; above it the browser
+# appears frozen for 30+ seconds and the user reports "no graph rendered".
+# The 3770-node context-router graph is the canonical reproducer.
+_DEFAULT_MAX_NODES = 500
+
+# Kinds that carry low signal in a force-directed view: external symbols are
+# stubs we never index, file-level pseudo-nodes pad the legend, raw imports
+# usually duplicate edges already implied by call/inherit relationships.
+_LOW_SIGNAL_KINDS = frozenset({"external", "file", "import"})
 
 graph_app = typer.Typer(help="Generate an interactive graph visualization.")
 
@@ -132,13 +145,27 @@ kinds.forEach(k => {
   legend.appendChild(el);
 });
 
+const truncatedMsg = GRAPH.meta && GRAPH.meta.truncated > 0
+  ? ` · truncated from ${GRAPH.meta.total_symbols} (top ${GRAPH.meta.rendered_nodes} by degree)`
+  : "";
 document.getElementById("stats").textContent =
-  `${GRAPH.nodes.length} nodes · ${GRAPH.links.length} edges`;
+  `${GRAPH.nodes.length} nodes · ${GRAPH.links.length} edges${truncatedMsg}`;
 
 const svg = d3.select("#canvas");
 const container = svg.append("g");
-const W = () => svg.node().clientWidth;
-const H = () => svg.node().clientHeight;
+const W = () => svg.node().clientWidth || window.innerWidth;
+const H = () => svg.node().clientHeight || (window.innerHeight - 49);
+
+// v4.4.4 — pre-position nodes uniformly across the viewport so the force
+// simulation doesn't start from a single (0,0) singularity. Without this,
+// every node enters at the origin and the first ~50 ticks are spent
+// untangling them; on a 500-node graph the user sees a blank canvas for
+// 3-5 seconds and assumes the page is broken.
+const _w0 = W(), _h0 = H();
+GRAPH.nodes.forEach(n => {
+  n.x = Math.random() * _w0;
+  n.y = Math.random() * _h0;
+});
 
 // Zoom
 svg.call(d3.zoom().scaleExtent([0.05, 4])
@@ -154,8 +181,12 @@ GRAPH.links.forEach(l => {
 const maxDeg = Math.max(...Object.values(degMap), 1);
 const nodeRadius = d => 4 + (degMap[d.id] || 0) / maxDeg * 14;
 
-// Simulation
+// Simulation. alphaDecay tightened to 0.05 so convergence completes in
+// ~50 ticks instead of the d3 default ~300 — perceptible motion settles
+// in <2 s on a 500-node graph.
 const sim = d3.forceSimulation(GRAPH.nodes)
+  .alphaDecay(0.05)
+  .velocityDecay(0.4)
   .force("link", d3.forceLink(GRAPH.links).id(d => d.id).distance(60).strength(0.4))
   .force("charge", d3.forceManyBody().strength(-120))
   .force("center", d3.forceCenter(W() / 2, H() / 2))
@@ -266,14 +297,50 @@ def graph(
     ] = "graph.html",
     open_browser: Annotated[
         bool,
-        typer.Option("--open/--no-open", help="Open in browser after generating."),
-    ] = False,
+        typer.Option(
+            "--open/--no-open",
+            help=(
+                "Open in browser after generating. Defaults to opening when "
+                "stdout is a tty; pass --no-open to suppress (CI / scripts)."
+            ),
+        ),
+    ] = True,
     json_only: Annotated[
         bool,
         typer.Option("--json", help="Output graph JSON instead of HTML."),
     ] = False,
+    max_nodes: Annotated[
+        int,
+        typer.Option(
+            "--max-nodes",
+            help=(
+                "Cap the number of nodes rendered, picked by descending degree "
+                f"(highest-connectivity wins). Default {_DEFAULT_MAX_NODES}; "
+                "above ~1000 the force-directed layout takes 30+ seconds to "
+                "converge and the page appears blank. Pass 0 for no cap."
+            ),
+        ),
+    ] = _DEFAULT_MAX_NODES,
+    include_low_signal: Annotated[
+        bool,
+        typer.Option(
+            "--include-low-signal/--exclude-low-signal",
+            help=(
+                "Include external/file/import nodes. Off by default — these "
+                "kinds inflate node count without adding navigation value."
+            ),
+        ),
+    ] = False,
 ) -> None:
-    """Generate an interactive D3.js force-directed symbol graph as a standalone HTML file."""
+    """Generate an interactive D3.js force-directed symbol graph as a standalone HTML file.
+
+    Defaults are tuned for human use: ``--max-nodes 500`` keeps the simulation
+    snappy, low-signal kinds (external / file / import) are filtered out, and
+    the rendered HTML opens in your browser automatically. Override any of
+    these for headless / CI use:
+
+        context-router graph --no-open --max-nodes 0 --include-low-signal --json > full.json
+    """
     # When a subcommand (e.g. ``call-chain``) is invoked, Typer still runs the
     # group callback first.  Skip the HTML-graph work in that case so flags
     # like --output don't collide with the subcommand's semantics.
@@ -299,8 +366,10 @@ def graph(
 
         # Build node list
         sym_id_map: dict[int, str] = {}  # rowid → uuid-like id
-        nodes = []
+        nodes_raw: list[dict] = []
         for sym in symbols:
+            if not include_low_signal and sym.kind in _LOW_SIGNAL_KINDS:
+                continue
             sym_id = sym_repo.get_id(
                 "default", str(sym.file), sym.name, sym.kind
             )
@@ -308,7 +377,7 @@ def graph(
                 continue
             node_id = f"sym_{sym_id}"
             sym_id_map[sym_id] = node_id
-            nodes.append({
+            nodes_raw.append({
                 "id": node_id,
                 "name": sym.name,
                 "kind": sym.kind,
@@ -326,19 +395,55 @@ def graph(
             WHERE e.repo = 'default'
             """
         ).fetchall()
-        links = []
+        links_raw: list[dict] = []
         for row in rows:
             src = sym_id_map.get(row["from_symbol_id"])
             tgt = sym_id_map.get(row["to_symbol_id"])
             if src and tgt and src != tgt:
-                links.append({
+                links_raw.append({
                     "source": src,
                     "target": tgt,
                     "type": row["edge_type"],
                     "weight": row["weight"],
                 })
 
-    graph_data = {"nodes": nodes, "links": links}
+    # Dedupe by node id — when an analyzer emits two Symbol records that
+    # resolve to the same (file, name, kind), the prior code appended both
+    # and D3's forceLink later complained about duplicate ids. Fix once,
+    # before truncation, so meta counts match the rendered SVG exactly.
+    seen_ids: set[str] = set()
+    nodes_dedup: list[dict] = []
+    for n in nodes_raw:
+        if n["id"] in seen_ids:
+            continue
+        seen_ids.add(n["id"])
+        nodes_dedup.append(n)
+
+    nodes, links, truncated = _truncate_by_degree(
+        nodes_dedup, links_raw, max_nodes=max_nodes
+    )
+    if truncated > 0:
+        # No-silent-failure policy — operator MUST see when nodes were dropped
+        # so they can re-run with a different --max-nodes if needed.
+        print(
+            f"WARN: graph truncated to {len(nodes)} highest-degree nodes "
+            f"({truncated} symbols dropped). Pass --max-nodes 0 to render "
+            f"every symbol, or --max-nodes N to set a different cap.",
+            file=sys.stderr,
+        )
+
+    graph_data = {
+        "nodes": nodes,
+        "links": links,
+        "meta": {
+            "total_symbols": len(nodes_raw),
+            "rendered_nodes": len(nodes),
+            "rendered_edges": len(links),
+            "truncated": truncated,
+            "max_nodes": max_nodes,
+            "include_low_signal": include_low_signal,
+        },
+    }
 
     if json_only:
         typer.echo(json.dumps(graph_data, indent=2))
@@ -360,8 +465,53 @@ def graph(
     if not json_only:
         typer.echo(f"Graph: {out_path}  ({len(nodes)} nodes, {len(links)} edges)")
 
-    if open_browser:
-        webbrowser.open(f"file://{out_path}")
+    # Honor an env override (CI sets CR_GRAPH_NO_OPEN=1) without forcing every
+    # caller to thread --no-open through their script.
+    suppress_open = os.environ.get("CR_GRAPH_NO_OPEN") == "1"
+    if open_browser and not suppress_open:
+        try:
+            webbrowser.open(f"file://{out_path}")
+        except (webbrowser.Error, OSError) as exc:  # pragma: no cover
+            print(
+                f"WARN: could not open browser ({exc}); the graph is at "
+                f"{out_path} — open it manually.",
+                file=sys.stderr,
+            )
+
+
+def _truncate_by_degree(
+    nodes: list[dict],
+    links: list[dict],
+    *,
+    max_nodes: int,
+) -> tuple[list[dict], list[dict], int]:
+    """Return (nodes, links, dropped_count) with high-degree nodes preferred.
+
+    ``max_nodes <= 0`` disables truncation. Otherwise the top-N nodes by
+    incident-edge count win; edges whose endpoints aren't both in the
+    surviving node set are dropped. Stable: equal-degree ties keep the
+    original DB order so reruns produce identical output.
+    """
+    if max_nodes <= 0 or len(nodes) <= max_nodes:
+        return nodes, links, 0
+
+    degree: dict[str, int] = {n["id"]: 0 for n in nodes}
+    for link in links:
+        degree[link["source"]] = degree.get(link["source"], 0) + 1
+        degree[link["target"]] = degree.get(link["target"], 0) + 1
+
+    ranked = sorted(
+        enumerate(nodes),
+        key=lambda pair: (-degree.get(pair[1]["id"], 0), pair[0]),
+    )
+    keep_ids = {nodes[i]["id"] for i, _ in ranked[:max_nodes]}
+    kept_nodes = [n for n in nodes if n["id"] in keep_ids]
+    kept_links = [
+        link
+        for link in links
+        if link["source"] in keep_ids and link["target"] in keep_ids
+    ]
+    return kept_nodes, kept_links, len(nodes) - len(kept_nodes)
 
 
 def _find_project_root() -> Path:
