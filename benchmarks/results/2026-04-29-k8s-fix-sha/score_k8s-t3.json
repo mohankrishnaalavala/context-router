@@ -1,0 +1,19 @@
+{
+  "repo": "kubernetes",
+  "task_id": "k8s-t3",
+  "anchor": "fix-sha",
+  "mode": "review",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "pkg/proxy/winkernel/proxier.go"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go"
+  ],
+  "n_items": 1,
+  "est_tokens_total": 65,
+  "precision": 1.0,
+  "recall": 1.0,
+  "f1": 1.0,
+  "rank1_hit": 1
+}

@@ -1,0 +1,17 @@
+{
+  "tool": "context-router",
+  "task_id": "k8s-t3",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go"
+  ],
+  "est_tokens": 65,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "pkg/proxy/winkernel/proxier.go"
+  ]
+}

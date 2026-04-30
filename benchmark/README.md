@@ -57,6 +57,39 @@ bash benchmark/run-holdout.sh --repo kubernetes=… --anchor query-only
 The anchor lands in every per-task `score_*.json`, in `summary.json`, and
 at the top of `summary.md` so reproducer numbers can verify the config.
 
+### Workload-matched competitor comparison (v4.4.4 Phase 3)
+
+`benchmark/run-comparison.sh` runs the same fair-config workload
+(`parent-sha-with-diff`) against `code-review-graph` so the published
+side-by-side numbers come from identical SHAs and identical diffs as input.
+
+```bash
+# 1. Run context-router under parent-sha-with-diff first (produces score_*.json).
+bash benchmark/run-holdout.sh \
+  --repo kubernetes=$HOME/Documents/project_context/holdout-repos/kubernetes \
+  --anchor parent-sha-with-diff \
+  --output-dir docs/benchmarks/holdout-runs/$(date +%Y-%m-%d)-k8s-parent-sha-with-diff
+
+# 2. Install code-review-graph in its own venv.
+uv venv .venv-crg --python 3.12
+.venv-crg/bin/python -m pip install code-review-graph
+.venv-crg/bin/code-review-graph --help
+
+# 3. Run the comparison — checks out each fix SHA, runs CRG `build` then
+#    `detect-changes --base <sha>^`, captures predicted files / tokens /
+#    runtime / exit status. Mirrors context-router's matching score_*.json
+#    so a single summary contains both tools.
+bash benchmark/run-comparison.sh \
+  --repo kubernetes=$HOME/Documents/project_context/holdout-repos/kubernetes \
+  --cr-output-dir docs/benchmarks/holdout-runs/$(date +%Y-%m-%d)-k8s-parent-sha-with-diff \
+  --crg-bin "$PWD/.venv-crg/bin/code-review-graph" \
+  --output-dir benchmarks/results/$(date +%Y-%m-%d)-comparison
+```
+
+If `code-review-graph` errors on a task, the failure mode (exit status,
+stderr tail) is captured in the per-task `comparison_*.json` and surfaced
+in the summary — tasks are never silently skipped.
+
 ## Repos to clone for running benchmarks
 
 ```bash

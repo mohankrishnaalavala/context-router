@@ -1,0 +1,88 @@
+{
+  "anchor": "fix-sha",
+  "per_task": [
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t1",
+      "anchor": "fix-sha",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "pkg/kubelet/status/status_manager.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager_test.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/controller/volume/protectionutil/wrappers.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/controller/resourceclaim/controller.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/controller/daemon/update_test.go"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 279,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t2",
+      "anchor": "fix-sha",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/config_test.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/cmd/phases/init/kubeconfig.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/phases/kubeconfig/kubeconfig.go"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 286,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t3",
+      "anchor": "fix-sha",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "pkg/proxy/winkernel/proxier.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go"
+      ],
+      "n_items": 1,
+      "est_tokens_total": 65,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "rank1_hit": 1
+    }
+  ],
+  "by_repo": {
+    "kubernetes": {
+      "n_tasks": 3,
+      "avg_precision": 0.4666666666666666,
+      "avg_recall": 1.0,
+      "avg_f1": 0.5555555555555556,
+      "avg_tokens": 210.0,
+      "rank1_hits": 3
+    }
+  },
+  "overall": {
+    "n_tasks": 3,
+    "avg_precision": 0.4666666666666666,
+    "avg_recall": 1.0,
+    "avg_f1": 0.5555555555555556,
+    "avg_tokens": 210.0,
+    "rank1_hits": 3
+  }
+}

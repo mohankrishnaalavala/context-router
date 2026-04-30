@@ -135,7 +135,14 @@ restore_all() {
 }
 trap restore_all EXIT
 
-# Emit a TSV row per task: repo_name \t repo_root \t task_id \t sha \t query \t mode
+# Emit a TSV row per task:
+#   repo_name \t repo_root \t task_id \t sha \t query \t mode \t checkout_ref
+#
+# `checkout_ref` is the git ref used by `git checkout` for the fix-tree
+# (defaults to `sha`). Tasks may override it via the optional
+# `checkout_ref:` YAML field — useful when a fixture uses synthetic
+# commits whose local SHA differs from the real upstream SHA recorded in
+# `sha:` for provenance.
 emit_tasks() {
   args=()
   for i in "${!REPO_NAMES[@]}"; do
@@ -154,7 +161,10 @@ while i < len(args):
     data = yaml.safe_load(open(yaml_path))
     for t in data.get("tasks", []):
         mode = mode_override or t.get("cr_mode", "debug")
-        print("\t".join([name, root, t["id"], t["sha"], t.get("cr_query", ""), mode]))
+        checkout_ref = t.get("checkout_ref") or t["sha"]
+        print("\t".join([
+            name, root, t["id"], t["sha"], t.get("cr_query", ""), mode, checkout_ref,
+        ]))
 PY
 }
 
@@ -174,7 +184,7 @@ init_repo_once() {
   fi
 }
 
-while IFS=$'\t' read -r NAME ROOT TID SHA QUERY MODE; do
+while IFS=$'\t' read -r NAME ROOT TID SHA QUERY MODE CHECKOUT_REF_FIX; do
   [[ -n "${TID}" ]] || continue
 
   init_repo_once "${ROOT}"
@@ -182,7 +192,12 @@ while IFS=$'\t' read -r NAME ROOT TID SHA QUERY MODE; do
   # Resolve checkout target + pack invocation per anchor.
   # Effective mode is what we actually pass to context-router pack; it may
   # override the per-task cr_mode when anchor demands a specific mode.
-  CHECKOUT_REF="${SHA}"
+  # CHECKOUT_REF_FIX = the ref to checkout for the fix tree (defaults to
+  # the task's `sha`; overridable via `checkout_ref:` in tasks.yaml when a
+  # fixture uses synthetic commits). PRE_FIX_ARG is the value passed to
+  # `--pre-fix` and must match the fix tree.
+  CHECKOUT_REF="${CHECKOUT_REF_FIX}"
+  PRE_FIX_ARG="${CHECKOUT_REF_FIX}"
   EFFECTIVE_MODE="${MODE}"
   PACK_EXTRA=()
   case "${ANCHOR}" in
@@ -193,13 +208,13 @@ while IFS=$'\t' read -r NAME ROOT TID SHA QUERY MODE; do
     parent-sha-with-diff)
       # Fair retrieval test: working tree pre-fix, --pre-fix anchors the
       # ranker on the actual change-set diff (sha^..sha).
-      CHECKOUT_REF="${SHA}^"
+      CHECKOUT_REF="${CHECKOUT_REF_FIX}^"
       EFFECTIVE_MODE="review"
-      PACK_EXTRA=(--pre-fix "${SHA}")
+      PACK_EXTRA=(--pre-fix "${PRE_FIX_ARG}")
       ;;
     query-only)
       # Hard retrieval test: pre-fix tree, no diff anchor, query only.
-      CHECKOUT_REF="${SHA}^"
+      CHECKOUT_REF="${CHECKOUT_REF_FIX}^"
       EFFECTIVE_MODE="implement"
       ;;
   esac
@@ -224,7 +239,7 @@ while IFS=$'\t' read -r NAME ROOT TID SHA QUERY MODE; do
         --query "${QUERY}" \
         --project-root "${ROOT}" \
         --json \
-        "${PACK_EXTRA[@]}" \
+        ${PACK_EXTRA[@]+"${PACK_EXTRA[@]}"} \
         >"${CR_OUT}" 2>/dev/null; then
     echo "   error: context-router pack failed for ${TID}" >&2
     exit 1
