@@ -7,12 +7,25 @@ access. All SQL uses parameterized queries — never string interpolation.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
 from contracts.interfaces import DependencyEdge, Symbol, SymbolRef
 from contracts.models import Decision, Observation, PackFeedback, RuntimeSignal
+
+# Matches identifier-shaped tokens for FTS5 query construction. Splits on
+# anything that isn't a letter/digit/underscore so e.g. "unprepareResources
+# error handling!" yields three clean tokens. Single-character tokens are
+# kept (FTS5 will simply return zero matches for noise like "a"), but blank
+# results are handled by the caller.
+_FTS_TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
+
+
+def _split_fts_tokens(query: str) -> list[str]:
+    """Tokenize *query* into FTS5-safe terms (letters, digits, underscores)."""
+    return _FTS_TOKEN_RE.findall(query)
 
 
 class ObservationRepository:
@@ -595,6 +608,78 @@ class SymbolRepository:
             for r in rows
         ]
 
+    def search_fts(
+        self, query: str, repo: str | None = None, limit: int = 200
+    ) -> list[Symbol]:
+        """Return symbols matching *query* via the BM25-ranked FTS5 index.
+
+        Used by implement-mode (Phase 4 of v4.4.4) when there is no diff
+        anchor, so ``get_all``'s untruncated 10K slice is unlikely to contain
+        the symbols a query like ``"unprepareResources error handling"``
+        actually needs.
+
+        Args:
+            query: Free-form natural-language tokens. Whitespace-only or
+                empty input returns ``[]`` without hitting the database.
+            repo: Optional repository scope. Defaults to ``None`` (all repos)
+                so callers that index a single repo can omit it.
+            limit: Maximum number of rows to return, ranked by FTS5 BM25.
+
+        Returns:
+            A list of :class:`Symbol` instances ordered by relevance
+            (lowest BM25 first). Empty when the query is blank or the index
+            has no matches.
+        """
+        if not query or not query.strip():
+            return []
+
+        # FTS5 MATCH expects a query string. Build a tolerant prefix-OR query
+        # from the user's tokens so a phrase like "unprepareResources error
+        # handling" matches symbol names and signatures even when the exact
+        # phrase isn't present. Quotes are escaped per FTS5 rules ("" inside
+        # a "..." string).
+        tokens = [t for t in _split_fts_tokens(query) if t]
+        if not tokens:
+            return []
+        match_expr = " OR ".join(f'"{t.replace(chr(34), chr(34) * 2)}"*' for t in tokens)
+
+        sql = """
+            SELECT s.id, s.name, s.kind, s.file_path, s.line_start, s.line_end,
+                   s.language, s.signature, s.docstring, s.community_id
+            FROM symbols_fts AS f
+            JOIN symbols AS s ON s.id = f.rowid
+            WHERE f.symbols_fts MATCH ?
+        """
+        params: list[object] = [match_expr]
+        if repo is not None:
+            sql += " AND s.repo = ?"
+            params.append(repo)
+        sql += " ORDER BY bm25(symbols_fts) LIMIT ?"
+        params.append(int(limit))
+
+        try:
+            rows = self._conn.execute(sql, params).fetchall()
+        except sqlite3.OperationalError:
+            # FTS5 not available, malformed query, or symbols_fts missing.
+            # Caller is responsible for emitting a stderr warning; the
+            # repository stays silent and just degrades to "no matches".
+            return []
+        return [
+            Symbol(
+                name=r["name"],
+                kind=r["kind"],
+                file=Path(r["file_path"]),
+                line_start=r["line_start"] or 0,
+                line_end=r["line_end"] or 0,
+                language=r["language"] or "",
+                signature=r["signature"] or "",
+                docstring=r["docstring"] or "",
+                community_id=r["community_id"],
+                id=r["id"],
+            )
+            for r in rows
+        ]
+
     def get_distinct_files(self, repo: str) -> list[str]:
         """Return the distinct file paths that have at least one symbol.
 
@@ -626,7 +711,8 @@ class SymbolRepository:
             file_path: The file path of the symbol as stored in the DB.
             name: The symbol name.
         """
-        from datetime import UTC, datetime as _dt
+        from datetime import UTC
+        from datetime import datetime as _dt
         self._conn.execute(
             "UPDATE symbols SET access_count = access_count + 1, "
             "last_accessed_at = ? WHERE file_path = ? AND name = ?",
