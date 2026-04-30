@@ -1,0 +1,84 @@
+{
+  "anchor": "parent-sha-with-diff",
+  "per_task": [
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t1",
+      "anchor": "parent-sha-with-diff",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "pkg/kubelet/status/status_manager.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager_test.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/apis/core/validation/validation.go"
+      ],
+      "n_items": 3,
+      "est_tokens_total": 169,
+      "precision": 0.3333333333333333,
+      "recall": 1.0,
+      "f1": 0.5,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t2",
+      "anchor": "parent-sha-with-diff",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/config_test.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go"
+      ],
+      "n_items": 3,
+      "est_tokens_total": 172,
+      "precision": 0.3333333333333333,
+      "recall": 1.0,
+      "f1": 0.5,
+      "rank1_hit": 0
+    },
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t3",
+      "anchor": "parent-sha-with-diff",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "pkg/proxy/winkernel/proxier.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go"
+      ],
+      "n_items": 1,
+      "est_tokens_total": 65,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "rank1_hit": 1
+    }
+  ],
+  "by_repo": {
+    "kubernetes": {
+      "n_tasks": 3,
+      "avg_precision": 0.5555555555555555,
+      "avg_recall": 1.0,
+      "avg_f1": 0.6666666666666666,
+      "avg_tokens": 135.33333333333334,
+      "rank1_hits": 2
+    }
+  },
+  "overall": {
+    "n_tasks": 3,
+    "avg_precision": 0.5555555555555555,
+    "avg_recall": 1.0,
+    "avg_f1": 0.6666666666666666,
+    "avg_tokens": 135.33333333333334,
+    "rank1_hits": 2
+  }
+}

@@ -9,6 +9,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.4.4] — 2026-04-29
+
+> Honesty release. Reframes how we benchmark: every k8s task ships under three retrieval-anchor configurations so reviewers can distinguish "the input contained the answer" from "retrieval actually worked." Closes the implement-mode regression on >10K-symbol repos with FTS5-anchored candidate retrieval. First workload-matched comparison vs `code-review-graph` on identical SHAs and identical diffs as input — `~88%` fewer tokens (was a `91.5%` cross-workload claim in v4.4.3).
+
+### Added
+- **FTS5-anchored implement-mode candidates** (`packages/storage-sqlite/src/storage_sqlite/migrations/0015_symbols_fts.sql`, `packages/storage-sqlite/src/storage_sqlite/repositories.py`, `packages/core/src/core/orchestrator.py`). New external-content FTS5 virtual table over `(name, signature, file_path)` with porter+unicode61 tokenization; three triggers keep the index live on insert/update/delete; seed via the canonical `INSERT INTO symbols_fts(symbols_fts) VALUES ('rebuild')`. `SymbolRepository.search_fts(query, repo=None, limit=200)` returns BM25-ranked `Symbol` rows. `Orchestrator._implement_candidates` unions FTS top-200 with the existing `get_all` 10K slice (FTS first so they survive top-N), dedupes by symbol id, preserves the v4.4.3 source-prior multiplier on both halves. Stderr warning fires only when FTS returned 0 AND `get_all` returned ≥10K rows — the precise case the implement-mode regression targets.
+- **Three retrieval-anchor configurations in the holdout runner** (`benchmark/run-holdout.sh`). `--anchor fix-sha` (default — checkout fix SHA, easy config), `--anchor parent-sha-with-diff` (checkout fix^, force review mode, pass `--pre-fix <fix-sha>` so the pack ranks from the diff — fair config, headline numbers), `--anchor query-only` (checkout fix^, force implement mode, query only — hard config). The anchor lands in every `score_*.json`, in `summary.json`, and at the top of `summary.md` so reproducer numbers can verify the config.
+- **Suite C holdout — kubernetes** (`benchmark/holdout/kubernetes/tasks.yaml`, `benchmark/build_k8s_synthetic.sh`). Three single-source-file upstream commits across kubelet status manager, client-go clientcmd loader, and kube-proxy/winkernel proxier. Synthetic fixture builder reconstructs a 6-commit local repo from per-commit GitHub tarballs (`codeload.github.com`) — partial-clone and depth-50000 throttled badly on the network used to validate; synthetic repo is 480 MB. Real upstream SHAs are recorded verbatim for provenance.
+- **Workload-matched competitor comparison runner** (`benchmark/run-comparison.sh`, `benchmarks/comparison-code-review-graph.md`, `benchmarks/results/2026-04-29-k8s-comparison/`). Runs `code-review-graph` against the same 3 fix SHAs at the same `parent-sha-with-diff` equivalent (build + `detect-changes --base <sha>^`), captures predicted files / tokens / runtime / exit status. Failures land in `comparison_*.json` with stderr — no silent skips.
+- **`[all-languages]` packaging extra** (`apps/cli/pyproject.toml`). Bundles `tree-sitter-go`, `tree-sitter-rust`, `tree-sitter-ruby`, `tree-sitter-php` and force-includes the `language-go/rust/ruby/php/sql` analyzer source in the wheel; entry-points register `go/rs/rb/php/sql`. Without `[all-languages]`, the four tree-sitter analyzers log a stderr warning naming the missing parser at index time and skip — other analyzers continue to work.
+- **Single-source agent bootstrap contract** (`.handover/prompts/agent-bootstrap.md`). `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` reference one file instead of duplicating the contract three times. Adds `.cursorrules`, `.windsurfrules`, `.opencode.json`, `.mcp.json` so every editor/agent picks up the same MCP server config and starter contract.
+
+### Changed
+- **`code-review-graph` removed from agent-facing docs.** This repo dogfoods context-router end-to-end. Other tools were never recommended in the contract; they were promoted alongside CR in `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` by accident in v4.4.3.
+- **Honest benchmark headline.** v4.4.3's "91.5% fewer tokens than `code-review-graph`" was workload-mismatched (different tasks, different SHAs). v4.4.4's `~88%` is from identical SHAs and identical diffs as input under `parent-sha-with-diff`.
+- **`benchmark/README.md`** now leads with the three anchors, names the kubernetes Suite C, and documents `run-comparison.sh`. Stale `--gin-root`/`--actix-root`/`--django-root` flag form (replaced by `--repo NAME=PATH` in v4.4.2) is removed.
+
+### Fixed
+- **Graph viz renders end-to-end** (`apps/cli/src/cli/commands/graph.py`). `--open` defaults to `true` so `context-router graph` actually opens the page (CI/scripts opt out via `--no-open` or `CR_GRAPH_NO_OPEN=1`). On real repos the d3 force simulation now caps at 500 nodes by degree (top-N highest-connectivity wins, stable original-order tiebreak), excludes low-signal kinds (external/file/import) by default (`--include-low-signal` restores prior behavior), and pre-positions nodes uniformly with a tighter `alphaDecay` so layout settles in <2s on a 500-node graph. Truncation emits a stderr WARN naming the dropped count and how to opt out (`--max-nodes 0`). Regression test (`apps/cli/tests/test_graph_command.py`) renders against a tiny fixture, parses the output HTML, and asserts SVG nodes present.
+
+### Caveats
+- **Synthetic k8s fixture: tarball SHA stamp.** GitHub's tarball generator stamps `KUBE_GIT_COMMIT` into a few `hack/lib/version.sh` and `staging/.../version/base.go` files at archive time, so the synthetic parent→fix diff includes 3-4 extra files the upstream fix did not touch. Spurious files are SHA-stamp lines only and tripped both tools' rank-1 on 2 of 3 tasks. Top-3 recall is unaffected. Documented in `benchmarks/comparison-code-review-graph.md`.
+
+---
+
 ## [4.4.3] — 2026-04-28
 
 > Holdout regressions caught by the v4.4.2 benchmark, fixed surgically without disturbing v4.4.2 behaviour on small repos. README/docs reorganised around three pillars (memory, multi-repo, token reduction) with a hand-to-an-agent `AGENT_GUIDE.md`.

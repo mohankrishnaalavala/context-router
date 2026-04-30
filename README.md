@@ -75,7 +75,10 @@ Full per-task breakdown + reproduction in [`BENCHMARKS.md`](BENCHMARKS.md).
 
 ```bash
 # Install (uv recommended; pipx / pip / brew also work — see AGENT_GUIDE.md)
+# Default — Python · TypeScript / JavaScript · Java · C# · YAML · SQL
 uv tool install context-router-cli
+# OR for polyglot / monorepo users — adds Go · Rust · Ruby · PHP parsers
+uv tool install 'context-router-cli[all-languages]'
 
 # In your repo:
 context-router init                      # creates .context-router/
@@ -191,9 +194,18 @@ agent should follow live in [`AGENT_GUIDE.md`](AGENT_GUIDE.md).
 
 ## Language support
 
-Python · TypeScript / JavaScript · Java (full, with `enum`) ·
-.NET / C# (full, with `record` / `enum`) · Go (via tree-sitter) ·
-Rust (via tree-sitter) · YAML (k8s / Helm / GitHub Actions).
+**Default install** (`uv tool install context-router-cli`):
+Python · TypeScript / JavaScript (`.ts`/`.tsx`/`.js`/`.jsx`/`.mjs`/`.cjs`)
+· Java (full, with `enum`) · .NET / C# (full, with `record` / `enum`) ·
+YAML (`.yaml`/`.yml` — k8s / Helm / GitHub Actions) · SQL DDL
+(`CREATE TABLE / VIEW / FUNCTION / PROCEDURE` via regex).
+
+**`[all-languages]` extra** (`uv tool install 'context-router-cli[all-languages]'`):
+adds Go · Rust · Ruby · PHP via tree-sitter. The analyzer source ships in
+every wheel; the extra only adds the optional tree-sitter parser deps.
+Without the parsers, the entry points still register and `context-router
+doctor` reports a stderr warning per missing parser — silent skipping is
+forbidden by the no-silent-failure policy.
 
 Add another language by implementing the `LanguageAnalyzer` protocol
 and registering via the `context_router.language_analyzers` entry

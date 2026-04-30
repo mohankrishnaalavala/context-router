@@ -228,6 +228,27 @@ internal_docs/ship-check/
 internal_docs/*
 .context-router/
 
+# Local agent-machine state — generated per-clone, never tracked.
+# Tracked exceptions are listed via "!" so they survive (docs-agent.md, ship-check
+# command, ship-check skill). The rest is per-developer noise: hooks, settings,
+# worktrees, IDE-specific configs. Per-machine settings should not propagate.
+.cursor/
+.agents/
+.claude/agents/*.md
+!.claude/agents/docs-agent.md
+.claude/commands/*.md
+!.claude/commands/ship-check.md
+.claude/skills/*.md
+.claude/skills/*/
+!.claude/skills/ship-check/
+.claude/hooks/
+.claude/settings.json
+.claude/settings.local.json
+.claude/worktrees/
+# Stale code-review-graph artifact directory (removed in v4.4.4 — kept here
+# in case a contributor still has it locally from an older revision).
+.code-review-graph/
+
 # v4.0 evaluation fixtures: cloned sources are derived, not tracked.
 tests/fixtures/workspaces/real/*/
 !tests/fixtures/workspaces/real/*/queries.jsonl

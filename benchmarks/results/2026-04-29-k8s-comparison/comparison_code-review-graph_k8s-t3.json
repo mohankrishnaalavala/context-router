@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "k8s-t3",
+  "sha": "a49bc6f2fbbd9b1a634d9224dac9828e2012b4ab",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "hack/lib/version.sh",
+    "pkg/proxy/winkernel/proxier.go"
+  ],
+  "est_tokens": 1184,
+  "runtime_ms": 6595,
+  "rank1_hit": 0,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "pkg/proxy/winkernel/proxier.go"
+  ]
+}

@@ -1,6 +1,6 @@
 [project]
 name = "context-router-cli"
-version = "4.4.3"
+version = "4.4.4"
 requires-python = ">=3.12"
 description = "Local-first CLI and MCP server for AI coding context — minimum useful context, maximum agent performance"
 readme = "README.md"
@@ -36,6 +36,26 @@ Changelog = "https://github.com/mohankrishnaalavala/context-router/blob/main/CHA
 
 [project.optional-dependencies]
 semantic = ["sentence-transformers>=2.2"]
+# Tree-sitter parsers for the optional language analyzers (Go, Rust, Ruby,
+# PHP). The analyzer source code itself ships in every wheel via
+# `[tool.hatch.build.targets.wheel.force-include]` below — this extra only
+# adds the runtime parser deps. Without these parsers installed, the entry
+# points still register, but loading the analyzer fails at import and the
+# PluginLoader emits a stderr warning naming the missing parser. SQL is
+# regex-based (no tree-sitter dep) and ships unconditionally.
+#
+# Default install: Python / TypeScript / JavaScript / Java / C# / YAML / SQL.
+# `[all-languages]` adds: Go / Rust / Ruby / PHP.
+#
+# Polyglot or monorepo users should run:
+#   uv tool install 'context-router-cli[all-languages]'
+#   pipx install 'context-router-cli[all-languages]'
+all-languages = [
+    "tree-sitter-go>=0.21",
+    "tree-sitter-rust>=0.21",
+    "tree-sitter-ruby>=0.21",
+    "tree-sitter-php>=0.21",
+]
 
 [project.scripts]
 context-router = "cli.main:app"
@@ -58,8 +78,22 @@ java = "language_java:JavaAnalyzer"
 ts = "language_typescript:TypeScriptAnalyzer"
 tsx = "language_typescript:TypeScriptAnalyzer"
 js = "language_typescript:TypeScriptAnalyzer"
+jsx = "language_typescript:TypeScriptAnalyzer"
+mjs = "language_typescript:TypeScriptAnalyzer"
+cjs = "language_typescript:TypeScriptAnalyzer"
 cs = "language_dotnet:DotnetAnalyzer"
 yaml = "language_yaml:YamlAnalyzer"
+yml = "language_yaml:YamlAnalyzer"
+# SQL is regex-only — no tree-sitter parser required, ships in default install.
+sql = "language_sql:SqlAnalyzer"
+# The remaining four require tree-sitter parsers, which only ship via
+# `[all-languages]`. Without them the PluginLoader logs a stderr warning
+# at index time naming the missing parser and skips the analyzer; other
+# analyzers continue to work. This matches the no-silent-failure policy.
+go = "language_go:GoAnalyzer"
+rs = "language_rust:RustAnalyzer"
+rb = "language_ruby:RubyAnalyzer"
+php = "language_php:PhpAnalyzer"
 
 [build-system]
 requires = ["hatchling"]
@@ -94,6 +128,15 @@ packages = ["src/cli"]
 "../../packages/language-typescript/src/language_typescript" = "language_typescript"
 "../../packages/language-java/src/language_java"     = "language_java"
 "../../packages/language-dotnet/src/language_dotnet" = "language_dotnet"
+# v4.4.4 — bundle the remaining language analyzers in every wheel. The
+# tree-sitter parser deps are optional and gated by [all-languages]; the
+# analyzer source itself is always present so doctor / PluginLoader can
+# explain missing parsers (rather than failing as "no entry point").
+"../../packages/language-go/src/language_go"         = "language_go"
+"../../packages/language-rust/src/language_rust"     = "language_rust"
+"../../packages/language-ruby/src/language_ruby"     = "language_ruby"
+"../../packages/language-php/src/language_php"       = "language_php"
+"../../packages/language-sql/src/language_sql"       = "language_sql"
 "../../packages/adapters-claude/src/adapters_claude" = "adapters_claude"
 "../../packages/adapters-copilot/src/adapters_copilot" = "adapters_copilot"
 "../../packages/adapters-codex/src/adapters_codex"   = "adapters_codex"

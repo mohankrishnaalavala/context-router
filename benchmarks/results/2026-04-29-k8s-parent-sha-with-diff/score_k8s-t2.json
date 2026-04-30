@@ -1,0 +1,21 @@
+{
+  "repo": "kubernetes",
+  "task_id": "k8s-t2",
+  "anchor": "parent-sha-with-diff",
+  "mode": "review",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/config_test.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go"
+  ],
+  "n_items": 3,
+  "est_tokens_total": 172,
+  "precision": 0.3333333333333333,
+  "recall": 1.0,
+  "f1": 0.5,
+  "rank1_hit": 0
+}

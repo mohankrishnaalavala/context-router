@@ -1,0 +1,19 @@
+{
+  "tool": "context-router",
+  "task_id": "k8s-t2",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/config_test.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go"
+  ],
+  "est_tokens": 172,
+  "runtime_ms": null,
+  "rank1_hit": 0,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+  ]
+}

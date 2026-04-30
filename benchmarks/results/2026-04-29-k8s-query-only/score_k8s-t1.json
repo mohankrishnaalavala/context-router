@@ -1,0 +1,23 @@
+{
+  "repo": "kubernetes",
+  "task_id": "k8s-t1",
+  "anchor": "query-only",
+  "mode": "review",
+  "effective_mode": "implement",
+  "ground_truth_files": [
+    "pkg/kubelet/status/status_manager.go"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/controller/podgc/gc_controller.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/controller/resourcequota/resource_quota_controller.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/controller/resourcequota/resource_quota_monitor.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/controller/storageversionmigrator/resourceversion.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/scheduler/framework/plugins/dynamicresources/dra_manager.go"
+  ],
+  "n_items": 49,
+  "est_tokens_total": 2756,
+  "precision": 0.0,
+  "recall": 0.0,
+  "f1": 0.0,
+  "rank1_hit": 0
+}

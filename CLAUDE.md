@@ -75,25 +75,22 @@ Every change, every time — no exceptions:
 
 ## MCP tools — call before opening any file
 
-Use both tools in sequence: context-router scopes the task, code-review-graph traces structure.
+This repo dogfoods context-router. The full agent contract lives in [`.handover/prompts/agent-bootstrap.md`](.handover/prompts/agent-bootstrap.md) — read it once, then follow it every session.
 
-**context-router** (start here)
+Hard requirements every session:
 
 | Call | When |
 |---|---|
-| `get_context_pack(mode=..., query=...)` | Starting any implement / review / handover task |
-| `get_debug_pack(query=..., error_file=...)` | Debugging a failure |
-| `search_memory(query=...)` | Finding past observations on a topic |
-| `get_decisions(query=...)` | Looking up architectural decisions |
+| `search_memory(query=...)` | First — before opening any file |
+| `get_context_pack(mode=..., query=...)` | Second — after `search_memory`, before exploring |
+| `get_debug_pack(query=..., error_file=...)` | When debugging a failure |
+| `get_decisions(query=...)` | Before any architectural decision |
 | `save_observation(...)` | After every completed task — required, not optional |
+| `save_decision(...)` | After any non-trivial design decision |
 
-**code-review-graph** (trace structure)
+Run `context-router watch` in a separate terminal to keep the index live as you edit.
 
-| Call | When |
-|---|---|
-| `semantic_search_nodes` / `query_graph` | Exploring code — use instead of grep/glob |
-| `get_impact_radius` | Blast radius before modifying a file |
-| `detect_changes` + `get_review_context` | Code review without reading full files |
+Do not introduce `code-review-graph`, `aider-repomap`, or other overlapping retrieval tools to this repo — we use our own stack end-to-end.
 
 ---
 

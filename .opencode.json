@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "context-router": {
+      "command": "context-router",
+      "args": ["mcp"],
+      "type": "stdio",
+      "env": []
+    }
+  }
+}

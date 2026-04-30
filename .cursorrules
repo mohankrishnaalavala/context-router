@@ -1,0 +1,34 @@
+# Cursor rules — context-router
+
+This repo dogfoods its own tool. Cursor sessions working here MUST follow the bootstrap contract:
+
+**→ Read `.handover/prompts/agent-bootstrap.md` before doing anything else.**
+
+That file is the single source of truth for required start/end-of-session calls, how to keep the index live, when to record architectural decisions, and repo conventions.
+
+For repo-specific quality rules, also read `CLAUDE.md`.
+
+---
+
+**Cursor MCP setup** — `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "context-router": {
+      "command": "context-router",
+      "args": ["mcp"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
+```
+
+Quick rules for Cursor:
+
+- Before opening any file, call `search_memory(query="<task>")` and `get_context_pack(mode="handover")`.
+- Run `context-router watch` in a terminal to keep the index live as you edit.
+- After every completed task, call `save_observation(...)` and commit `.context-router/memory/observations/`.
+- One conventional-commit per logical concern. Tests green before push (`uv run pytest`).
+
+No other knowledge-graph tools are wired into this repo. Do not introduce `code-review-graph`, `aider-repomap`, or similar — context-router is the local stack.
