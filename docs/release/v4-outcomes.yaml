@@ -423,3 +423,106 @@ outcomes:
           r = ContextRanker(token_budget=0); assert r._use_embeddings is True;
           assert _ADAPTIVE_TOPK_ABS_FLOOR == 0.40; print('PASS: semantic-rerank-default')"
         expected_stdout_contains: "PASS: semantic-rerank-default"
+
+  - id: v4.4.4-fts-implement-anchor
+    phase: v4.4.4
+    priority: P0
+    description: >-
+      FTS5-anchored implement-mode candidate retrieval recovers GT symbols on
+      >10K-symbol repos when no diff is available. Closes the candidate-cap
+      regression flagged in BENCHMARKS.md.
+    dod:
+      outcome: >-
+        On a >=10K-symbol repo, `pack --mode implement --query "<known-good
+        terms>"` returns the GT file in the top-3 selected items even though
+        the GT symbol falls outside the get_all 10K slice.
+      threshold: >-
+        `uv run pytest packages/core/tests/test_implement_fts_anchor.py -q`
+        exits 0 with both integration tests passing.
+      negative_case: >-
+        When FTS returned 0 hits AND get_all returned >=10K rows, stderr
+        contains "FTS5 implement-mode anchor returned 0 matches" naming the
+        query. Small repos (<10K symbols) emit no warning even on a no-match.
+      verify:
+        cmd: >-
+          uv run pytest packages/core/tests/test_implement_fts_anchor.py
+          packages/storage-sqlite/tests/test_symbols_fts.py -q
+        expected_stdout_contains: "passed"
+
+  - id: v4.4.4-anchor-flag
+    phase: v4.4.4
+    priority: P0
+    description: >-
+      The holdout runner exposes three retrieval-anchor configurations
+      (fix-sha / parent-sha-with-diff / query-only) so reviewers can
+      distinguish "the input contained the answer" from "retrieval actually
+      worked." Anchor is stamped in every score JSON and summary.
+    dod:
+      outcome: >-
+        Every per-task score_*.json and summary.json carries an "anchor"
+        field naming the retrieval configuration used. summary.md shows
+        the anchor at the top.
+      threshold: >-
+        `bash benchmark/run-holdout.sh --repo gin=<path> --anchor
+        parent-sha-with-diff --output-dir /tmp/cr-anchor-smoke` produces
+        a summary.json whose top-level "anchor" key equals
+        "parent-sha-with-diff".
+      negative_case: >-
+        `--anchor bogus` exits non-zero with stderr "must be one of:
+        fix-sha | parent-sha-with-diff | query-only" — never silently
+        falls back to the default.
+      verify:
+        cmd: >-
+          bash benchmark/run-holdout.sh --repo gin=/tmp/nope --anchor bogus 2>&1 || true
+        expected_stdout_contains: "fix-sha | parent-sha-with-diff | query-only"
+
+  - id: v4.4.4-honest-comparison
+    phase: v4.4.4
+    priority: P1
+    description: >-
+      Workload-matched comparison vs code-review-graph published. Both
+      tools see identical SHAs and identical diffs as input under the
+      parent-sha-with-diff anchor.
+    dod:
+      outcome: >-
+        benchmarks/comparison-code-review-graph.md exists, names the
+        anchor explicitly, lists the 3 k8s SHAs, and gives a per-task
+        side-by-side table covering predicted files, tokens, runtime,
+        and rank-1 hit for both tools.
+      threshold: >-
+        benchmarks/results/2026-04-29-k8s-comparison/summary.json contains
+        records for both "context-router" and "code-review-graph" across
+        all 3 tasks (6 records total) with no exit_status != 0 entries.
+      negative_case: >-
+        If code-review-graph errors on a task, the failure mode (exit
+        status, stderr tail) is captured in
+        comparison_<task_id>.json — never silently skipped.
+      verify:
+        cmd: >-
+          jq '[.by_task | to_entries[] | .value | to_entries[] | .value
+          | select(.exit_status == 0)] | length'
+          benchmarks/results/2026-04-29-k8s-comparison/summary.json
+        expected_stdout_contains: "6"
+
+  - id: v4.4.4-graph-renders
+    phase: v4.4.4
+    priority: P2
+    description: >-
+      `context-router graph` opens the page by default and renders end-to-end
+      on real repos within 2 seconds at the default 500-node cap.
+    dod:
+      outcome: >-
+        Running `context-router graph` opens a browser tab whose SVG contains
+        force-laid-out nodes within ~2s. CI-suppressible via --no-open or
+        CR_GRAPH_NO_OPEN=1.
+      threshold: >-
+        `uv run pytest apps/cli/tests/test_graph_command.py -q` exits 0;
+        the rendered HTML for a fixture repo parses and yields >=1 SVG node.
+      negative_case: >-
+        When the graph would exceed --max-nodes (default 500), stderr
+        contains a WARN naming the dropped count and "--max-nodes 0" as
+        the opt-out — never silently truncates.
+      verify:
+        cmd: >-
+          uv run pytest apps/cli/tests/test_graph_command.py -q
+        expected_stdout_contains: "passed"

@@ -179,7 +179,7 @@ wheels = [
 
 [[package]]
 name = "context-router-adapters-claude"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/adapters-claude" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -190,7 +190,7 @@ requires-dist = [{ name = "context-router-contracts", editable = "packages/contr
 
 [[package]]
 name = "context-router-adapters-codex"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/adapters-codex" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -201,7 +201,7 @@ requires-dist = [{ name = "context-router-contracts", editable = "packages/contr
 
 [[package]]
 name = "context-router-adapters-copilot"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/adapters-copilot" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -212,7 +212,7 @@ requires-dist = [{ name = "context-router-contracts", editable = "packages/contr
 
 [[package]]
 name = "context-router-benchmark"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/benchmark" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -227,7 +227,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-cli"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "apps/cli" }
 dependencies = [
     { name = "cachetools" },
@@ -279,7 +279,7 @@ provides-extras = ["semantic", "all-languages"]
 
 [[package]]
 name = "context-router-contracts"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/contracts" }
 dependencies = [
     { name = "pydantic" },
@@ -294,7 +294,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-contracts-extractor"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/contracts-extractor" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -309,7 +309,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-core"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "cachetools" },
@@ -336,7 +336,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-evaluation"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/evaluation" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -353,7 +353,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-graph-index"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/graph-index" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -370,7 +370,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-dotnet"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-dotnet" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -387,7 +387,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-go"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-go" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -404,7 +404,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-java"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-java" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -421,7 +421,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-php"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-php" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -438,7 +438,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-python"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-python" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -455,7 +455,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-ruby"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-ruby" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -472,7 +472,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-rust"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-rust" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -489,7 +489,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-sql"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-sql" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -500,7 +500,7 @@ requires-dist = [{ name = "context-router-contracts", editable = "packages/contr
 
 [[package]]
 name = "context-router-language-typescript"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-typescript" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -517,7 +517,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-language-yaml"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/language-yaml" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -532,7 +532,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-mcp-server"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "apps/mcp-server" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -551,7 +551,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-memory"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/memory" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -566,7 +566,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-ranking"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/ranking" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -615,7 +615,7 @@ dev = [
 
 [[package]]
 name = "context-router-runtime"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/runtime" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -626,7 +626,7 @@ requires-dist = [{ name = "context-router-contracts", editable = "packages/contr
 
 [[package]]
 name = "context-router-storage-sqlite"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/storage-sqlite" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -637,7 +637,7 @@ requires-dist = [{ name = "context-router-contracts", editable = "packages/contr
 
 [[package]]
 name = "context-router-workspace"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/workspace" }
 dependencies = [
     { name = "context-router-contracts" },
@@ -654,7 +654,7 @@ requires-dist = [
 
 [[package]]
 name = "context-router-workspace-store"
-version = "4.4.3"
+version = "4.4.4"
 source = { editable = "packages/workspace-store" }
 
 [[package]]

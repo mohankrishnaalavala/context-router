@@ -1,6 +1,6 @@
 [project]
 name = "context-router-language-sql"
-version = "4.4.3"
+version = "4.4.4"
 requires-python = ">=3.12"
 description = "SQL language analyzer plugin for context-router"
 license = {text = "Apache-2.0"}
