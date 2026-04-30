@@ -1,0 +1,20 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "k8s-t1",
+  "sha": "81e4b115fd290208d757566d4e6f58c62d0833eb",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "hack/lib/version.sh",
+    "pkg/kubelet/status/status_manager.go",
+    "pkg/kubelet/status/status_manager_test.go"
+  ],
+  "est_tokens": 1101,
+  "runtime_ms": 4433,
+  "rank1_hit": 0,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "pkg/kubelet/status/status_manager.go"
+  ]
+}

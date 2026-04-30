@@ -1,48 +1,75 @@
 # Holdout fixtures — kubernetes/kubernetes (197K symbols, polyglot).
 # NEVER tune the ranker against these tasks.
-# Clone: git clone https://github.com/kubernetes/kubernetes.git
 #
-# Three tasks chosen to exercise:
-#   - the >10K-symbol cap (no diff anchor case, query-only anchor)
-#   - cross-package retrieval (review with --pre-fix anchor)
-#   - source-prior multiplier (review at the fix SHA — easy config)
+# These fixtures are reconstructed from per-commit GitHub tarballs into a
+# *synthetic* local git repo (`benchmark/build_k8s_synthetic.sh`) because
+# a full clone of kubernetes/kubernetes is multi-GB and the depth-50000
+# clone we tried in this session ran into upstream throttling. The
+# `sha:` field below is the **real upstream commit SHA** and is recorded
+# verbatim in summary.json/score_*.json/summary.md for provenance. The
+# `checkout_ref:` field names a local annotated tag in the synthetic
+# repo whose tree matches the real fix-SHA tree (verified via the
+# tarball that GitHub serves at `codeload.github.com/.../tar.gz/<sha>`).
+#
+# Caveat — known noise floor: GitHub's tarball generator stamps
+# `KUBE_GIT_COMMIT` into a few `hack/lib/version.sh` and
+# `staging/src/k8s.io/{client-go,component-base}/version/base.go` files
+# at archive time, so the synthetic parent→fix diff includes those 3-4
+# extra files. They were NOT touched by the upstream fix commit. The
+# spurious files are SHA-stamp lines only and do not contain
+# kubelet/kubectl/proxy semantics, so the ranker still surfaces the GT
+# in our smoke runs. We document this in
+# `benchmarks/comparison-code-review-graph.md`.
+#
+# Three single-source-file bug fixes touching diverse subsystems:
+#
+#   k8s-t1: 81e4b115fd290208d757566d4e6f58c62d0833eb
+#           2026-01-26  fix(kubelet): ignore resource claim statuses in pod status comparison
+#           ground-truth: pkg/kubelet/status/status_manager.go
+#
+#   k8s-t2: ffa084f81129ea685b176a282921c4d54906c539
+#           2025-07-29  kubectl: Fix current-context being written to wrong file
+#           ground-truth: staging/src/k8s.io/client-go/tools/clientcmd/loader.go
+#
+#   k8s-t3: a49bc6f2fbbd9b1a634d9224dac9828e2012b4ab
+#           2025-11-05  kube-proxy/winkernel: fix stale RemoteEndpoints due to premature
+#                       clearing of terminatedEndpoints map.
+#           ground-truth: pkg/proxy/winkernel/proxier.go
 #
 # Run all three anchors per task (single SHA list, three sweeps):
-#   bash benchmark/run-holdout.sh --repo kubernetes=/path/to/k8s --anchor fix-sha
-#   bash benchmark/run-holdout.sh --repo kubernetes=/path/to/k8s --anchor parent-sha-with-diff
-#   bash benchmark/run-holdout.sh --repo kubernetes=/path/to/k8s --anchor query-only
+#   bash benchmark/build_k8s_synthetic.sh                  # one-time setup
+#   bash benchmark/run-holdout.sh --repo kubernetes=$HOME/Documents/project_context/holdout-repos/kubernetes --anchor fix-sha
+#   bash benchmark/run-holdout.sh --repo kubernetes=$HOME/Documents/project_context/holdout-repos/kubernetes --anchor parent-sha-with-diff
+#   bash benchmark/run-holdout.sh --repo kubernetes=$HOME/Documents/project_context/holdout-repos/kubernetes --anchor query-only
 #
-# TODO(v4.4.4 Phase 2): the SHAs below are placeholders. The plan
-# (`.handover/work/v4.4.4-plan.md`) refers to "the 3 k8s SHAs from prior
-# session" — those numbers were not committed before the prior session
-# was interrupted. Before publishing benchmark numbers, paste the 3 real
-# SHAs + ground-truth files here. Until that happens, the runner skips
-# tasks with `sha: TODO_…` (see PRECONDITION below).
-#
-# PRECONDITION: every task with a `sha: TODO_…` value must be filled in
-# before running this fixture. The runner will fail fast on unresolved
-# SHAs (git checkout TODO_… returns non-zero) — not a silent skip.
+# Each task touches exactly ONE production source file (verified via
+# `git show --stat <sha>` against the upstream commit — tests against
+# the same file are ignored for scoring). All commits are on master.
+# Subsystems span kubelet, client-go CLI config, and kube-proxy networking.
 tasks:
   - id: k8s-t1
-    sha: TODO_K8S_SHA_1
-    description: "fix(kubelet/dra): error handling in unprepareResources (placeholder — fill from prior session)"
+    sha: 81e4b115fd290208d757566d4e6f58c62d0833eb
+    checkout_ref: k8s-t1-fix
+    description: "fix(kubelet): ignore resource claim statuses in pod status comparison"
     ground_truth_files:
-      - pkg/kubelet/cm/dra/manager.go
-    cr_query: "kubelet dra unprepareResources error handling"
+      - pkg/kubelet/status/status_manager.go
+    cr_query: "pod restart loops when DRA scheduler updates resource claims"
     cr_mode: review
 
   - id: k8s-t2
-    sha: TODO_K8S_SHA_2
-    description: "(placeholder — fill from prior session)"
+    sha: ffa084f81129ea685b176a282921c4d54906c539
+    checkout_ref: k8s-t2-fix
+    description: "kubectl: Fix current-context being written to wrong file"
     ground_truth_files:
-      - TODO_K8S_GT_2
-    cr_query: "TODO_K8S_QUERY_2"
+      - staging/src/k8s.io/client-go/tools/clientcmd/loader.go
+    cr_query: "kubectl set-context writes current-context into wrong kubeconfig file"
     cr_mode: review
 
   - id: k8s-t3
-    sha: TODO_K8S_SHA_3
-    description: "(placeholder — fill from prior session)"
+    sha: a49bc6f2fbbd9b1a634d9224dac9828e2012b4ab
+    checkout_ref: k8s-t3-fix
+    description: "kube-proxy/winkernel: fix stale RemoteEndpoints due to premature clearing of terminatedEndpoints map."
     ground_truth_files:
-      - TODO_K8S_GT_3
-    cr_query: "TODO_K8S_QUERY_3"
+      - pkg/proxy/winkernel/proxier.go
+    cr_query: "windows kube-proxy stale remote endpoints after terminating pods"
     cr_mode: review

@@ -1,0 +1,137 @@
+{
+  "by_task": {
+    "k8s-t1": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "k8s-t1",
+        "sha": "81e4b115fd290208d757566d4e6f58c62d0833eb",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "hack/lib/version.sh",
+          "pkg/kubelet/status/status_manager.go",
+          "pkg/kubelet/status/status_manager_test.go"
+        ],
+        "est_tokens": 1101,
+        "runtime_ms": 4433,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "pkg/kubelet/status/status_manager.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "k8s-t1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager_test.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/apis/core/validation/validation.go"
+        ],
+        "est_tokens": 169,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "pkg/kubelet/status/status_manager.go"
+        ]
+      }
+    },
+    "k8s-t2": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "k8s-t2",
+        "sha": "ffa084f81129ea685b176a282921c4d54906c539",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "hack/lib/version.sh",
+          "staging/src/k8s.io/client-go/tools/clientcmd/config_test.go",
+          "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+        ],
+        "est_tokens": 1193,
+        "runtime_ms": 3176,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "k8s-t2",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/config_test.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go"
+        ],
+        "est_tokens": 172,
+        "runtime_ms": null,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+        ]
+      }
+    },
+    "k8s-t3": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "k8s-t3",
+        "sha": "a49bc6f2fbbd9b1a634d9224dac9828e2012b4ab",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "hack/lib/version.sh",
+          "pkg/proxy/winkernel/proxier.go"
+        ],
+        "est_tokens": 1184,
+        "runtime_ms": 6595,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "pkg/proxy/winkernel/proxier.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "k8s-t3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go"
+        ],
+        "est_tokens": 65,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "pkg/proxy/winkernel/proxier.go"
+        ]
+      }
+    }
+  },
+  "aggregate": {
+    "context-router": {
+      "rank1": 2,
+      "tokens": 406,
+      "n": 3
+    },
+    "code-review-graph": {
+      "rank1": 0,
+      "tokens": 3478,
+      "n": 3,
+      "errors": 0
+    }
+  }
+}
