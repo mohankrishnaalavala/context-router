@@ -5,14 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-
+from contracts.models import Decision, Observation, RuntimeSignal
 from storage_sqlite.database import Database
 from storage_sqlite.repositories import (
     DecisionRepository,
     ObservationRepository,
     RuntimeSignalRepository,
 )
-from contracts.models import Decision, Observation, RuntimeSignal
 
 
 @pytest.fixture()
@@ -24,22 +23,22 @@ def db(tmp_path: Path) -> Database:
 
 
 class TestDatabase:
-    def test_schema_version_is_1_after_init(self, db: Database):
+    def test_schema_version_after_init(self, db: Database):
         row = db.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 14
+        assert row[0] == 15
 
     def test_initialize_is_idempotent(self, tmp_path: Path):
         database = Database(tmp_path / "idempotent.db")
         database.initialize()
         database.initialize()
         row = database.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-        assert row[0] == 14
+        assert row[0] == 15
         database.close()
 
     def test_context_manager(self, tmp_path: Path):
         with Database(tmp_path / "ctx.db") as db:
             row = db.connection.execute("SELECT MAX(version) FROM schema_version").fetchone()
-            assert row[0] == 14
+            assert row[0] == 15
 
     def test_p0_indexes_exist_after_init(self, db: Database):
         expected = {

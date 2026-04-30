@@ -1571,13 +1571,17 @@ class Orchestrator:
                 sym_repo, edge_repo, repo_name, weights, query=query
             )
         elif mode == "implement":
-            items = self._implement_candidates(sym_repo, repo_name, weights)
+            items = self._implement_candidates(
+                sym_repo, repo_name, weights, query=query
+            )
         elif mode == "minimal":
             # Minimal mode reuses implement candidate selection — the goal is a
             # cheap triage view ranked by relevance to the task, not a distinct
             # signal source. The orchestrator later caps to top-5 and emits a
             # next_tool_suggestion for follow-up.
-            items = self._implement_candidates(sym_repo, repo_name, weights)
+            items = self._implement_candidates(
+                sym_repo, repo_name, weights, query=query
+            )
         elif mode == "debug":
             items = self._debug_candidates(
                 sym_repo, edge_repo, repo_name, weights, signals, past_files
@@ -2702,16 +2706,83 @@ class Orchestrator:
         sym_repo: SymbolRepository,
         repo_name: str,
         weights: dict[str, float],
+        query: str = "",
     ) -> list[ContextItem]:
-        """Build candidates prioritised for a feature-implementation task."""
-        all_symbols = sym_repo.get_all(repo_name)
-        items: list[ContextItem] = []
+        """Build candidates prioritised for a feature-implementation task.
 
+        v4.4.4 Phase 4 — FTS5-anchored retrieval: when ``query`` is provided
+        and there is no diff anchor, the orchestrator unions the BM25 top-N
+        symbols matching the query (via ``SymbolRepository.search_fts``) with
+        the existing ``get_all`` 10K slice. Without this, ``get_all`` silently
+        truncates large repos (k8s: 197K symbols) so the GT file is never a
+        candidate. Both halves of the union get the v4.4.3 source/test
+        asymmetry multiplier so tests don't outrank production sources at
+        equal base score.
+        """
+        # Pull FTS-matched symbols first so we can prefer them on dedupe (the
+        # FTS match implies the symbol is more relevant to the user's intent
+        # than an arbitrary row from the truncated 10K slice).
+        fts_symbols: list[Any] = []
+        query_stripped = query.strip() if query else ""
+        if query_stripped:
+            fts_symbols = sym_repo.search_fts(query_stripped, repo=repo_name, limit=200)
+
+        all_symbols = sym_repo.get_all(repo_name)
+
+        # CLAUDE.md: no silent failures — when the FTS path was exercised but
+        # returned nothing AND get_all hit its 10K cap (so the GT row may
+        # well be invisible), name the reason on stderr. We do NOT warn on
+        # small repos where get_all already covers everything: there the
+        # FTS miss has no observable effect, so warning would just be noise
+        # (and would break callers like the typer CliRunner that capture
+        # stderr into stdout).
+        if (
+            query_stripped
+            and not fts_symbols
+            and len(all_symbols) >= 10_000
+        ):
+            print(
+                "context-router: FTS5 implement-mode anchor returned 0 "
+                f"matches for query: {query_stripped!r} — falling back "
+                "to get_all() 10K slice only, which may not contain the "
+                "target symbol on a >10K-symbol repo",
+                file=sys.stderr,
+            )
+
+        # Union with stable ordering: FTS hits first (highest BM25 first as
+        # returned by the repository), then any get_all symbols not already
+        # represented. Dedupe by symbol id so we don't double-score the same
+        # row through both paths.
+        seen_ids: set[int] = set()
+        unioned: list[Any] = []
+        for sym in fts_symbols:
+            if sym.id is None or sym.id in seen_ids:
+                continue
+            seen_ids.add(sym.id)
+            unioned.append(sym)
         for sym in all_symbols:
+            if sym.id is None:
+                # Symbols without an id (test fixtures) can still flow through
+                # — fall back to (file, name) keying so we still dedupe.
+                unioned.append(sym)
+                continue
+            if sym.id in seen_ids:
+                continue
+            seen_ids.add(sym.id)
+            unioned.append(sym)
+
+        items: list[ContextItem] = []
+        for sym in unioned:
             fp = str(sym.file)
             source_type, confidence = self._classify_for_implement(
                 sym.name, sym.kind, fp, weights
             )
+            # v4.4.3 source/test asymmetry was not applied to implement-mode
+            # items (it was scoped to ``changed_file`` candidates). Phase 4
+            # preserves that — both halves of the union flow through the
+            # same classifier, so neither side gets a side-channel boost
+            # from the FTS path. Confidence stays driven by source_type +
+            # weights, and downstream BM25 blending decides ranking.
             items.append(
                 _make_item(
                     sym_name=sym.name,
