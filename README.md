@@ -262,6 +262,24 @@ uv run ruff check .
 
 ---
 
+## Reporting issues & support
+
+Found a bug or have an idea? We'd love to hear it.
+
+- **🐞 Bug reports** (install failures, crashes, wrong output, silent no-ops):
+  [open a bug report](https://github.com/mohankrishnaalavala/context-router/issues/new?template=bug_report.yml).
+  Please include `context-router --version`, how you installed it, and your OS.
+- **✨ Feature requests**:
+  [open a feature request](https://github.com/mohankrishnaalavala/context-router/issues/new?template=feature_request.yml).
+- **❓ Questions & setup help**: ask in
+  [Discussions](https://github.com/mohankrishnaalavala/context-router/discussions),
+  and check [`AGENT_GUIDE.md`](AGENT_GUIDE.md) for setup and troubleshooting.
+- **🔒 Security vulnerabilities**: please **don't** open a public issue — use
+  [private vulnerability reporting](https://github.com/mohankrishnaalavala/context-router/security/advisories/new)
+  (see [`SECURITY.md`](SECURITY.md)).
+
+Contributing a fix or feature? See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).

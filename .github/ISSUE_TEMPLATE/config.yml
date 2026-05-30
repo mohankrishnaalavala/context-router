@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/mohankrishnaalavala/context-router/security/advisories/new
+    about: Report security issues privately via GitHub private vulnerability reporting — do not open a public issue.
+  - name: Question or usage help
+    url: https://github.com/mohankrishnaalavala/context-router/discussions
+    about: Ask how-to and setup questions in Discussions. See AGENT_GUIDE.md for the full setup and troubleshooting guide.

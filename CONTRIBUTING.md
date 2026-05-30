@@ -1,5 +1,20 @@
 # Contributing to context-router
 
+## Reporting issues
+
+- **Bugs** (install failures, crashes, wrong output, silent no-ops):
+  [open a bug report](https://github.com/mohankrishnaalavala/context-router/issues/new?template=bug_report.yml).
+  Please include the output of `context-router --version`, how you installed it
+  (`uv tool` / `pipx` / `pip` / `brew` / source), and your OS.
+- **Feature ideas**:
+  [open a feature request](https://github.com/mohankrishnaalavala/context-router/issues/new?template=feature_request.yml).
+- **Questions / setup help**: use
+  [Discussions](https://github.com/mohankrishnaalavala/context-router/discussions);
+  see [`AGENT_GUIDE.md`](AGENT_GUIDE.md) for full setup and troubleshooting.
+- **Security vulnerabilities**: do **not** open a public issue — follow
+  [`SECURITY.md`](SECURITY.md), which routes through GitHub private vulnerability
+  reporting.
+
 ## Development setup
 
 Python 3.12+ is required.
