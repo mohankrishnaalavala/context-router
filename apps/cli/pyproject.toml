@@ -1,6 +1,6 @@
 [project]
 name = "context-router-cli"
-version = "4.4.4"
+version = "4.4.5"
 requires-python = ">=3.12"
 description = "Local-first CLI and MCP server for AI coding context — minimum useful context, maximum agent performance"
 readme = "README.md"
@@ -26,8 +26,13 @@ dependencies = [
     "tree-sitter-java>=0.21",
     "tree-sitter-c-sharp>=0.21",
     "watchdog>=4.0",
-    "context-router-evaluation",
 ]
+# NOTE: workspace-internal packages (evaluation, benchmark, core, ranking,
+# language analyzers, adapters, …) are intentionally NOT listed here. Their
+# source ships inside this wheel via [tool.hatch.build.targets.wheel.force-include]
+# below, and most are not published to PyPI. Declaring one as a dependency makes
+# `uv tool install context-router-cli` try to resolve it from PyPI and fail on a
+# clean machine — the v4.4.4 install bug. Add force-include entries, never deps.
 
 [project.urls]
 Homepage = "https://github.com/mohankrishnaalavala/context-router"
