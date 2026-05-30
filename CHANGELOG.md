@@ -9,6 +9,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [4.4.5] - 2026-05-30
+
+### Fixed — Packaging hotfix
+
+- **Clean-machine install no longer fails.** `apps/cli/pyproject.toml` listed
+  `context-router-evaluation` in `[project].dependencies`, but that package is
+  not published to PyPI (its source ships *inside* the CLI wheel via
+  `[tool.hatch.build.targets.wheel.force-include]`). On a machine without the
+  workspace checkout, `uv tool install` / `pipx install` / `pip install
+  context-router-cli` tried to resolve it from PyPI and failed with *"No matching
+  distribution found for context-router-evaluation"*. The bad dependency line is
+  removed; the evaluation source still ships in the wheel, so `context-router eval`
+  and `context-router benchmark` keep working.
+- **`make bump-version` now matches the real version scheme.** Its `sed` was
+  hardcoded to `0.x.x` and silently bumped nothing for `4.x` releases; the regex
+  now matches any `X.Y.Z`.
+
+### Added
+
+- **Issue-reporting docs.** GitHub issue templates (bug report, feature request,
+  chooser config), `SECURITY.md` (GitHub private vulnerability reporting), an
+  expanded *Reporting Issues* section in `CONTRIBUTING.md`, and a *Reporting issues
+  & support* section in the README.
+
 ## [4.4.4] — 2026-04-29
 
 > Honesty release. Reframes how we benchmark: every k8s task ships under three retrieval-anchor configurations so reviewers can distinguish "the input contained the answer" from "retrieval actually worked." Closes the implement-mode regression on >10K-symbol repos with FTS5-anchored candidate retrieval. First workload-matched comparison vs `code-review-graph` on identical SHAs and identical diffs as input — `~88%` fewer tokens (was a `91.5%` cross-workload claim in v4.4.3).

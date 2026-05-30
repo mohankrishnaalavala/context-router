@@ -38,7 +38,7 @@ build:
 bump-version:
 	@if [ -z "$(VERSION)" ]; then echo "Usage: make bump-version VERSION=0.3.0"; exit 1; fi
 	@find . -name "pyproject.toml" -not -path "*/\.*" -not -path "*/node_modules/*" | while read f; do \
-		sed -i '' 's/^version = "0\.[0-9]*\.[0-9]*"/version = "$(VERSION)"/' "$$f"; \
+		sed -i '' 's/^version = "[0-9]*\.[0-9]*\.[0-9]*"/version = "$(VERSION)"/' "$$f"; \
 	done
 	@echo "Bumped all packages to $(VERSION)"
 	@grep -h '^version' apps/cli/pyproject.toml packages/contracts/pyproject.toml

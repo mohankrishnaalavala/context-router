@@ -526,3 +526,30 @@ outcomes:
         cmd: >-
           uv run pytest apps/cli/tests/test_graph_command.py -q
         expected_stdout_contains: "passed"
+
+  - id: v4.4.5-clean-install
+    priority: P0
+    description: >-
+      `context-router-cli` installs on a clean machine with no workspace
+      checkout. Workspace-internal packages ship inside the CLI wheel via
+      force-include and most are unpublished, so none may be declared as a
+      runtime dependency — doing so makes `uv tool install` / `pipx` / `pip`
+      try to resolve an unpublished package from PyPI and fail.
+    dod:
+      outcome: >-
+        Installing the built CLI wheel into a fresh virtualenv resolves every
+        dependency from PyPI and `context-router --version` runs.
+      threshold: >-
+        No `context-router-*` distribution appears in
+        apps/cli/pyproject.toml [project].dependencies.
+      negative_case: >-
+        If any workspace-internal (context-router-*) package is reintroduced
+        into the CLI dependency list, the verify command exits non-zero — it
+        does not silently pass.
+      verify:
+        cmd: >-
+          uv run python -c "import tomllib,sys;
+          d=tomllib.load(open('apps/cli/pyproject.toml','rb'));
+          bad=[x for x in d['project']['dependencies'] if x.startswith('context-router-')];
+          print('internal deps:', bad); sys.exit(1 if bad else 0)"
+        expected_stdout_contains: "internal deps: []"
