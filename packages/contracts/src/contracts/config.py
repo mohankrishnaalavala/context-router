@@ -80,6 +80,7 @@ class ContextRouterConfig(BaseModel):
             ".venv*", "venv", "env", ".tox", ".nox",
             "node_modules", "vendor", "dist", "build", "target",
             ".mypy_cache", ".ruff_cache", ".pytest_cache", "site-packages",
+            "*.min.js", "*.min.css",
         ]
     )
     # Per-mode confidence overrides. Outer keys: review | implement | debug | handover.
@@ -200,4 +201,6 @@ ignore_patterns:
   - ".ruff_cache"
   - ".pytest_cache"
   - "site-packages"
+  - "*.min.js"
+  - "*.min.css"
 """

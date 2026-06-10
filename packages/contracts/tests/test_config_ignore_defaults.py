@@ -15,6 +15,7 @@ def test_default_patterns_cover_vendored_dirs():
         ".venv", ".venv-crg", "venv", "node_modules", "vendor",
         "dist", "build", "target", ".tox", ".mypy_cache",
         ".ruff_cache", ".pytest_cache", "site-packages",
+        "d3.v7.min.js", "vendor.min.css",
     ]:
         assert _is_part_ignored(part, patterns), f"{part} not ignored by defaults"
 
