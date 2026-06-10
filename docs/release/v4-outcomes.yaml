@@ -644,3 +644,163 @@ outcomes:
       verify:
         cmd: grep -c "4\.4\.3" README.md || true
         expected_stdout_contains: "0"
+
+  # ── v4.6.0 — Hands-Free Context (Phase A + B) ──────────────────────────
+  # Spec: docs/design/v4.6-hands-free-context.md
+
+  - id: v4.6-edge-dedup
+    priority: P0
+    description: >-
+      Graph edges must be unique per (repo, from, to, type); repeated
+      occurrences become weight, not duplicate rows.
+    dod:
+      outcome: >-
+        Re-indexing a repo where the same class is defined many times
+        produces exactly one edge row per distinct relationship.
+      threshold: >-
+        After indexing this repo, the duplicate-edge query (GROUP BY repo,
+        from_symbol_id, to_symbol_id, edge_type HAVING COUNT(*) > 1)
+        returns 0 rows; same on the pydantic fixture.
+      negative_case: >-
+        A file that calls the same function 10 times still contributes that
+        signal: the single edge row carries weight >= 10, and ranking
+        consumes weight — collapsing rows must not flatten ranking signal.
+      verify:
+        cmd: >-
+          uv run context-router index --project-root . >/dev/null 2>&1 &&
+          sqlite3 .context-router/context-router.db "SELECT count(*) FROM
+          (SELECT 1 FROM edges GROUP BY repo, from_symbol_id, to_symbol_id,
+          edge_type HAVING COUNT(*) > 1)"
+        expected_stdout_contains: "0"
+
+  - id: v4.6-symbol-qualification
+    priority: P0
+    description: >-
+      Same-named symbols defined at different scopes in one file are
+      distinct symbols, not one collapsed row.
+    dod:
+      outcome: >-
+        Two classes named Model defined inside two different test functions
+        index as two symbols, each with its own edges.
+      threshold: >-
+        Fixture file with N same-named nested classes yields N symbol rows
+        with scope-qualified identities and N extends edges to N (or fewer
+        distinct) targets.
+      negative_case: >-
+        Retrieval by the short name ("Model") still matches all of them —
+        recall eval (scripts/eval) does not regress below the v4.5 baseline
+        F1 0.613.
+      verify:
+        cmd: >-
+          uv run pytest packages/graph-index/tests -k "qualif" -q
+        expected_stdout_contains: "passed"
+
+  - id: v4.6-edge-count-consistency
+    priority: P1
+    description: >-
+      The edge count reported by `index` must equal the rows stored.
+    dod:
+      outcome: >-
+        The summary line printed at the end of `context-router index`
+        states the same edge count the database contains.
+      threshold: >-
+        reported == SELECT count(*) FROM edges WHERE repo = ? on first run
+        AND on an immediate re-run (pydantic previously: 24,718 vs 27,915
+        vs 24,253).
+      negative_case: >-
+        An incremental per-file update (watch path) reports a delta that
+        keeps reported == stored; a mismatch is a test failure, never a
+        silently logged number.
+      verify:
+        cmd: >-
+          uv run pytest packages/graph-index/tests apps/cli/tests
+          -k "edge_count" -q
+        expected_stdout_contains: "passed"
+
+  - id: v4.6-getall-paging
+    priority: P0
+    description: >-
+      Internal ranking must cover the full symbol set on >10k-symbol
+      repos instead of consuming a silently partial 10k slice.
+    dod:
+      outcome: >-
+        Packs on a 15k-symbol repo rank over all symbols; no partial-slice
+        warning fires from the internal pipeline.
+      threshold: >-
+        On a fixture with >10,000 symbols, the candidate-assembly pool size
+        equals the total symbol count and stderr contains no get_all cap
+        WARN during pack.
+      negative_case: >-
+        External callers of get_all() at the 10k cap still receive the
+        loud WARN naming the cap and suggesting iter_all — the guard is
+        narrowed, not removed.
+      verify:
+        cmd: >-
+          uv run pytest packages/storage-sqlite/tests packages/core/tests
+          -k "iter_all or getall_paging" -q
+        expected_stdout_contains: "passed"
+
+  - id: v4.6-graph-accuracy-audit
+    priority: P1
+    description: >-
+      Edge precision/recall must be measured against hand-verified ground
+      truth, before and after the Phase A fixes.
+    dod:
+      outcome: >-
+        A published eval doc reports per-edge-type precision and recall on
+        a hand-verified sample, with a baseline and post-fix comparison.
+      threshold: >-
+        Sample covers >= 30 symbols across >= 2 repos; every edge type
+        present in the sample has a P and R number; any type with recall
+        < 0.8 post-fix has a named finding (fixed or explicitly deferred).
+      negative_case: >-
+        N/A (eval doc); reviewer checks the sample is stratified, not
+        cherry-picked, and that the baseline was captured pre-A1/A2.
+      verify:
+        cmd: >-
+          grep -c "recall" docs/eval/2026-06-10-v4.6-graph-accuracy.md
+        expected_stdout_contains: ""
+
+  - id: v4.6-pack-staleness-selfheal
+    priority: P0
+    description: >-
+      Packs must detect stale indexed files and self-heal inline (small
+      deltas) or warn loudly (large deltas) — never silently serve stale.
+    dod:
+      outcome: >-
+        Editing a file and running pack without re-indexing returns the
+        fresh symbol at its new line numbers.
+      threshold: >-
+        With <= 25 stale files, pack stderr contains "re-indexed" and the
+        edited symbol's line range matches the file on disk.
+      negative_case: >-
+        With > 25 stale files, stderr contains "WARN" naming the stale file
+        count and suggesting 'context-router index'; with a pre-v4.6 index
+        (no fingerprints), stderr names the missing-fingerprint reason and
+        behavior matches v4.5.
+      verify:
+        cmd: >-
+          uv run pytest packages/core/tests -k "stalen" -q
+        expected_stdout_contains: "passed"
+
+  - id: v4.6-hooks-install
+    priority: P1
+    description: >-
+      One command installs Claude Code hooks for automatic index updates;
+      install is idempotent and never clobbers user hooks.
+    dod:
+      outcome: >-
+        After `context-router hooks install`, editing a file in a Claude
+        Code session triggers an index update with no manual command.
+      threshold: >-
+        Running install twice produces a byte-identical
+        .claude/settings.json; uninstall removes only context-router
+        entries, preserving pre-existing user hooks exactly.
+      negative_case: >-
+        Running hooks install outside a project root exits non-zero with a
+        named reason; a settings.json with existing user hooks is merged,
+        never overwritten.
+      verify:
+        cmd: >-
+          uv run pytest apps/cli/tests -k "hooks" -q
+        expected_stdout_contains: "passed"
