@@ -110,6 +110,11 @@ class TestDoctorCLI:
         with patch(
             "cli.commands.doctor.check_analyzer_entry_points",
             return_value=fake_results,
+        ), patch(
+            # Isolate from the host machine's real index DB (which may
+            # legitimately be polluted) — covered in test_doctor_pollution.py.
+            "cli.commands.doctor.check_index_pollution",
+            return_value=[CheckResult("index-pollution", "PASS", "index hygiene OK")],
         ):
             result = runner.invoke(doctor_app, [])
         assert result.exit_code == 0, result.output
@@ -140,6 +145,11 @@ class TestDoctorCLI:
         with patch(
             "cli.commands.doctor.check_analyzer_entry_points",
             return_value=fake_results,
+        ), patch(
+            # Isolate from the host machine's real index DB — see
+            # test_doctor_pollution.py for the real-check coverage.
+            "cli.commands.doctor.check_index_pollution",
+            return_value=[CheckResult("index-pollution", "PASS", "index hygiene OK")],
         ):
             result = runner.invoke(doctor_app, ["--json"])
         assert result.exit_code == 0, result.output
