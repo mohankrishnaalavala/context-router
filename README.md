@@ -7,7 +7,7 @@
 [![Tests](https://github.com/mohankrishnaalavala/context-router/actions/workflows/ci.yml/badge.svg)](https://github.com/mohankrishnaalavala/context-router/actions)
 
 > **Memory-aware context engine for AI coding agents.**
-> Persistent project memory · multi-repo workspaces · up to **91% fewer tokens** (89% combined avg across 6 OSS projects, 17/18 rank-1) · MCP-native, local-first.
+> Persistent project memory · multi-repo workspaces · **96% fewer end-to-end tokens** than comparable tooling (21 tasks, 7 OSS projects, 21/21 rank-1) · MCP-native, local-first.
 
 context-router is **more than a context picker**. It indexes your code,
 **remembers what your team learned** (observations + decisions, shared
@@ -56,18 +56,21 @@ cross-repo edges from Python imports + OpenAPI / protobuf / GraphQL
 contracts; `workspace pack` returns a unified ranked pack with
 `[repo]` labels and warns when edges cross community boundaries.
 
-### ⚡ Up to 91% token reduction without losing recall
+### ⚡ 96% fewer end-to-end tokens without losing recall
 
-Latest holdout against six OSS projects in five languages:
+v4.5 measures what agents actually pay: **pack tokens + downstream read
+tokens** (symbol-body items cost only their line span). Workload-matched
+holdout vs `code-review-graph`, 21 tasks across 7 OSS projects
+(Go · Rust · Python · Java · TypeScript · k8s-scale):
 
-| Suite | Repos | Avg F1 | Rank-1 | Avg tokens / pack | vs ~1,506 baseline |
-|---|---|---:|---:|---:|---:|
-| A | gin · actix-web · django | 0.630 | 8/9 | 186 | **−87.7%** |
-| B | gson · requests · zod | **0.685** | **9/9** | **132** | **−91.2%** |
-| **Combined** | 6 projects, 5 languages | **0.658** | **17/18 (94%)** | **159** | **−89.4%** |
+| Metric (21 tasks) | context-router | code-review-graph |
+|---|---:|---:|
+| Rank-1 hit | **21/21** | 16/21 |
+| **End-to-end tokens** | **15,325 (~730/task)** | 380,260 |
+| Reduction | **−96.0%** | — |
 
-Comparable tools average ~1,506 tokens per pack on the same workload.
-Full per-task breakdown + reproduction in [`BENCHMARKS.md`](BENCHMARKS.md).
+Full methodology, per-task breakdown, caveats and reproduction in
+[`BENCHMARKS.md`](BENCHMARKS.md).
 
 ---
 
@@ -245,7 +248,7 @@ and `benchmark`.
 |---|---|
 | [`AGENT_GUIDE.md`](AGENT_GUIDE.md) | **Hand to your AI agent** — install, setup, every feature, the agent contract, troubleshooting, examples |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | Full holdout results across 6 OSS projects, reproduction commands, fixture provenance |
-| [`CHANGELOG.md`](CHANGELOG.md) | Per-release detail (current: v4.4.3) |
+| [`CHANGELOG.md`](CHANGELOG.md) | Per-release detail (current: v4.5.0) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Development setup, coding standards, PR process |
 
 ---
