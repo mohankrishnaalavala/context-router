@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "gin-t1",
+  "sha": "472d086af2acd924cb4b9d7be0525f7d790f69bc",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "tree.go",
+    "tree_test.go"
+  ],
+  "est_tokens": 968,
+  "runtime_ms": 403,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "tree.go"
+  ]
+}

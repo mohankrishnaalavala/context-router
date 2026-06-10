@@ -1,0 +1,18 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "gson-t3",
+  "sha": "e8cdabf296cd4c2c1550ed76cf27a1a8e0c4ec59",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "Types.java"
+  ],
+  "est_tokens": 459,
+  "runtime_ms": 637,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+  ]
+}

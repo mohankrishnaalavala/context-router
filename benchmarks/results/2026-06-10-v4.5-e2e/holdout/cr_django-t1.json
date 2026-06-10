@@ -1,0 +1,117 @@
+{
+  "id": "e57e8aa1-ac74-44d8-9483-8b3778c3feb8",
+  "mode": "review",
+  "query": "Query.orderby_issubset_groupby crashes on descending or random order_by strings",
+  "selected_items": [
+    {
+      "id": "1132cb8a-05eb-45cd-9dc2-7507bfa43f40",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/sql/query.py",
+      "title": "orderby_issubset_groupby (query.py)",
+      "excerpt": "def orderby_issubset_groupby(self):",
+      "reason": "Modified `orderby_issubset_groupby` lines 2363-2387",
+      "confidence": 0.95,
+      "est_tokens": 61,
+      "freshness": "2026-06-10T13:41:08.195260Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 116,
+      "symbol_body": "    def orderby_issubset_groupby(self):\n        if self.extra_order_by:\n            # Raw SQL from extra(order_by=...) can't be reliably compared\n            # against resolved OrderBy/Col expressions. Treat as not a subset.\n            return False\n        if self.group_by in (None, True):\n            # There is either no aggregation at all (None), or the group by\n            # is generated automatically from model fields (True), in which\n            # case the order by is necessarily a subset of them.\n            return True\n        if not self.order_by:\n            # Although an empty set is always a subset, there's no point in\n            # clearing ordering when there isn't any. Avoid the clone() below.\n            return True\n        # Don't pollute the original query (might disrupt joins).\n        q = self.clone()\n        order_by_set = {\n            (\n                order_by.resolve_expression(q)\n                if hasattr(order_by, \"resolve_expression\")\n                else F(order_by).resolve_expression(q)\n            )\n            for order_by in q.order_by\n        }\n        return order_by_set.issubset(self.group_by)",
+      "symbol_lines": [
+        2363,
+        2387
+      ]
+    },
+    {
+      "id": "c5a1c84a-ff5a-4caf-bc4d-1f429d213d7f",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/query.py",
+      "title": "_handle_order_with_respect_to (query.py)",
+      "excerpt": "def _handle_order_with_respect_to(self, objs):",
+      "reason": "Depends on or is imported by `_handle_order_with_respect_to` lines 897-926",
+      "confidence": 0.6720963641732974,
+      "est_tokens": 62,
+      "freshness": "2026-06-10T13:41:08.079306Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 168,
+      "symbol_body": null,
+      "symbol_lines": [
+        897,
+        926
+      ]
+    }
+  ],
+  "total_est_tokens": 123,
+  "baseline_est_tokens": 643966,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:41:37.332142Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "bd821339-1a0e-41d5-9bfa-cad01c32827d",
+      "1132cb8a-05eb-45cd-9dc2-7507bfa43f40",
+      "592e1255-0851-4464-a2e3-0b6d99d41863",
+      "acfb301a-3538-4a8f-aa35-d3002719bcd0"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.28); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "1132cb8a-05eb-45cd-9dc2-7507bfa43f40",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/sql/query.py",
+      "title": "orderby_issubset_groupby (query.py)",
+      "excerpt": "def orderby_issubset_groupby(self):",
+      "reason": "Modified `orderby_issubset_groupby` lines 2363-2387",
+      "confidence": 0.95,
+      "est_tokens": 61,
+      "freshness": "2026-06-10T13:41:08.195260Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 116,
+      "symbol_body": "    def orderby_issubset_groupby(self):\n        if self.extra_order_by:\n            # Raw SQL from extra(order_by=...) can't be reliably compared\n            # against resolved OrderBy/Col expressions. Treat as not a subset.\n            return False\n        if self.group_by in (None, True):\n            # There is either no aggregation at all (None), or the group by\n            # is generated automatically from model fields (True), in which\n            # case the order by is necessarily a subset of them.\n            return True\n        if not self.order_by:\n            # Although an empty set is always a subset, there's no point in\n            # clearing ordering when there isn't any. Avoid the clone() below.\n            return True\n        # Don't pollute the original query (might disrupt joins).\n        q = self.clone()\n        order_by_set = {\n            (\n                order_by.resolve_expression(q)\n                if hasattr(order_by, \"resolve_expression\")\n                else F(order_by).resolve_expression(q)\n            )\n            for order_by in q.order_by\n        }\n        return order_by_set.issubset(self.group_by)",
+      "symbol_lines": [
+        2363,
+        2387
+      ]
+    },
+    {
+      "id": "c5a1c84a-ff5a-4caf-bc4d-1f429d213d7f",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/query.py",
+      "title": "_handle_order_with_respect_to (query.py)",
+      "excerpt": "def _handle_order_with_respect_to(self, objs):",
+      "reason": "Depends on or is imported by `_handle_order_with_respect_to` lines 897-926",
+      "confidence": 0.6720963641732974,
+      "est_tokens": 62,
+      "freshness": "2026-06-10T13:41:08.079306Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 168,
+      "symbol_body": null,
+      "symbol_lines": [
+        897,
+        926
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 123,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

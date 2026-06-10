@@ -1,0 +1,240 @@
+{
+  "id": "64c2c7b0-8361-4be0-a4cf-848ec1d25245",
+  "mode": "review",
+  "query": "malformed Content-Type header value parsing fails in requests utils",
+  "selected_items": [
+    {
+      "id": "bdd00015-dc5b-4fd9-92de-593d69ed6089",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "_parse_content_type_header (utils.py)",
+      "excerpt": "def _parse_content_type_header(header):\nReturns content type and parameters from given header\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters",
+      "reason": "Modified `_parse_content_type_header` lines 504-526",
+      "confidence": 0.95,
+      "est_tokens": 86,
+      "freshness": "2026-06-10T13:41:27.021678Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 42,
+      "symbol_body": "def _parse_content_type_header(header):\n    \"\"\"Returns content type and parameters from given header\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters\n    \"\"\"\n\n    tokens = header.split(\";\")\n    content_type, params = tokens[0].strip(), tokens[1:]\n    params_dict = {}\n    items_to_strip = \"\\\"' \"\n\n    for param in params:\n        param = param.strip()\n        if param:\n            key, value = param, True\n            index_of_equals = param.find(\"=\")\n            if index_of_equals != -1:\n                key = param[:index_of_equals].strip(items_to_strip)\n                value = param[index_of_equals + 1 :].strip(items_to_strip)\n            params_dict[key.lower()] = value\n    return content_type, params_dict",
+      "symbol_lines": [
+        504,
+        526
+      ]
+    },
+    {
+      "id": "87881e57-7593-4c9d-a26d-d6d6c33d71e9",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+      "title": "test__parse_content_type_header (test_utils.py)",
+      "excerpt": "def test__parse_content_type_header(value, expected):",
+      "reason": "Modified `test__parse_content_type_header` lines 639-640",
+      "confidence": 0.7518250000000001,
+      "est_tokens": 62,
+      "freshness": "2026-06-10T13:41:27.057188Z",
+      "tags": [],
+      "risk": "medium",
+      "flow": null,
+      "duplicates_hidden": 81,
+      "symbol_body": null,
+      "symbol_lines": [
+        639,
+        640
+      ]
+    },
+    {
+      "id": "20e5854d-9b62-43de-8fd8-ff7ef900cd8f",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+      "title": "add_unredirected_header (cookies.py)",
+      "excerpt": "def add_unredirected_header(self, name, value):",
+      "reason": "Depends on or is imported by `add_unredirected_header` lines 84-85",
+      "confidence": 0.5843832240209091,
+      "est_tokens": 61,
+      "freshness": "2026-06-10T13:41:26.999375Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 52,
+      "symbol_body": null,
+      "symbol_lines": [
+        84,
+        85
+      ]
+    },
+    {
+      "id": "53f6f85b-9c6e-4d5d-939d-f5008a20cacd",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+      "title": "StreamConsumedError (exceptions.py)",
+      "excerpt": "class StreamConsumedError(RequestException, TypeError):\nThe content for this response was already consumed.",
+      "reason": "Depends on or is imported by `StreamConsumedError` lines 128-129",
+      "confidence": 0.5738683694412539,
+      "est_tokens": 67,
+      "freshness": "2026-06-10T13:41:27.005623Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 27,
+      "symbol_body": null,
+      "symbol_lines": [
+        128,
+        129
+      ]
+    },
+    {
+      "id": "b0b7792d-b5b9-4e2a-83ef-ff10a7a6d4a5",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/models.py",
+      "title": "prepare_content_length (models.py)",
+      "excerpt": "def prepare_content_length(self, body):\nPrepare Content-Length header based on request method and body",
+      "reason": "Depends on or is imported by `prepare_content_length` lines 574-588",
+      "confidence": 0.5721003699384469,
+      "est_tokens": 65,
+      "freshness": "2026-06-10T13:41:27.009255Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 45,
+      "symbol_body": null,
+      "symbol_lines": [
+        574,
+        588
+      ]
+    }
+  ],
+  "total_est_tokens": 341,
+  "baseline_est_tokens": 56768,
+  "reduction_pct": 99.4,
+  "created_at": "2026-06-10T13:41:27.337783Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "bdd00015-dc5b-4fd9-92de-593d69ed6089"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.20); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "bdd00015-dc5b-4fd9-92de-593d69ed6089",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "_parse_content_type_header (utils.py)",
+      "excerpt": "def _parse_content_type_header(header):\nReturns content type and parameters from given header\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters",
+      "reason": "Modified `_parse_content_type_header` lines 504-526",
+      "confidence": 0.95,
+      "est_tokens": 86,
+      "freshness": "2026-06-10T13:41:27.021678Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 42,
+      "symbol_body": "def _parse_content_type_header(header):\n    \"\"\"Returns content type and parameters from given header\n\n    :param header: string\n    :return: tuple containing content type and dictionary of\n         parameters\n    \"\"\"\n\n    tokens = header.split(\";\")\n    content_type, params = tokens[0].strip(), tokens[1:]\n    params_dict = {}\n    items_to_strip = \"\\\"' \"\n\n    for param in params:\n        param = param.strip()\n        if param:\n            key, value = param, True\n            index_of_equals = param.find(\"=\")\n            if index_of_equals != -1:\n                key = param[:index_of_equals].strip(items_to_strip)\n                value = param[index_of_equals + 1 :].strip(items_to_strip)\n            params_dict[key.lower()] = value\n    return content_type, params_dict",
+      "symbol_lines": [
+        504,
+        526
+      ]
+    },
+    {
+      "id": "87881e57-7593-4c9d-a26d-d6d6c33d71e9",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+      "title": "test__parse_content_type_header (test_utils.py)",
+      "excerpt": "def test__parse_content_type_header(value, expected):",
+      "reason": "Modified `test__parse_content_type_header` lines 639-640",
+      "confidence": 0.7518250000000001,
+      "est_tokens": 62,
+      "freshness": "2026-06-10T13:41:27.057188Z",
+      "tags": [],
+      "risk": "medium",
+      "flow": null,
+      "duplicates_hidden": 81,
+      "symbol_body": null,
+      "symbol_lines": [
+        639,
+        640
+      ]
+    },
+    {
+      "id": "20e5854d-9b62-43de-8fd8-ff7ef900cd8f",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+      "title": "add_unredirected_header (cookies.py)",
+      "excerpt": "def add_unredirected_header(self, name, value):",
+      "reason": "Depends on or is imported by `add_unredirected_header` lines 84-85",
+      "confidence": 0.5843832240209091,
+      "est_tokens": 61,
+      "freshness": "2026-06-10T13:41:26.999375Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 52,
+      "symbol_body": null,
+      "symbol_lines": [
+        84,
+        85
+      ]
+    },
+    {
+      "id": "53f6f85b-9c6e-4d5d-939d-f5008a20cacd",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+      "title": "StreamConsumedError (exceptions.py)",
+      "excerpt": "class StreamConsumedError(RequestException, TypeError):\nThe content for this response was already consumed.",
+      "reason": "Depends on or is imported by `StreamConsumedError` lines 128-129",
+      "confidence": 0.5738683694412539,
+      "est_tokens": 67,
+      "freshness": "2026-06-10T13:41:27.005623Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 27,
+      "symbol_body": null,
+      "symbol_lines": [
+        128,
+        129
+      ]
+    },
+    {
+      "id": "b0b7792d-b5b9-4e2a-83ef-ff10a7a6d4a5",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/models.py",
+      "title": "prepare_content_length (models.py)",
+      "excerpt": "def prepare_content_length(self, body):\nPrepare Content-Length header based on request method and body",
+      "reason": "Depends on or is imported by `prepare_content_length` lines 574-588",
+      "confidence": 0.5721003699384469,
+      "est_tokens": 65,
+      "freshness": "2026-06-10T13:41:27.009255Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 45,
+      "symbol_body": null,
+      "symbol_lines": [
+        574,
+        588
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 341,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

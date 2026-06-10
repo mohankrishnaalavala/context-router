@@ -1,0 +1,863 @@
+{
+  "by_task": {
+    "actix-t1": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "actix-t1",
+        "sha": "f31f9bc92c2518e40fecd7eaa711b0bdf01ec0b9",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "actix-files/src/named.rs",
+          "actix-files/tests/pre_epoch_mtime.rs"
+        ],
+        "est_tokens": 1163,
+        "runtime_ms": 417,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "actix-files/src/named.rs"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "actix-t1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/named.rs",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/files.rs"
+        ],
+        "est_tokens": 98,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "actix-files/src/named.rs"
+        ]
+      }
+    },
+    "actix-t2": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "actix-t2",
+        "sha": "d3bf929040129241d9141dfce9826c40acec549f",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "actix-web/src/route.rs"
+        ],
+        "est_tokens": 2781,
+        "runtime_ms": 419,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "actix-web/src/route.rs"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "actix-t2",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/route.rs",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/service.rs"
+        ],
+        "est_tokens": 102,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "actix-web/src/route.rs"
+        ]
+      }
+    },
+    "actix-t3": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "actix-t3",
+        "sha": "41e4863748ac0c8e446d96528fa1c31b2b20aae1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "awc/src/client/h1proto.rs",
+          "awc/tests/test_empty_stream.rs"
+        ],
+        "est_tokens": 1498,
+        "runtime_ms": 408,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "awc/src/client/h1proto.rs"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "actix-t3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/chunked.rs",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/request.rs",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/encoder.rs",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/decoder.rs"
+        ],
+        "est_tokens": 255,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "awc/src/client/h1proto.rs"
+        ]
+      }
+    },
+    "django-t1": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "django-t1",
+        "sha": "a284a49153f005f2a7af087025e5112ba06cbd5f",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "django/db/models/sql/query.py",
+          "tests/aggregation_regress/tests.py"
+        ],
+        "est_tokens": 1433,
+        "runtime_ms": 15465,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "django/db/models/sql/query.py"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "django-t1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/sql/query.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/query.py"
+        ],
+        "est_tokens": 123,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "django/db/models/sql/query.py"
+        ]
+      }
+    },
+    "django-t2": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "django-t2",
+        "sha": "b33c31d992591bc8e8d20ac156809e4ae5b45375",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "django/core/handlers/asgi.py",
+          "tests/handlers/tests.py"
+        ],
+        "est_tokens": 1701,
+        "runtime_ms": 4824,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "django/core/handlers/asgi.py"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "django-t2",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/asgi.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/wsgi.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/handlers/tests.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/http/request.py"
+        ],
+        "est_tokens": 284,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "django/core/handlers/asgi.py"
+        ]
+      }
+    },
+    "django-t3": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "django-t3",
+        "sha": "e779bc7d78cbcadd395d48e5b6b00acea07ce503",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "django/db/models/fields/__init__.py"
+        ],
+        "est_tokens": 778,
+        "runtime_ms": 6600,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "django/db/models/fields/__init__.py"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "django-t3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/__init__.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/forms/fields.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/related.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/contrib/gis/gdal/field.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/composite.py"
+        ],
+        "est_tokens": 299,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "django/db/models/fields/__init__.py"
+        ]
+      }
+    },
+    "gin-t1": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "gin-t1",
+        "sha": "472d086af2acd924cb4b9d7be0525f7d790f69bc",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "tree.go",
+          "tree_test.go"
+        ],
+        "est_tokens": 968,
+        "runtime_ms": 403,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "tree.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "gin-t1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree_test.go"
+        ],
+        "est_tokens": 120,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "tree.go"
+        ]
+      }
+    },
+    "gin-t2": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "gin-t2",
+        "sha": "9914178584e42458ff7d23891463a880f58c9d86",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "context.go",
+          "context_test.go"
+        ],
+        "est_tokens": 905,
+        "runtime_ms": 499,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "context.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "gin-t2",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context_test.go"
+        ],
+        "est_tokens": 114,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "context.go"
+        ]
+      }
+    },
+    "gin-t3": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "gin-t3",
+        "sha": "c3d1092b3b48addf6f9cd00fe274ec3bd14650eb",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "binding/form_mapping.go",
+          "binding/form_mapping_test.go"
+        ],
+        "est_tokens": 656,
+        "runtime_ms": 429,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "binding/form_mapping.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "gin-t3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping_test.go"
+        ],
+        "est_tokens": 105,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "binding/form_mapping.go"
+        ]
+      }
+    },
+    "gson-t1": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "gson-t1",
+        "sha": "6bf8bf6cbf4d4f5f72f69262be890a5a5e28259d",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "gson/src/main/java/com/google/gson/stream/JsonReader.java",
+          "gson/src/test/java/com/google/gson/stream/JsonReaderTest.java"
+        ],
+        "est_tokens": 3020,
+        "runtime_ms": 1205,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "gson/src/main/java/com/google/gson/stream/JsonReader.java"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "gson-t1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/stream/JsonReader.java",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/stream/JsonReaderTest.java",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/JsonStreamParser.java",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/proto/src/main/java/com/google/gson/protobuf/LegacyProtoTypeAdapterFactory.java"
+        ],
+        "est_tokens": 489,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "gson/src/main/java/com/google/gson/stream/JsonReader.java"
+        ]
+      }
+    },
+    "gson-t2": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "gson-t2",
+        "sha": "f4d371d29c04066dbe7fdb31f642831f9c7f40cd",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+          "gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+          "gson/src/test/java/com/google/gson/functional/MapTest.java"
+        ],
+        "est_tokens": 3139,
+        "runtime_ms": 731,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "gson-t2",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/LinkedTreeMap.java",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapTest.java",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/ConstructorConstructor.java"
+        ],
+        "est_tokens": 357,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java"
+        ]
+      }
+    },
+    "gson-t3": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "gson-t3",
+        "sha": "e8cdabf296cd4c2c1550ed76cf27a1a8e0c4ec59",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "Types.java"
+        ],
+        "est_tokens": 459,
+        "runtime_ms": 637,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "gson-t3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+        ],
+        "est_tokens": 69,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+        ]
+      }
+    },
+    "k8s-t1": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "k8s-t1",
+        "sha": "81e4b115fd290208d757566d4e6f58c62d0833eb",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "hack/lib/version.sh",
+          "pkg/kubelet/status/status_manager.go",
+          "pkg/kubelet/status/status_manager_test.go"
+        ],
+        "est_tokens": 1103,
+        "runtime_ms": 3523,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "pkg/kubelet/status/status_manager.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "k8s-t1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager_test.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/apis/core/validation/validation.go"
+        ],
+        "est_tokens": 169,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "pkg/kubelet/status/status_manager.go"
+        ]
+      }
+    },
+    "k8s-t2": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "k8s-t2",
+        "sha": "ffa084f81129ea685b176a282921c4d54906c539",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "hack/lib/version.sh",
+          "staging/src/k8s.io/client-go/tools/clientcmd/config_test.go",
+          "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+        ],
+        "est_tokens": 1193,
+        "runtime_ms": 3514,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "k8s-t2",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/cmd/phases/init/kubeconfig.go",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/phases/kubeconfig/kubeconfig.go"
+        ],
+        "est_tokens": 219,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+        ]
+      }
+    },
+    "k8s-t3": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "k8s-t3",
+        "sha": "a49bc6f2fbbd9b1a634d9224dac9828e2012b4ab",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "hack/lib/version.sh",
+          "pkg/proxy/winkernel/proxier.go"
+        ],
+        "est_tokens": 1184,
+        "runtime_ms": 7324,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "pkg/proxy/winkernel/proxier.go"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "k8s-t3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go"
+        ],
+        "est_tokens": 65,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "pkg/proxy/winkernel/proxier.go"
+        ]
+      }
+    },
+    "requests-t1": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "requests-t1",
+        "sha": "f0198e6dfc431a2293dc16e1b1e8fcddc910a7f3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "src/requests/utils.py"
+        ],
+        "est_tokens": 436,
+        "runtime_ms": 377,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "src/requests/utils.py"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "requests-t1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/models.py"
+        ],
+        "est_tokens": 341,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "src/requests/utils.py"
+        ]
+      }
+    },
+    "requests-t2": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "requests-t2",
+        "sha": "47914226c2968802f2cdee3f6f0f6e06e4472f64",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "src/requests/utils.py",
+          "tests/test_utils.py"
+        ],
+        "est_tokens": 1041,
+        "runtime_ms": 385,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "src/requests/utils.py"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "requests-t2",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/structures.py"
+        ],
+        "est_tokens": 323,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "src/requests/utils.py"
+        ]
+      }
+    },
+    "requests-t3": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "requests-t3",
+        "sha": "3ff3ff21dd45957c9e143cd500291959bb15f690",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "src/requests/exceptions.py",
+          "tests/test_requests.py"
+        ],
+        "est_tokens": 1072,
+        "runtime_ms": 468,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "src/requests/exceptions.py"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "requests-t3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/models.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_lowlevel.py",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py"
+        ],
+        "est_tokens": 365,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "src/requests/exceptions.py"
+        ]
+      }
+    },
+    "zod-t1": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "zod-t1",
+        "sha": "7f789defd73ee35f3099ab5c2091cb19bd2b3578",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "packages/zod/src/v4/core/tests/record-constructor.test.ts"
+        ],
+        "est_tokens": 1440,
+        "runtime_ms": 696,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "packages/zod/src/v4/core/schemas.ts"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "zod-t1",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/schemas.ts",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/tests/record-constructor.test.ts",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/refine.test.ts",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/custom.test.ts"
+        ],
+        "est_tokens": 289,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "packages/zod/src/v4/core/schemas.ts"
+        ]
+      }
+    },
+    "zod-t2": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "zod-t2",
+        "sha": "2f8414bc90cebc76be87c3640617e300a5d9b060",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "packages/zod/src/v4/classic/schemas.ts",
+          "packages/zod/src/v4/classic/tests/transform.test.ts"
+        ],
+        "est_tokens": 737,
+        "runtime_ms": 423,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "packages/zod/src/v4/classic/schemas.ts"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "zod-t2",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/schemas.ts",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/transform.test.ts",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/preprocess.test.ts"
+        ],
+        "est_tokens": 212,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "packages/zod/src/v4/classic/schemas.ts"
+        ]
+      }
+    },
+    "zod-t3": {
+      "code-review-graph": {
+        "tool": "code-review-graph",
+        "task_id": "zod-t3",
+        "sha": "3a818de145dc2fa9b5753bc8bf97b0b8484cfbaf",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "packages/zod/src/v4/classic/tests/number.test.ts",
+          "packages/zod/src/v4/core/util.ts"
+        ],
+        "est_tokens": 763,
+        "runtime_ms": 470,
+        "rank1_hit": 0,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "packages/zod/src/v4/core/util.ts"
+        ]
+      },
+      "context-router": {
+        "tool": "context-router",
+        "task_id": "zod-t3",
+        "anchor": "parent-sha-with-diff",
+        "predicted_files": [
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/util.ts",
+          "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts"
+        ],
+        "est_tokens": 100,
+        "runtime_ms": null,
+        "rank1_hit": 1,
+        "exit_status": 0,
+        "stderr_excerpt": "",
+        "error": null,
+        "ground_truth_files": [
+          "packages/zod/src/v4/core/util.ts"
+        ]
+      }
+    }
+  },
+  "aggregate": {
+    "context-router": {
+      "rank1": 21,
+      "tokens": 4498,
+      "n": 21
+    },
+    "code-review-graph": {
+      "rank1": 16,
+      "tokens": 27470,
+      "n": 21,
+      "errors": 0
+    }
+  }
+}

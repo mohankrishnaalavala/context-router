@@ -1,0 +1,238 @@
+{
+  "id": "e9bbd14e-a2bd-4d2e-b7e8-dd197642086b",
+  "mode": "review",
+  "query": "z.record validation iterates non-enumerable properties causing wrong errors",
+  "selected_items": [
+    {
+      "id": "350325b5-14e4-4f5a-b5c8-f76d33c86d41",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/schemas.ts",
+      "title": "$ZodNonOptional (schemas.ts)",
+      "excerpt": "",
+      "reason": "Modified `$ZodNonOptional` lines 3599-3601",
+      "confidence": 0.8227385942403732,
+      "est_tokens": 50,
+      "freshness": "2026-06-10T13:41:42.010982Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 298,
+      "symbol_body": "export interface $ZodNonOptional<T extends SomeType = $ZodType> extends $ZodType {\n  _zod: $ZodNonOptionalInternals<T>;\n}",
+      "symbol_lines": [
+        3599,
+        3601
+      ]
+    },
+    {
+      "id": "399f7715-6f39-4c5c-9b50-e33cf7f0ff24",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+      "title": "getIssueProperties (types.ts)",
+      "excerpt": "",
+      "reason": "Depends on or is imported by `getIssueProperties` lines 335-343",
+      "confidence": 0.6748100061710378,
+      "est_tokens": 48,
+      "freshness": "2026-06-10T13:41:41.781622Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 316,
+      "symbol_body": null,
+      "symbol_lines": [
+        335,
+        343
+      ]
+    },
+    {
+      "id": "62ddbfbd-d7e7-4a1e-9017-877682f2406d",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/tests/record-constructor.test.ts",
+      "title": "test_record_should_parse_objects_with_non_function_constructor_field (record-constructor.test.ts)",
+      "excerpt": "test_record_should_parse_objects_with_non_function_constructor_field()",
+      "reason": "Modified `test_record_should_parse_objects_with_non_function_constructor_field` lines 4-36",
+      "confidence": 0.6342999277045492,
+      "est_tokens": 68,
+      "freshness": "2026-06-10T13:41:42.027519Z",
+      "tags": [],
+      "risk": "low",
+      "flow": null,
+      "duplicates_hidden": 3,
+      "symbol_body": null,
+      "symbol_lines": [
+        4,
+        36
+      ]
+    },
+    {
+      "id": "bd2adec2-3557-4d63-83fd-a479cd411f54",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/refine.test.ts",
+      "title": "test_should_collect_all_validation_errors_when_appropriate (refine.test.ts)",
+      "excerpt": "test_should_collect_all_validation_errors_when_appropriate()",
+      "reason": "Depends on or is imported by `test_should_collect_all_validation_errors_when_appropriate` lines 374-416",
+      "confidence": 0.5735767393038013,
+      "est_tokens": 65,
+      "freshness": "2026-06-10T13:41:41.945194Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 28,
+      "symbol_body": null,
+      "symbol_lines": [
+        374,
+        416
+      ]
+    },
+    {
+      "id": "0c577d67-b28d-43e7-91ae-b065ec2f9c3f",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/custom.test.ts",
+      "title": "test_non_continuable_by_default (custom.test.ts)",
+      "excerpt": "test_non_continuable_by_default()",
+      "reason": "Depends on or is imported by `test_non_continuable_by_default` lines 25-40",
+      "confidence": 0.5498477045705423,
+      "est_tokens": 58,
+      "freshness": "2026-06-10T13:41:41.882446Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 4,
+      "symbol_body": null,
+      "symbol_lines": [
+        25,
+        40
+      ]
+    }
+  ],
+  "total_est_tokens": 289,
+  "baseline_est_tokens": 245341,
+  "reduction_pct": 99.9,
+  "created_at": "2026-06-10T13:41:44.864631Z",
+  "has_more": false,
+  "total_items": 5,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [],
+    "external_dropped": 0,
+    "depth": "standard",
+    "depth_reason": "top1 0.82, top2 0.67, top3 0.63 \u2014 moderate confidence, consider the top few items",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "350325b5-14e4-4f5a-b5c8-f76d33c86d41",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/schemas.ts",
+      "title": "$ZodNonOptional (schemas.ts)",
+      "excerpt": "",
+      "reason": "Modified `$ZodNonOptional` lines 3599-3601",
+      "confidence": 0.8227385942403732,
+      "est_tokens": 50,
+      "freshness": "2026-06-10T13:41:42.010982Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 298,
+      "symbol_body": "export interface $ZodNonOptional<T extends SomeType = $ZodType> extends $ZodType {\n  _zod: $ZodNonOptionalInternals<T>;\n}",
+      "symbol_lines": [
+        3599,
+        3601
+      ]
+    },
+    {
+      "id": "399f7715-6f39-4c5c-9b50-e33cf7f0ff24",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+      "title": "getIssueProperties (types.ts)",
+      "excerpt": "",
+      "reason": "Depends on or is imported by `getIssueProperties` lines 335-343",
+      "confidence": 0.6748100061710378,
+      "est_tokens": 48,
+      "freshness": "2026-06-10T13:41:41.781622Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 316,
+      "symbol_body": null,
+      "symbol_lines": [
+        335,
+        343
+      ]
+    },
+    {
+      "id": "62ddbfbd-d7e7-4a1e-9017-877682f2406d",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/tests/record-constructor.test.ts",
+      "title": "test_record_should_parse_objects_with_non_function_constructor_field (record-constructor.test.ts)",
+      "excerpt": "test_record_should_parse_objects_with_non_function_constructor_field()",
+      "reason": "Modified `test_record_should_parse_objects_with_non_function_constructor_field` lines 4-36",
+      "confidence": 0.6342999277045492,
+      "est_tokens": 68,
+      "freshness": "2026-06-10T13:41:42.027519Z",
+      "tags": [],
+      "risk": "low",
+      "flow": null,
+      "duplicates_hidden": 3,
+      "symbol_body": null,
+      "symbol_lines": [
+        4,
+        36
+      ]
+    },
+    {
+      "id": "bd2adec2-3557-4d63-83fd-a479cd411f54",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/refine.test.ts",
+      "title": "test_should_collect_all_validation_errors_when_appropriate (refine.test.ts)",
+      "excerpt": "test_should_collect_all_validation_errors_when_appropriate()",
+      "reason": "Depends on or is imported by `test_should_collect_all_validation_errors_when_appropriate` lines 374-416",
+      "confidence": 0.5735767393038013,
+      "est_tokens": 65,
+      "freshness": "2026-06-10T13:41:41.945194Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 28,
+      "symbol_body": null,
+      "symbol_lines": [
+        374,
+        416
+      ]
+    },
+    {
+      "id": "0c577d67-b28d-43e7-91ae-b065ec2f9c3f",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/custom.test.ts",
+      "title": "test_non_continuable_by_default (custom.test.ts)",
+      "excerpt": "test_non_continuable_by_default()",
+      "reason": "Depends on or is imported by `test_non_continuable_by_default` lines 25-40",
+      "confidence": 0.5498477045705423,
+      "est_tokens": 58,
+      "freshness": "2026-06-10T13:41:41.882446Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 4,
+      "symbol_body": null,
+      "symbol_lines": [
+        25,
+        40
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 289,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

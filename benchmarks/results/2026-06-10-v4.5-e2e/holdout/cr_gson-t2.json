@@ -1,0 +1,245 @@
+{
+  "id": "6399db9f-8919-484a-bcb1-e6d04f1946eb",
+  "mode": "review",
+  "query": "MapTypeAdapterFactory duplicate key detection skips null first value",
+  "selected_items": [
+    {
+      "id": "114668d4-9207-41c9-be5e-b74424e28541",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+      "title": "Adapter (MapTypeAdapterFactory.java)",
+      "excerpt": "Adapter(\n        TypeAdapter<K> keyTypeAdapter,\n        TypeAdapter<V> valueTypeAdapter,\n        ObjectConstructor<? extends Map<K, V>> constructor)",
+      "reason": "Modified `Adapter` lines 166-173",
+      "confidence": 0.95,
+      "est_tokens": 78,
+      "freshness": "2026-06-10T13:41:11.306018Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 8,
+      "symbol_body": "    Adapter(\n        TypeAdapter<K> keyTypeAdapter,\n        TypeAdapter<V> valueTypeAdapter,\n        ObjectConstructor<? extends Map<K, V>> constructor) {\n      this.keyTypeAdapter = keyTypeAdapter;\n      this.valueTypeAdapter = valueTypeAdapter;\n      this.constructor = constructor;\n    }",
+      "symbol_lines": [
+        166,
+        173
+      ]
+    },
+    {
+      "id": "f94843e3-58c6-4387-b0bf-cae85da07a50",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+      "title": "testMultipleEnableComplexKeyRegistrationHasNoEffect (MapAsArrayTypeAdapterTest.java)",
+      "excerpt": "@Test @Test\n  public void testMultipleEnableComplexKeyRegistrationHasNoEffect()",
+      "reason": "Modified `testMultipleEnableComplexKeyRegistrationHasNoEffect` lines 83-98",
+      "confidence": 0.749643297304957,
+      "est_tokens": 75,
+      "freshness": "2026-06-10T13:41:11.474634Z",
+      "tags": [],
+      "risk": "low",
+      "flow": null,
+      "duplicates_hidden": 13,
+      "symbol_body": null,
+      "symbol_lines": [
+        83,
+        98
+      ]
+    },
+    {
+      "id": "3dae8701-6dfb-4525-89b8-e39830320555",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/LinkedTreeMap.java",
+      "title": "Node (LinkedTreeMap.java)",
+      "excerpt": "Node(boolean allowNullValue, Node<K, V> parent, K key, Node<K, V> next, Node<K, V> prev)\nCreate a regular entry",
+      "reason": "Depends on or is imported by `Node` lines 488-497",
+      "confidence": 0.6828027757461972,
+      "est_tokens": 80,
+      "freshness": "2026-06-10T13:41:11.289046Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 51,
+      "symbol_body": null,
+      "symbol_lines": [
+        488,
+        497
+      ]
+    },
+    {
+      "id": "832586b9-91b3-49c7-9271-2febd607ee31",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapTest.java",
+      "title": "testMapSerializationWithNullKey (MapTest.java)",
+      "excerpt": "@Test @Test\n  public void testMapSerializationWithNullKey()",
+      "reason": "Modified `testMapSerializationWithNullKey` lines 144-152",
+      "confidence": 0.6477847467400655,
+      "est_tokens": 66,
+      "freshness": "2026-06-10T13:41:11.477832Z",
+      "tags": [],
+      "risk": "medium",
+      "flow": null,
+      "duplicates_hidden": 71,
+      "symbol_body": null,
+      "symbol_lines": [
+        144,
+        152
+      ]
+    },
+    {
+      "id": "6a11471a-8ffd-41fc-a9a9-7b09e1688a66",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/ConstructorConstructor.java",
+      "title": "hasStringKeyType (ConstructorConstructor.java)",
+      "excerpt": "private static boolean hasStringKeyType(Type mapType)",
+      "reason": "Depends on or is imported by `hasStringKeyType` lines 339-350",
+      "confidence": 0.6432525921872676,
+      "est_tokens": 58,
+      "freshness": "2026-06-10T13:41:11.281584Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 17,
+      "symbol_body": null,
+      "symbol_lines": [
+        339,
+        350
+      ]
+    }
+  ],
+  "total_est_tokens": 357,
+  "baseline_est_tokens": 287845,
+  "reduction_pct": 99.8,
+  "created_at": "2026-06-10T13:41:14.467856Z",
+  "has_more": false,
+  "total_items": 5,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "47c91d38-5a2f-44e1-934e-a8e365ccaf8c",
+      "54e41e97-0170-4d0b-8e26-f1c3a3986ae1",
+      "f94843e3-58c6-4387-b0bf-cae85da07a50",
+      "f209ebc3-b480-4cf8-a9a6-2e50dfe7be84",
+      "d7337f25-8d60-42f6-af63-35e28cf76ca8",
+      "adf46db3-17a8-4b87-a75c-06648f56cc03"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.20); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "114668d4-9207-41c9-be5e-b74424e28541",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+      "title": "Adapter (MapTypeAdapterFactory.java)",
+      "excerpt": "Adapter(\n        TypeAdapter<K> keyTypeAdapter,\n        TypeAdapter<V> valueTypeAdapter,\n        ObjectConstructor<? extends Map<K, V>> constructor)",
+      "reason": "Modified `Adapter` lines 166-173",
+      "confidence": 0.95,
+      "est_tokens": 78,
+      "freshness": "2026-06-10T13:41:11.306018Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 8,
+      "symbol_body": "    Adapter(\n        TypeAdapter<K> keyTypeAdapter,\n        TypeAdapter<V> valueTypeAdapter,\n        ObjectConstructor<? extends Map<K, V>> constructor) {\n      this.keyTypeAdapter = keyTypeAdapter;\n      this.valueTypeAdapter = valueTypeAdapter;\n      this.constructor = constructor;\n    }",
+      "symbol_lines": [
+        166,
+        173
+      ]
+    },
+    {
+      "id": "f94843e3-58c6-4387-b0bf-cae85da07a50",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+      "title": "testMultipleEnableComplexKeyRegistrationHasNoEffect (MapAsArrayTypeAdapterTest.java)",
+      "excerpt": "@Test @Test\n  public void testMultipleEnableComplexKeyRegistrationHasNoEffect()",
+      "reason": "Modified `testMultipleEnableComplexKeyRegistrationHasNoEffect` lines 83-98",
+      "confidence": 0.749643297304957,
+      "est_tokens": 75,
+      "freshness": "2026-06-10T13:41:11.474634Z",
+      "tags": [],
+      "risk": "low",
+      "flow": null,
+      "duplicates_hidden": 13,
+      "symbol_body": null,
+      "symbol_lines": [
+        83,
+        98
+      ]
+    },
+    {
+      "id": "3dae8701-6dfb-4525-89b8-e39830320555",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/LinkedTreeMap.java",
+      "title": "Node (LinkedTreeMap.java)",
+      "excerpt": "Node(boolean allowNullValue, Node<K, V> parent, K key, Node<K, V> next, Node<K, V> prev)\nCreate a regular entry",
+      "reason": "Depends on or is imported by `Node` lines 488-497",
+      "confidence": 0.6828027757461972,
+      "est_tokens": 80,
+      "freshness": "2026-06-10T13:41:11.289046Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 51,
+      "symbol_body": null,
+      "symbol_lines": [
+        488,
+        497
+      ]
+    },
+    {
+      "id": "832586b9-91b3-49c7-9271-2febd607ee31",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapTest.java",
+      "title": "testMapSerializationWithNullKey (MapTest.java)",
+      "excerpt": "@Test @Test\n  public void testMapSerializationWithNullKey()",
+      "reason": "Modified `testMapSerializationWithNullKey` lines 144-152",
+      "confidence": 0.6477847467400655,
+      "est_tokens": 66,
+      "freshness": "2026-06-10T13:41:11.477832Z",
+      "tags": [],
+      "risk": "medium",
+      "flow": null,
+      "duplicates_hidden": 71,
+      "symbol_body": null,
+      "symbol_lines": [
+        144,
+        152
+      ]
+    },
+    {
+      "id": "6a11471a-8ffd-41fc-a9a9-7b09e1688a66",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/ConstructorConstructor.java",
+      "title": "hasStringKeyType (ConstructorConstructor.java)",
+      "excerpt": "private static boolean hasStringKeyType(Type mapType)",
+      "reason": "Depends on or is imported by `hasStringKeyType` lines 339-350",
+      "confidence": 0.6432525921872676,
+      "est_tokens": 58,
+      "freshness": "2026-06-10T13:41:11.281584Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 17,
+      "symbol_body": null,
+      "symbol_lines": [
+        339,
+        350
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 357,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

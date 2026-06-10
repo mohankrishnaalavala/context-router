@@ -1,0 +1,22 @@
+{
+  "repo": "django",
+  "task_id": "django-t2",
+  "anchor": "parent-sha-with-diff",
+  "mode": "debug",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "django/core/handlers/asgi.py"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/asgi.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/wsgi.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/handlers/tests.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/http/request.py"
+  ],
+  "n_items": 4,
+  "est_tokens_total": 284,
+  "precision": 0.25,
+  "recall": 1.0,
+  "f1": 0.4,
+  "rank1_hit": 1
+}

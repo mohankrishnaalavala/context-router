@@ -1,0 +1,415 @@
+{
+  "date": "2026-06-10",
+  "method": "v4.5 end-to-end: pack tokens + downstream read tokens (evaluation.downstream), anchor=parent-sha-with-diff",
+  "aggregate": {
+    "n_tasks": 21,
+    "n_repos": 7,
+    "repos": [
+      "actix-web",
+      "django",
+      "gin",
+      "gson",
+      "kubernetes",
+      "requests",
+      "zod"
+    ],
+    "context-router": {
+      "rank1": 21,
+      "pack_tokens": 4498,
+      "downstream_read_tokens": 10827,
+      "end_to_end_tokens": 15325,
+      "judge_sufficient_rate": null
+    },
+    "code-review-graph": {
+      "rank1": 16,
+      "pack_tokens": 27470,
+      "downstream_read_tokens": 352790,
+      "end_to_end_tokens": 380260
+    },
+    "end_to_end_reduction_vs_crg_pct": 96.0,
+    "judge": {
+      "model": "claude-fable-5",
+      "status": "FAILED \u2014 all 21 calls returned 'Credit balance is too low'; re-run benchmark/judge_packs.py when API credits available. judge_sufficient_rate is null, NOT zero."
+    }
+  },
+  "by_task": {
+    "actix-t1": {
+      "repo": "actix-web",
+      "rank1_hit": 1,
+      "f1": 0.6666666666666666,
+      "pack_tokens": 98,
+      "downstream_read_tokens": 57,
+      "end_to_end_tokens": 155,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1163,
+        "downstream_read_tokens": 5813,
+        "end_to_end_tokens": 6976,
+        "rank1_hit": 1
+      }
+    },
+    "actix-t2": {
+      "repo": "actix-web",
+      "rank1_hit": 1,
+      "f1": 0.6666666666666666,
+      "pack_tokens": 102,
+      "downstream_read_tokens": 182,
+      "end_to_end_tokens": 284,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 2781,
+        "downstream_read_tokens": 3732,
+        "end_to_end_tokens": 6513,
+        "rank1_hit": 1
+      }
+    },
+    "actix-t3": {
+      "repo": "actix-web",
+      "rank1_hit": 1,
+      "f1": 0.33333333333333337,
+      "pack_tokens": 255,
+      "downstream_read_tokens": 810,
+      "end_to_end_tokens": 1065,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1498,
+        "downstream_read_tokens": 1832,
+        "end_to_end_tokens": 3330,
+        "rank1_hit": 1
+      }
+    },
+    "django-t1": {
+      "repo": "django",
+      "rank1_hit": 1,
+      "f1": 0.6666666666666666,
+      "pack_tokens": 123,
+      "downstream_read_tokens": 556,
+      "end_to_end_tokens": 679,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1433,
+        "downstream_read_tokens": 48988,
+        "end_to_end_tokens": 50421,
+        "rank1_hit": 1
+      }
+    },
+    "django-t2": {
+      "repo": "django",
+      "rank1_hit": 1,
+      "f1": 0.4,
+      "pack_tokens": 284,
+      "downstream_read_tokens": 249,
+      "end_to_end_tokens": 533,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1701,
+        "downstream_read_tokens": 7421,
+        "end_to_end_tokens": 9122,
+        "rank1_hit": 1
+      }
+    },
+    "django-t3": {
+      "repo": "django",
+      "rank1_hit": 1,
+      "f1": 0.33333333333333337,
+      "pack_tokens": 299,
+      "downstream_read_tokens": 673,
+      "end_to_end_tokens": 972,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 778,
+        "downstream_read_tokens": 25519,
+        "end_to_end_tokens": 26297,
+        "rank1_hit": 1
+      }
+    },
+    "gin-t1": {
+      "repo": "gin",
+      "rank1_hit": 1,
+      "f1": 0.6666666666666666,
+      "pack_tokens": 120,
+      "downstream_read_tokens": 2450,
+      "end_to_end_tokens": 2570,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 968,
+        "downstream_read_tokens": 13967,
+        "end_to_end_tokens": 14935,
+        "rank1_hit": 1
+      }
+    },
+    "gin-t2": {
+      "repo": "gin",
+      "rank1_hit": 1,
+      "f1": 0.6666666666666666,
+      "pack_tokens": 114,
+      "downstream_read_tokens": 364,
+      "end_to_end_tokens": 478,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 905,
+        "downstream_read_tokens": 37879,
+        "end_to_end_tokens": 38784,
+        "rank1_hit": 1
+      }
+    },
+    "gin-t3": {
+      "repo": "gin",
+      "rank1_hit": 1,
+      "f1": 0.6666666666666666,
+      "pack_tokens": 105,
+      "downstream_read_tokens": 206,
+      "end_to_end_tokens": 311,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 656,
+        "downstream_read_tokens": 7446,
+        "end_to_end_tokens": 8102,
+        "rank1_hit": 1
+      }
+    },
+    "gson-t1": {
+      "repo": "gson",
+      "rank1_hit": 1,
+      "f1": 0.33333333333333337,
+      "pack_tokens": 489,
+      "downstream_read_tokens": 653,
+      "end_to_end_tokens": 1142,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 3020,
+        "downstream_read_tokens": 37005,
+        "end_to_end_tokens": 40025,
+        "rank1_hit": 1
+      }
+    },
+    "gson-t2": {
+      "repo": "gson",
+      "rank1_hit": 1,
+      "f1": 0.33333333333333337,
+      "pack_tokens": 357,
+      "downstream_read_tokens": 479,
+      "end_to_end_tokens": 836,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 3139,
+        "downstream_read_tokens": 10907,
+        "end_to_end_tokens": 14046,
+        "rank1_hit": 1
+      }
+    },
+    "gson-t3": {
+      "repo": "gson",
+      "rank1_hit": 1,
+      "f1": 1.0,
+      "pack_tokens": 69,
+      "downstream_read_tokens": 0,
+      "end_to_end_tokens": 69,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 459,
+        "downstream_read_tokens": 0,
+        "end_to_end_tokens": 459,
+        "rank1_hit": 1
+      }
+    },
+    "k8s-t1": {
+      "repo": "kubernetes",
+      "rank1_hit": 1,
+      "f1": 0.5,
+      "pack_tokens": 169,
+      "downstream_read_tokens": 448,
+      "end_to_end_tokens": 617,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1103,
+        "downstream_read_tokens": 37517,
+        "end_to_end_tokens": 38620,
+        "rank1_hit": 0
+      }
+    },
+    "k8s-t2": {
+      "repo": "kubernetes",
+      "rank1_hit": 1,
+      "f1": 0.4,
+      "pack_tokens": 219,
+      "downstream_read_tokens": 596,
+      "end_to_end_tokens": 815,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1193,
+        "downstream_read_tokens": 8094,
+        "end_to_end_tokens": 9287,
+        "rank1_hit": 0
+      }
+    },
+    "k8s-t3": {
+      "repo": "kubernetes",
+      "rank1_hit": 1,
+      "f1": 1.0,
+      "pack_tokens": 65,
+      "downstream_read_tokens": 203,
+      "end_to_end_tokens": 268,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1184,
+        "downstream_read_tokens": 19067,
+        "end_to_end_tokens": 20251,
+        "rank1_hit": 0
+      }
+    },
+    "requests-t1": {
+      "repo": "requests",
+      "rank1_hit": 1,
+      "f1": 0.33333333333333337,
+      "pack_tokens": 341,
+      "downstream_read_tokens": 348,
+      "end_to_end_tokens": 689,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 436,
+        "downstream_read_tokens": 8241,
+        "end_to_end_tokens": 8677,
+        "rank1_hit": 1
+      }
+    },
+    "requests-t2": {
+      "repo": "requests",
+      "rank1_hit": 1,
+      "f1": 0.33333333333333337,
+      "pack_tokens": 323,
+      "downstream_read_tokens": 564,
+      "end_to_end_tokens": 887,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1041,
+        "downstream_read_tokens": 15890,
+        "end_to_end_tokens": 16931,
+        "rank1_hit": 1
+      }
+    },
+    "requests-t3": {
+      "repo": "requests",
+      "rank1_hit": 1,
+      "f1": 0.33333333333333337,
+      "pack_tokens": 365,
+      "downstream_read_tokens": 729,
+      "end_to_end_tokens": 1094,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1072,
+        "downstream_read_tokens": 27810,
+        "end_to_end_tokens": 28882,
+        "rank1_hit": 1
+      }
+    },
+    "zod-t1": {
+      "repo": "zod",
+      "rank1_hit": 1,
+      "f1": 0.33333333333333337,
+      "pack_tokens": 289,
+      "downstream_read_tokens": 810,
+      "end_to_end_tokens": 1099,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 1440,
+        "downstream_read_tokens": 1143,
+        "end_to_end_tokens": 2583,
+        "rank1_hit": 0
+      }
+    },
+    "zod-t2": {
+      "repo": "zod",
+      "rank1_hit": 1,
+      "f1": 0.4,
+      "pack_tokens": 212,
+      "downstream_read_tokens": 268,
+      "end_to_end_tokens": 480,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 737,
+        "downstream_read_tokens": 24502,
+        "end_to_end_tokens": 25239,
+        "rank1_hit": 1
+      }
+    },
+    "zod-t3": {
+      "repo": "zod",
+      "rank1_hit": 1,
+      "f1": 0.6666666666666666,
+      "pack_tokens": 100,
+      "downstream_read_tokens": 182,
+      "end_to_end_tokens": 282,
+      "judge": {
+        "sufficient": null,
+        "missing": "judge error: exit 1: Credit balance is too low"
+      },
+      "crg": {
+        "pack_tokens": 763,
+        "downstream_read_tokens": 10017,
+        "end_to_end_tokens": 10780,
+        "rank1_hit": 0
+      }
+    }
+  }
+}

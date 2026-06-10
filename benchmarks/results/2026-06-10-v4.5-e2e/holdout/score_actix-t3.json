@@ -1,0 +1,23 @@
+{
+  "repo": "actix-web",
+  "task_id": "actix-t3",
+  "anchor": "parent-sha-with-diff",
+  "mode": "debug",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "awc/src/client/h1proto.rs"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/chunked.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/request.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/encoder.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/decoder.rs"
+  ],
+  "n_items": 5,
+  "est_tokens_total": 255,
+  "precision": 0.2,
+  "recall": 1.0,
+  "f1": 0.33333333333333337,
+  "rank1_hit": 1
+}

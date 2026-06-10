@@ -1,0 +1,241 @@
+{
+  "id": "5a4675bb-6817-4ebd-bc4a-fed3155cfed1",
+  "mode": "review",
+  "query": "empty netrc entry causes credentials to be sent as None",
+  "selected_items": [
+    {
+      "id": "1e397c89-f8fd-42a2-bdd2-10a108ba1742",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "get_netrc_auth (utils.py)",
+      "excerpt": "def get_netrc_auth(url, raise_errors=False):\nReturns the Requests tuple auth for a given url from netrc.",
+      "reason": "Modified `get_netrc_auth` lines 205-246",
+      "confidence": 0.9123841357387446,
+      "est_tokens": 72,
+      "freshness": "2026-06-10T13:41:29.590814Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 42,
+      "symbol_body": "def get_netrc_auth(url, raise_errors=False):\n    \"\"\"Returns the Requests tuple auth for a given url from netrc.\"\"\"\n\n    netrc_file = os.environ.get(\"NETRC\")\n    if netrc_file is not None:\n        netrc_locations = (netrc_file,)\n    else:\n        netrc_locations = (f\"~/{f}\" for f in NETRC_FILES)\n\n    try:\n        from netrc import NetrcParseError, netrc\n\n        netrc_path = None\n\n        for f in netrc_locations:\n            loc = os.path.expanduser(f)\n            if os.path.exists(loc):\n                netrc_path = loc\n                break\n\n        # Abort early if there isn't one.\n        if netrc_path is None:\n            return\n\n        ri = urlparse(url)\n        host = ri.hostname\n\n        try:\n            _netrc = netrc(netrc_path).authenticators(host)\n            if _netrc:\n                # Return with login / password\n                login_i = 0 if _netrc[0] else 1\n                return (_netrc[login_i], _netrc[2])\n        except (NetrcParseError, OSError):\n            # If there was a parsing error or a permissions issue reading the file,\n            # we'll just skip netrc auth unless explicitly asked to raise errors.\n            if raise_errors:\n                raise\n\n    # App Engine hackiness.\n    except (ImportError, AttributeError):\n        pass",
+      "symbol_lines": [
+        205,
+        246
+      ]
+    },
+    {
+      "id": "931850b5-615f-47ab-b1ec-533f72e8b670",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+      "title": "test_empty_response_has_content_none (test_requests.py)",
+      "excerpt": "def test_empty_response_has_content_none(self):",
+      "reason": "Depends on or is imported by `test_empty_response_has_content_none` lines 1417-1419",
+      "confidence": 0.6970000000000001,
+      "est_tokens": 60,
+      "freshness": "2026-06-10T13:41:29.609138Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 274,
+      "symbol_body": null,
+      "symbol_lines": [
+        1417,
+        1419
+      ]
+    },
+    {
+      "id": "b2818077-48eb-4e7f-8f8c-d4b3b7fe97f9",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+      "title": "get_cookie_header (cookies.py)",
+      "excerpt": "def get_cookie_header(jar, request):\n\n    Produce an appropriate Cookie header string to be sent with `request`, or None.\n\n    :rtype: str",
+      "reason": "Depends on or is imported by `get_cookie_header` lines 140-148",
+      "confidence": 0.6929081583715939,
+      "est_tokens": 78,
+      "freshness": "2026-06-10T13:41:29.574293Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 52,
+      "symbol_body": null,
+      "symbol_lines": [
+        140,
+        148
+      ]
+    },
+    {
+      "id": "24730cfe-b0b0-4e06-9e7e-967ee6fbf957",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+      "title": "TestGetNetrcAuth (test_utils.py)",
+      "excerpt": "class TestGetNetrcAuth:",
+      "reason": "Modified `TestGetNetrcAuth` lines 156-171",
+      "confidence": 0.6539952822563507,
+      "est_tokens": 57,
+      "freshness": "2026-06-10T13:41:29.624591Z",
+      "tags": [],
+      "risk": "medium",
+      "flow": null,
+      "duplicates_hidden": 80,
+      "symbol_body": null,
+      "symbol_lines": [
+        156,
+        171
+      ]
+    },
+    {
+      "id": "c101976e-b881-4824-9e4c-423aa0eb4104",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/structures.py",
+      "title": "__init__ (structures.py)",
+      "excerpt": "def __init__(self, name=None):",
+      "reason": "Depends on or is imported by `__init__` lines 86-88",
+      "confidence": 0.5928046222826855,
+      "est_tokens": 56,
+      "freshness": "2026-06-10T13:41:29.590118Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 13,
+      "symbol_body": null,
+      "symbol_lines": [
+        86,
+        88
+      ]
+    }
+  ],
+  "total_est_tokens": 323,
+  "baseline_est_tokens": 56689,
+  "reduction_pct": 99.2,
+  "created_at": "2026-06-10T13:41:29.914970Z",
+  "has_more": false,
+  "total_items": 5,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "1e397c89-f8fd-42a2-bdd2-10a108ba1742",
+      "fa4f8087-2ecd-4838-a2ac-a8bf32869400"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.91 is high and clearly leads the pack (gap to top2: 0.22); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "1e397c89-f8fd-42a2-bdd2-10a108ba1742",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "get_netrc_auth (utils.py)",
+      "excerpt": "def get_netrc_auth(url, raise_errors=False):\nReturns the Requests tuple auth for a given url from netrc.",
+      "reason": "Modified `get_netrc_auth` lines 205-246",
+      "confidence": 0.9123841357387446,
+      "est_tokens": 72,
+      "freshness": "2026-06-10T13:41:29.590814Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 42,
+      "symbol_body": "def get_netrc_auth(url, raise_errors=False):\n    \"\"\"Returns the Requests tuple auth for a given url from netrc.\"\"\"\n\n    netrc_file = os.environ.get(\"NETRC\")\n    if netrc_file is not None:\n        netrc_locations = (netrc_file,)\n    else:\n        netrc_locations = (f\"~/{f}\" for f in NETRC_FILES)\n\n    try:\n        from netrc import NetrcParseError, netrc\n\n        netrc_path = None\n\n        for f in netrc_locations:\n            loc = os.path.expanduser(f)\n            if os.path.exists(loc):\n                netrc_path = loc\n                break\n\n        # Abort early if there isn't one.\n        if netrc_path is None:\n            return\n\n        ri = urlparse(url)\n        host = ri.hostname\n\n        try:\n            _netrc = netrc(netrc_path).authenticators(host)\n            if _netrc:\n                # Return with login / password\n                login_i = 0 if _netrc[0] else 1\n                return (_netrc[login_i], _netrc[2])\n        except (NetrcParseError, OSError):\n            # If there was a parsing error or a permissions issue reading the file,\n            # we'll just skip netrc auth unless explicitly asked to raise errors.\n            if raise_errors:\n                raise\n\n    # App Engine hackiness.\n    except (ImportError, AttributeError):\n        pass",
+      "symbol_lines": [
+        205,
+        246
+      ]
+    },
+    {
+      "id": "931850b5-615f-47ab-b1ec-533f72e8b670",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+      "title": "test_empty_response_has_content_none (test_requests.py)",
+      "excerpt": "def test_empty_response_has_content_none(self):",
+      "reason": "Depends on or is imported by `test_empty_response_has_content_none` lines 1417-1419",
+      "confidence": 0.6970000000000001,
+      "est_tokens": 60,
+      "freshness": "2026-06-10T13:41:29.609138Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 274,
+      "symbol_body": null,
+      "symbol_lines": [
+        1417,
+        1419
+      ]
+    },
+    {
+      "id": "b2818077-48eb-4e7f-8f8c-d4b3b7fe97f9",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+      "title": "get_cookie_header (cookies.py)",
+      "excerpt": "def get_cookie_header(jar, request):\n\n    Produce an appropriate Cookie header string to be sent with `request`, or None.\n\n    :rtype: str",
+      "reason": "Depends on or is imported by `get_cookie_header` lines 140-148",
+      "confidence": 0.6929081583715939,
+      "est_tokens": 78,
+      "freshness": "2026-06-10T13:41:29.574293Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 52,
+      "symbol_body": null,
+      "symbol_lines": [
+        140,
+        148
+      ]
+    },
+    {
+      "id": "24730cfe-b0b0-4e06-9e7e-967ee6fbf957",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+      "title": "TestGetNetrcAuth (test_utils.py)",
+      "excerpt": "class TestGetNetrcAuth:",
+      "reason": "Modified `TestGetNetrcAuth` lines 156-171",
+      "confidence": 0.6539952822563507,
+      "est_tokens": 57,
+      "freshness": "2026-06-10T13:41:29.624591Z",
+      "tags": [],
+      "risk": "medium",
+      "flow": null,
+      "duplicates_hidden": 80,
+      "symbol_body": null,
+      "symbol_lines": [
+        156,
+        171
+      ]
+    },
+    {
+      "id": "c101976e-b881-4824-9e4c-423aa0eb4104",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/structures.py",
+      "title": "__init__ (structures.py)",
+      "excerpt": "def __init__(self, name=None):",
+      "reason": "Depends on or is imported by `__init__` lines 86-88",
+      "confidence": 0.5928046222826855,
+      "est_tokens": 56,
+      "freshness": "2026-06-10T13:41:29.590118Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 13,
+      "symbol_body": null,
+      "symbol_lines": [
+        86,
+        88
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 323,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

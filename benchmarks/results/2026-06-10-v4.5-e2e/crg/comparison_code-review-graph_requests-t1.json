@@ -1,0 +1,18 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "requests-t1",
+  "sha": "f0198e6dfc431a2293dc16e1b1e8fcddc910a7f3",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "src/requests/utils.py"
+  ],
+  "est_tokens": 436,
+  "runtime_ms": 377,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "src/requests/utils.py"
+  ]
+}

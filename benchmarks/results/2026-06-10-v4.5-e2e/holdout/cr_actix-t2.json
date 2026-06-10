@@ -1,0 +1,120 @@
+{
+  "id": "b2e1640a-7fd3-4056-84f5-c813dbb7dc06",
+  "mode": "review",
+  "query": "Route panics when .to() or .service() is called after .wrap() middleware",
+  "selected_items": [
+    {
+      "id": "66309d3d-3fe6-4ab6-844a-7d69fe286445",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/route.rs",
+      "title": "Route (route.rs)",
+      "excerpt": "struct Route",
+      "reason": "Modified `Route` lines 23-26",
+      "confidence": 0.95,
+      "est_tokens": 47,
+      "freshness": "2026-06-10T13:40:43.876050Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 17,
+      "symbol_body": "pub struct Route {\n    service: BoxedHttpServiceFactory,\n    guards: Rc<Vec<Box<dyn Guard>>>,\n}",
+      "symbol_lines": [
+        23,
+        26
+      ]
+    },
+    {
+      "id": "58751e66-3771-47fc-b568-7ffc46a52869",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/service.rs",
+      "title": "cloning_request_panics (service.rs)",
+      "excerpt": "fn cloning_request_panics(...)",
+      "reason": "Referenced in codebase `cloning_request_panics` lines 853-873",
+      "confidence": 0.5973109209854228,
+      "est_tokens": 55,
+      "freshness": "2026-06-10T13:40:43.889645Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 71,
+      "symbol_body": null,
+      "symbol_lines": [
+        853,
+        873
+      ]
+    }
+  ],
+  "total_est_tokens": 102,
+  "baseline_est_tokens": 211791,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:40:46.711757Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "66309d3d-3fe6-4ab6-844a-7d69fe286445",
+      "f56cf480-3f9c-42d9-b047-b3ad919e0765",
+      "97be4e52-e480-4db0-bf51-1a8d4395828f",
+      "7da1a380-0462-41d7-b4b0-045cec47d091",
+      "0cee396a-939f-43d4-b40c-536f59bf82af",
+      "232f8b99-bcad-480f-b857-31a47038cd8e",
+      "051398a3-42f5-427f-a122-8c431ed276ae"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.35); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "66309d3d-3fe6-4ab6-844a-7d69fe286445",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/route.rs",
+      "title": "Route (route.rs)",
+      "excerpt": "struct Route",
+      "reason": "Modified `Route` lines 23-26",
+      "confidence": 0.95,
+      "est_tokens": 47,
+      "freshness": "2026-06-10T13:40:43.876050Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 17,
+      "symbol_body": "pub struct Route {\n    service: BoxedHttpServiceFactory,\n    guards: Rc<Vec<Box<dyn Guard>>>,\n}",
+      "symbol_lines": [
+        23,
+        26
+      ]
+    },
+    {
+      "id": "58751e66-3771-47fc-b568-7ffc46a52869",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/service.rs",
+      "title": "cloning_request_panics (service.rs)",
+      "excerpt": "fn cloning_request_panics(...)",
+      "reason": "Referenced in codebase `cloning_request_panics` lines 853-873",
+      "confidence": 0.5973109209854228,
+      "est_tokens": 55,
+      "freshness": "2026-06-10T13:40:43.889645Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 71,
+      "symbol_body": null,
+      "symbol_lines": [
+        853,
+        873
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 102,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

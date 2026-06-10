@@ -1,0 +1,242 @@
+{
+  "id": "7dc1ab6f-887c-4761-967c-d066f0ee5eb1",
+  "mode": "review",
+  "query": "JSONDecodeError raised by requests is not picklable / not deserializable",
+  "selected_items": [
+    {
+      "id": "7e3e537f-7c1e-4257-9265-48d10d273507",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+      "title": "JSONDecodeError (exceptions.py)",
+      "excerpt": "class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\nCouldn't decode the text into json",
+      "reason": "Modified `JSONDecodeError` lines 31-42",
+      "confidence": 0.95,
+      "est_tokens": 69,
+      "freshness": "2026-06-10T13:41:32.243669Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 26,
+      "symbol_body": "class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\n    \"\"\"Couldn't decode the text into json\"\"\"\n\n    def __init__(self, *args, **kwargs):\n        \"\"\"\n        Construct the JSONDecodeError instance first with all\n        args. Then use it's args to construct the IOError so that\n        the json specific args aren't used as IOError specific args\n        and the error message from JSONDecodeError is preserved.\n        \"\"\"\n        CompatJSONDecodeError.__init__(self, *args)\n        InvalidJSONError.__init__(self, *self.args, **kwargs)",
+      "symbol_lines": [
+        31,
+        42
+      ]
+    },
+    {
+      "id": "64fc89fb-96d0-490b-9fb5-ab48be2c92d4",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/models.py",
+      "title": "json (models.py)",
+      "excerpt": "def json(self, **kwargs):\nr\"\"\"Returns the json-encoded content of a response, if any.\n\n        :param \\*\\*kwargs: Optional arguments that ``json.loads`` takes.\n        :raises requests.exceptions.JSONDecodeError: If the response body does not\n            contain valid json.",
+      "reason": "Depends on or is imported by `json` lines 942-973",
+      "confidence": 0.7453318976491041,
+      "est_tokens": 104,
+      "freshness": "2026-06-10T13:41:32.250818Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 45,
+      "symbol_body": null,
+      "symbol_lines": [
+        942,
+        973
+      ]
+    },
+    {
+      "id": "667b37d7-109b-4ee6-9170-d5b8deecb41f",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+      "title": "test_json_decode_compatibility (test_requests.py)",
+      "excerpt": "def test_json_decode_compatibility(self, httpbin):",
+      "reason": "Modified `test_json_decode_compatibility` lines 2785-2791",
+      "confidence": 0.7202776614157703,
+      "est_tokens": 61,
+      "freshness": "2026-06-10T13:41:32.282563Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 263,
+      "symbol_body": null,
+      "symbol_lines": [
+        2785,
+        2791
+      ]
+    },
+    {
+      "id": "51ab6467-b7c1-41e4-b035-86bc9e0a786a",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_lowlevel.py",
+      "title": "test_json_decode_compatibility_for_alt_utf_encodings (test_lowlevel.py)",
+      "excerpt": "def test_json_decode_compatibility_for_alt_utf_encodings():",
+      "reason": "Depends on or is imported by `test_json_decode_compatibility_for_alt_utf_encodings` lines 407-428",
+      "confidence": 0.6142684493778565,
+      "est_tokens": 68,
+      "freshness": "2026-06-10T13:41:32.261685Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 19,
+      "symbol_body": null,
+      "symbol_lines": [
+        407,
+        428
+      ]
+    },
+    {
+      "id": "ab188ef7-df4c-41d1-945b-eb0cf3443363",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "stream_decode_response_unicode (utils.py)",
+      "excerpt": "def stream_decode_response_unicode(iterator, r):\nStream decodes an iterator.",
+      "reason": "Depends on or is imported by `stream_decode_response_unicode` lines 559-573",
+      "confidence": 0.6001739768569527,
+      "est_tokens": 63,
+      "freshness": "2026-06-10T13:41:32.257545Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 42,
+      "symbol_body": null,
+      "symbol_lines": [
+        559,
+        573
+      ]
+    }
+  ],
+  "total_est_tokens": 365,
+  "baseline_est_tokens": 53783,
+  "reduction_pct": 99.3,
+  "created_at": "2026-06-10T13:41:32.531830Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "628a70b0-961c-4218-9cad-e4cc742bd4e0",
+      "0327bbe7-bc6b-4583-b4db-2af64d63cb18",
+      "0f6c71bb-8a16-4a45-a2e7-024402da853d"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.20); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "7e3e537f-7c1e-4257-9265-48d10d273507",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+      "title": "JSONDecodeError (exceptions.py)",
+      "excerpt": "class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\nCouldn't decode the text into json",
+      "reason": "Modified `JSONDecodeError` lines 31-42",
+      "confidence": 0.95,
+      "est_tokens": 69,
+      "freshness": "2026-06-10T13:41:32.243669Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 26,
+      "symbol_body": "class JSONDecodeError(InvalidJSONError, CompatJSONDecodeError):\n    \"\"\"Couldn't decode the text into json\"\"\"\n\n    def __init__(self, *args, **kwargs):\n        \"\"\"\n        Construct the JSONDecodeError instance first with all\n        args. Then use it's args to construct the IOError so that\n        the json specific args aren't used as IOError specific args\n        and the error message from JSONDecodeError is preserved.\n        \"\"\"\n        CompatJSONDecodeError.__init__(self, *args)\n        InvalidJSONError.__init__(self, *self.args, **kwargs)",
+      "symbol_lines": [
+        31,
+        42
+      ]
+    },
+    {
+      "id": "64fc89fb-96d0-490b-9fb5-ab48be2c92d4",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/models.py",
+      "title": "json (models.py)",
+      "excerpt": "def json(self, **kwargs):\nr\"\"\"Returns the json-encoded content of a response, if any.\n\n        :param \\*\\*kwargs: Optional arguments that ``json.loads`` takes.\n        :raises requests.exceptions.JSONDecodeError: If the response body does not\n            contain valid json.",
+      "reason": "Depends on or is imported by `json` lines 942-973",
+      "confidence": 0.7453318976491041,
+      "est_tokens": 104,
+      "freshness": "2026-06-10T13:41:32.250818Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 45,
+      "symbol_body": null,
+      "symbol_lines": [
+        942,
+        973
+      ]
+    },
+    {
+      "id": "667b37d7-109b-4ee6-9170-d5b8deecb41f",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+      "title": "test_json_decode_compatibility (test_requests.py)",
+      "excerpt": "def test_json_decode_compatibility(self, httpbin):",
+      "reason": "Modified `test_json_decode_compatibility` lines 2785-2791",
+      "confidence": 0.7202776614157703,
+      "est_tokens": 61,
+      "freshness": "2026-06-10T13:41:32.282563Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 263,
+      "symbol_body": null,
+      "symbol_lines": [
+        2785,
+        2791
+      ]
+    },
+    {
+      "id": "51ab6467-b7c1-41e4-b035-86bc9e0a786a",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_lowlevel.py",
+      "title": "test_json_decode_compatibility_for_alt_utf_encodings (test_lowlevel.py)",
+      "excerpt": "def test_json_decode_compatibility_for_alt_utf_encodings():",
+      "reason": "Depends on or is imported by `test_json_decode_compatibility_for_alt_utf_encodings` lines 407-428",
+      "confidence": 0.6142684493778565,
+      "est_tokens": 68,
+      "freshness": "2026-06-10T13:41:32.261685Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 19,
+      "symbol_body": null,
+      "symbol_lines": [
+        407,
+        428
+      ]
+    },
+    {
+      "id": "ab188ef7-df4c-41d1-945b-eb0cf3443363",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+      "title": "stream_decode_response_unicode (utils.py)",
+      "excerpt": "def stream_decode_response_unicode(iterator, r):\nStream decodes an iterator.",
+      "reason": "Depends on or is imported by `stream_decode_response_unicode` lines 559-573",
+      "confidence": 0.6001739768569527,
+      "est_tokens": 63,
+      "freshness": "2026-06-10T13:41:32.257545Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 42,
+      "symbol_body": null,
+      "symbol_lines": [
+        559,
+        573
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 365,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

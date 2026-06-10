@@ -1,0 +1,18 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "zod-t1",
+  "sha": "7f789defd73ee35f3099ab5c2091cb19bd2b3578",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "packages/zod/src/v4/core/tests/record-constructor.test.ts"
+  ],
+  "est_tokens": 1440,
+  "runtime_ms": 696,
+  "rank1_hit": 0,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "packages/zod/src/v4/core/schemas.ts"
+  ]
+}

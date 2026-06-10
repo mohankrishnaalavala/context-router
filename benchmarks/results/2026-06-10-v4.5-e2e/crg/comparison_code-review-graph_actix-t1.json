@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "actix-t1",
+  "sha": "f31f9bc92c2518e40fecd7eaa711b0bdf01ec0b9",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "actix-files/src/named.rs",
+    "actix-files/tests/pre_epoch_mtime.rs"
+  ],
+  "est_tokens": 1163,
+  "runtime_ms": 417,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "actix-files/src/named.rs"
+  ]
+}

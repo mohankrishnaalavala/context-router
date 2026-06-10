@@ -1,0 +1,18 @@
+{
+  "tool": "context-router",
+  "task_id": "django-t1",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/sql/query.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/query.py"
+  ],
+  "est_tokens": 123,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "django/db/models/sql/query.py"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "tool": "context-router",
+  "task_id": "zod-t1",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/schemas.ts",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/tests/record-constructor.test.ts",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/refine.test.ts",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/custom.test.ts"
+  ],
+  "est_tokens": 289,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "packages/zod/src/v4/core/schemas.ts"
+  ]
+}

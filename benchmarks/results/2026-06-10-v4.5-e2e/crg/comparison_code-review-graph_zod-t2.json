@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "zod-t2",
+  "sha": "2f8414bc90cebc76be87c3640617e300a5d9b060",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "packages/zod/src/v4/classic/schemas.ts",
+    "packages/zod/src/v4/classic/tests/transform.test.ts"
+  ],
+  "est_tokens": 737,
+  "runtime_ms": 423,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "packages/zod/src/v4/classic/schemas.ts"
+  ]
+}

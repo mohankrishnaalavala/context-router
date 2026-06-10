@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "actix-t3",
+  "sha": "41e4863748ac0c8e446d96528fa1c31b2b20aae1",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "awc/src/client/h1proto.rs",
+    "awc/tests/test_empty_stream.rs"
+  ],
+  "est_tokens": 1498,
+  "runtime_ms": 408,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "awc/src/client/h1proto.rs"
+  ]
+}

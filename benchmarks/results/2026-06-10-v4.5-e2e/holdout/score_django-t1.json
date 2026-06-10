@@ -1,0 +1,20 @@
+{
+  "repo": "django",
+  "task_id": "django-t1",
+  "anchor": "parent-sha-with-diff",
+  "mode": "debug",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "django/db/models/sql/query.py"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/sql/query.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/query.py"
+  ],
+  "n_items": 2,
+  "est_tokens_total": 123,
+  "precision": 0.5,
+  "recall": 1.0,
+  "f1": 0.6666666666666666,
+  "rank1_hit": 1
+}

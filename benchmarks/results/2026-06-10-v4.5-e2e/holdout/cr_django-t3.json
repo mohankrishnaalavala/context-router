@@ -1,0 +1,241 @@
+{
+  "id": "432304d7-9381-4d09-a5c0-128287f6b8c1",
+  "mode": "review",
+  "query": "optimize Field.deconstruct slow path on model field serialization",
+  "selected_items": [
+    {
+      "id": "3d1ebf41-d2ca-4e54-8677-60ff00762396",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/__init__.py",
+      "title": "clone (__init__.py)",
+      "excerpt": "def clone(self):\n\n        Uses deconstruct() to clone a new copy of this Field.\n        Will not preserve any class attachments/attribute names.",
+      "reason": "Modified `clone` lines 693-699",
+      "confidence": 0.9270399893894553,
+      "est_tokens": 75,
+      "freshness": "2026-06-10T13:43:34.414245Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 150,
+      "symbol_body": "    def clone(self):\n        \"\"\"\n        Uses deconstruct() to clone a new copy of this Field.\n        Will not preserve any class attachments/attribute names.\n        \"\"\"\n        name, path, args, kwargs = self.deconstruct()\n        return self.__class__(*args, **kwargs)",
+      "symbol_lines": [
+        693,
+        699
+      ]
+    },
+    {
+      "id": "0d195988-2a6e-49ca-95e8-8c7e2d3000d0",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/forms/fields.py",
+      "title": "FilePathField (fields.py)",
+      "excerpt": "class FilePathField(ChoiceField):",
+      "reason": "Depends on or is imported by `FilePathField` lines 1183-1234",
+      "confidence": 0.7392617679061159,
+      "est_tokens": 53,
+      "freshness": "2026-06-10T13:43:34.525105Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 90,
+      "symbol_body": null,
+      "symbol_lines": [
+        1183,
+        1234
+      ]
+    },
+    {
+      "id": "34b5105c-a9b8-469f-bae7-bbfd6cb22c0f",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/related.py",
+      "title": "get_path_info (related.py)",
+      "excerpt": "def get_path_info(self, filtered_relation=None):\nGet path from this field to the related model.",
+      "reason": "Depends on or is imported by `get_path_info` lines 887-901",
+      "confidence": 0.7272971434521589,
+      "est_tokens": 67,
+      "freshness": "2026-06-10T13:43:34.456739Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 89,
+      "symbol_body": null,
+      "symbol_lines": [
+        1977,
+        1978
+      ]
+    },
+    {
+      "id": "d0f7536f-25e7-4852-b837-eeeb221e6340",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/contrib/gis/gdal/field.py",
+      "title": "OFTInteger (field.py)",
+      "excerpt": "class OFTInteger(Field):",
+      "reason": "Depends on or is imported by `OFTInteger` lines 135-150",
+      "confidence": 0.7161384830756236,
+      "est_tokens": 53,
+      "freshness": "2026-06-10T13:43:34.008609Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 33,
+      "symbol_body": null,
+      "symbol_lines": [
+        135,
+        150
+      ]
+    },
+    {
+      "id": "954fea1c-5a64-403f-9c59-fd4948ce2933",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/composite.py",
+      "title": "deconstruct (composite.py)",
+      "excerpt": "def deconstruct(self):",
+      "reason": "Depends on or is imported by `deconstruct` lines 78-81",
+      "confidence": 0.6844866212743952,
+      "est_tokens": 51,
+      "freshness": "2026-06-10T13:43:34.441733Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 22,
+      "symbol_body": null,
+      "symbol_lines": [
+        78,
+        81
+      ]
+    }
+  ],
+  "total_est_tokens": 299,
+  "baseline_est_tokens": 638404,
+  "reduction_pct": 99.9,
+  "created_at": "2026-06-10T13:44:03.364656Z",
+  "has_more": false,
+  "total_items": 5,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "a6b600b6-6e74-4078-b583-52faec650c4d",
+      "3d1ebf41-d2ca-4e54-8677-60ff00762396"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.93 is high and clearly leads the pack (gap to top2: 0.19); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "3d1ebf41-d2ca-4e54-8677-60ff00762396",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/__init__.py",
+      "title": "clone (__init__.py)",
+      "excerpt": "def clone(self):\n\n        Uses deconstruct() to clone a new copy of this Field.\n        Will not preserve any class attachments/attribute names.",
+      "reason": "Modified `clone` lines 693-699",
+      "confidence": 0.9270399893894553,
+      "est_tokens": 75,
+      "freshness": "2026-06-10T13:43:34.414245Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 150,
+      "symbol_body": "    def clone(self):\n        \"\"\"\n        Uses deconstruct() to clone a new copy of this Field.\n        Will not preserve any class attachments/attribute names.\n        \"\"\"\n        name, path, args, kwargs = self.deconstruct()\n        return self.__class__(*args, **kwargs)",
+      "symbol_lines": [
+        693,
+        699
+      ]
+    },
+    {
+      "id": "0d195988-2a6e-49ca-95e8-8c7e2d3000d0",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/forms/fields.py",
+      "title": "FilePathField (fields.py)",
+      "excerpt": "class FilePathField(ChoiceField):",
+      "reason": "Depends on or is imported by `FilePathField` lines 1183-1234",
+      "confidence": 0.7392617679061159,
+      "est_tokens": 53,
+      "freshness": "2026-06-10T13:43:34.525105Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 90,
+      "symbol_body": null,
+      "symbol_lines": [
+        1183,
+        1234
+      ]
+    },
+    {
+      "id": "34b5105c-a9b8-469f-bae7-bbfd6cb22c0f",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/related.py",
+      "title": "get_path_info (related.py)",
+      "excerpt": "def get_path_info(self, filtered_relation=None):\nGet path from this field to the related model.",
+      "reason": "Depends on or is imported by `get_path_info` lines 887-901",
+      "confidence": 0.7272971434521589,
+      "est_tokens": 67,
+      "freshness": "2026-06-10T13:43:34.456739Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 89,
+      "symbol_body": null,
+      "symbol_lines": [
+        1977,
+        1978
+      ]
+    },
+    {
+      "id": "d0f7536f-25e7-4852-b837-eeeb221e6340",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/contrib/gis/gdal/field.py",
+      "title": "OFTInteger (field.py)",
+      "excerpt": "class OFTInteger(Field):",
+      "reason": "Depends on or is imported by `OFTInteger` lines 135-150",
+      "confidence": 0.7161384830756236,
+      "est_tokens": 53,
+      "freshness": "2026-06-10T13:43:34.008609Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 33,
+      "symbol_body": null,
+      "symbol_lines": [
+        135,
+        150
+      ]
+    },
+    {
+      "id": "954fea1c-5a64-403f-9c59-fd4948ce2933",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/composite.py",
+      "title": "deconstruct (composite.py)",
+      "excerpt": "def deconstruct(self):",
+      "reason": "Depends on or is imported by `deconstruct` lines 78-81",
+      "confidence": 0.6844866212743952,
+      "est_tokens": 51,
+      "freshness": "2026-06-10T13:43:34.441733Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 22,
+      "symbol_body": null,
+      "symbol_lines": [
+        78,
+        81
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 299,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

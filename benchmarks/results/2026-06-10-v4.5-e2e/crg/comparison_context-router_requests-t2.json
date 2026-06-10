@@ -1,0 +1,21 @@
+{
+  "tool": "context-router",
+  "task_id": "requests-t2",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/structures.py"
+  ],
+  "est_tokens": 323,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "src/requests/utils.py"
+  ]
+}

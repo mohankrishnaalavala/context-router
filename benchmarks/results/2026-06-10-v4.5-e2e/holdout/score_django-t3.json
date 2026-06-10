@@ -1,0 +1,23 @@
+{
+  "repo": "django",
+  "task_id": "django-t3",
+  "anchor": "parent-sha-with-diff",
+  "mode": "implement",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "django/db/models/fields/__init__.py"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/__init__.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/forms/fields.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/related.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/contrib/gis/gdal/field.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/composite.py"
+  ],
+  "n_items": 5,
+  "est_tokens_total": 299,
+  "precision": 0.2,
+  "recall": 1.0,
+  "f1": 0.33333333333333337,
+  "rank1_hit": 1
+}

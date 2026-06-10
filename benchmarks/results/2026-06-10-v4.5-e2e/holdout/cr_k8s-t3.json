@@ -1,0 +1,73 @@
+{
+  "id": "d65ef254-d164-406d-a6ac-7271e1cd42bf",
+  "mode": "review",
+  "query": "windows kube-proxy stale remote endpoints after terminating pods",
+  "selected_items": [
+    {
+      "id": "8d7dc1eb-399d-43cc-b497-7a8569f06ff6",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go",
+      "title": "isAllEndpointsTerminating (proxier.go)",
+      "excerpt": "func (proxier *Proxier) isAllEndpointsTerminating(...)",
+      "reason": "Modified `isAllEndpointsTerminating` lines 1131-1152",
+      "confidence": 0.95,
+      "est_tokens": 65,
+      "freshness": "2026-06-10T13:57:47.750279Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 87,
+      "symbol_body": "func (proxier *Proxier) isAllEndpointsTerminating(svcName proxy.ServicePortName, isLocalTrafficDSR bool) bool {\n\tfor _, epInfo := range proxier.endpointsMap[svcName] {\n\t\tep, ok := epInfo.(*endpointInfo)\n\t\tif !ok {\n\t\t\tcontinue\n\t\t}\n\t\tif isLocalTrafficDSR && !ep.IsLocal() {\n\t\t\t// KEP-1669: Ignore remote endpoints when the ExternalTrafficPolicy is Local (DSR Mode)\n\t\t\tcontinue\n\t\t}\n\t\t// If Readiness Probe fails and pod is not under delete, then\n\t\t// the state of the endpoint will be - Ready:False, Serving:False, Terminating:False\n\t\tif !ep.IsReady() && !ep.IsTerminating() {\n\t\t\t// Ready:false, Terminating:False, ignore\n\t\t\tcontinue\n\t\t}\n\t\tif !ep.IsTerminating() {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}",
+      "symbol_lines": [
+        1131,
+        1152
+      ]
+    }
+  ],
+  "total_est_tokens": 65,
+  "baseline_est_tokens": 632377,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:59:29.060333Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "487a180d-6179-481e-8f82-6148f6340835",
+      "892ffeb8-c3e0-488f-a573-53d668107e65"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.95); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "8d7dc1eb-399d-43cc-b497-7a8569f06ff6",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go",
+      "title": "isAllEndpointsTerminating (proxier.go)",
+      "excerpt": "func (proxier *Proxier) isAllEndpointsTerminating(...)",
+      "reason": "Modified `isAllEndpointsTerminating` lines 1131-1152",
+      "confidence": 0.95,
+      "est_tokens": 65,
+      "freshness": "2026-06-10T13:57:47.750279Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 87,
+      "symbol_body": "func (proxier *Proxier) isAllEndpointsTerminating(svcName proxy.ServicePortName, isLocalTrafficDSR bool) bool {\n\tfor _, epInfo := range proxier.endpointsMap[svcName] {\n\t\tep, ok := epInfo.(*endpointInfo)\n\t\tif !ok {\n\t\t\tcontinue\n\t\t}\n\t\tif isLocalTrafficDSR && !ep.IsLocal() {\n\t\t\t// KEP-1669: Ignore remote endpoints when the ExternalTrafficPolicy is Local (DSR Mode)\n\t\t\tcontinue\n\t\t}\n\t\t// If Readiness Probe fails and pod is not under delete, then\n\t\t// the state of the endpoint will be - Ready:False, Serving:False, Terminating:False\n\t\tif !ep.IsReady() && !ep.IsTerminating() {\n\t\t\t// Ready:false, Terminating:False, ignore\n\t\t\tcontinue\n\t\t}\n\t\tif !ep.IsTerminating() {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}",
+      "symbol_lines": [
+        1131,
+        1152
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 65,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

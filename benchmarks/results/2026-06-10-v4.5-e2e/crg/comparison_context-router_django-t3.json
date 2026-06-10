@@ -1,0 +1,21 @@
+{
+  "tool": "context-router",
+  "task_id": "django-t3",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/__init__.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/forms/fields.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/related.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/contrib/gis/gdal/field.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/composite.py"
+  ],
+  "est_tokens": 299,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "django/db/models/fields/__init__.py"
+  ]
+}

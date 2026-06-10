@@ -1,0 +1,158 @@
+{
+  "id": "831eaea2-a17e-4ac0-ad73-d37b2f56fda6",
+  "mode": "review",
+  "query": "pod restart loops when DRA scheduler updates resource claims",
+  "selected_items": [
+    {
+      "id": "e30c6e57-ce12-4648-945f-3fb58f5c3cd8",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager.go",
+      "title": "isPodStatusByKubeletEqual (status_manager.go)",
+      "excerpt": "func isPodStatusByKubeletEqual(...)",
+      "reason": "Modified `isPodStatusByKubeletEqual` lines 209-237",
+      "confidence": 0.7925643127533016,
+      "est_tokens": 63,
+      "freshness": "2026-06-10T13:44:34.292212Z",
+      "tags": [],
+      "risk": "medium",
+      "flow": null,
+      "duplicates_hidden": 44,
+      "symbol_body": "func isPodStatusByKubeletEqual(oldStatus, status *v1.PodStatus) bool {\n\toldCopy := oldStatus.DeepCopy()\n\n\tnewConditions := make(map[v1.PodConditionType]*v1.PodCondition, len(status.Conditions))\n\toldConditions := make(map[v1.PodConditionType]*v1.PodCondition, len(oldStatus.Conditions))\n\tfor _, c := range status.Conditions {\n\t\tif kubetypes.PodConditionByKubelet(c.Type) || kubetypes.PodConditionSharedByKubelet(c.Type) {\n\t\t\tnewConditions[c.Type] = &c\n\t\t}\n\t}\n\tfor _, c := range oldStatus.Conditions {\n\t\tif kubetypes.PodConditionByKubelet(c.Type) || kubetypes.PodConditionSharedByKubelet(c.Type) {\n\t\t\toldConditions[c.Type] = &c\n\t\t}\n\t}\n\n\tif len(newConditions) != len(oldConditions) {\n\t\treturn false\n\t}\n\tfor _, newCondition := range newConditions {\n\t\toldCondition := oldConditions[newCondition.Type]\n\t\tif oldCondition == nil || oldCondition.Status != newCondition.Status || oldCondition.Message != newCondition.Message || oldCondition.Reason != newCondition.Reason {\n\t\t\treturn false\n\t\t}\n\t}\n\n\toldCopy.Conditions = status.Conditions\n\treturn apiequality.Semantic.DeepEqual(oldCopy, status)\n}",
+      "symbol_lines": [
+        209,
+        237
+      ]
+    },
+    {
+      "id": "1224d91c-0966-4dc0-be99-7eb784013742",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager_test.go",
+      "title": "verifyUpdates (status_manager_test.go)",
+      "excerpt": "func verifyUpdates(...)",
+      "reason": "Modified `verifyUpdates` lines 131-139",
+      "confidence": 0.58122273317239,
+      "est_tokens": 52,
+      "freshness": "2026-06-10T13:44:34.296985Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 52,
+      "symbol_body": null,
+      "symbol_lines": [
+        131,
+        139
+      ]
+    },
+    {
+      "id": "a21ecb10-889d-4b27-ac43-2ebe91629000",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/apis/core/validation/validation.go",
+      "title": "validatePodResourceClaims (validation.go)",
+      "excerpt": "func validatePodResourceClaims(...)",
+      "reason": "Referenced in codebase `validatePodResourceClaims` lines 3201-3208",
+      "confidence": 0.52,
+      "est_tokens": 54,
+      "freshness": "2026-06-10T13:44:34.239539Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 353,
+      "symbol_body": null,
+      "symbol_lines": [
+        3201,
+        3208
+      ]
+    }
+  ],
+  "total_est_tokens": 169,
+  "baseline_est_tokens": 629396,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:46:38.954314Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "e30c6e57-ce12-4648-945f-3fb58f5c3cd8",
+      "410629a6-f217-4338-88d6-aa46e8bc4786",
+      "2118d1f4-d33c-4797-a4c3-aa48e6163602"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.79 is high and clearly leads the pack (gap to top2: 0.21); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "e30c6e57-ce12-4648-945f-3fb58f5c3cd8",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager.go",
+      "title": "isPodStatusByKubeletEqual (status_manager.go)",
+      "excerpt": "func isPodStatusByKubeletEqual(...)",
+      "reason": "Modified `isPodStatusByKubeletEqual` lines 209-237",
+      "confidence": 0.7925643127533016,
+      "est_tokens": 63,
+      "freshness": "2026-06-10T13:44:34.292212Z",
+      "tags": [],
+      "risk": "medium",
+      "flow": null,
+      "duplicates_hidden": 44,
+      "symbol_body": "func isPodStatusByKubeletEqual(oldStatus, status *v1.PodStatus) bool {\n\toldCopy := oldStatus.DeepCopy()\n\n\tnewConditions := make(map[v1.PodConditionType]*v1.PodCondition, len(status.Conditions))\n\toldConditions := make(map[v1.PodConditionType]*v1.PodCondition, len(oldStatus.Conditions))\n\tfor _, c := range status.Conditions {\n\t\tif kubetypes.PodConditionByKubelet(c.Type) || kubetypes.PodConditionSharedByKubelet(c.Type) {\n\t\t\tnewConditions[c.Type] = &c\n\t\t}\n\t}\n\tfor _, c := range oldStatus.Conditions {\n\t\tif kubetypes.PodConditionByKubelet(c.Type) || kubetypes.PodConditionSharedByKubelet(c.Type) {\n\t\t\toldConditions[c.Type] = &c\n\t\t}\n\t}\n\n\tif len(newConditions) != len(oldConditions) {\n\t\treturn false\n\t}\n\tfor _, newCondition := range newConditions {\n\t\toldCondition := oldConditions[newCondition.Type]\n\t\tif oldCondition == nil || oldCondition.Status != newCondition.Status || oldCondition.Message != newCondition.Message || oldCondition.Reason != newCondition.Reason {\n\t\t\treturn false\n\t\t}\n\t}\n\n\toldCopy.Conditions = status.Conditions\n\treturn apiequality.Semantic.DeepEqual(oldCopy, status)\n}",
+      "symbol_lines": [
+        209,
+        237
+      ]
+    },
+    {
+      "id": "1224d91c-0966-4dc0-be99-7eb784013742",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager_test.go",
+      "title": "verifyUpdates (status_manager_test.go)",
+      "excerpt": "func verifyUpdates(...)",
+      "reason": "Modified `verifyUpdates` lines 131-139",
+      "confidence": 0.58122273317239,
+      "est_tokens": 52,
+      "freshness": "2026-06-10T13:44:34.296985Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 52,
+      "symbol_body": null,
+      "symbol_lines": [
+        131,
+        139
+      ]
+    },
+    {
+      "id": "a21ecb10-889d-4b27-ac43-2ebe91629000",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/apis/core/validation/validation.go",
+      "title": "validatePodResourceClaims (validation.go)",
+      "excerpt": "func validatePodResourceClaims(...)",
+      "reason": "Referenced in codebase `validatePodResourceClaims` lines 3201-3208",
+      "confidence": 0.52,
+      "est_tokens": 54,
+      "freshness": "2026-06-10T13:44:34.239539Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 353,
+      "symbol_body": null,
+      "symbol_lines": [
+        3201,
+        3208
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 169,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

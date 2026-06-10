@@ -1,0 +1,18 @@
+{
+  "tool": "context-router",
+  "task_id": "gin-t3",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping_test.go"
+  ],
+  "est_tokens": 105,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "binding/form_mapping.go"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "django-t1",
+  "sha": "a284a49153f005f2a7af087025e5112ba06cbd5f",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "django/db/models/sql/query.py",
+    "tests/aggregation_regress/tests.py"
+  ],
+  "est_tokens": 1433,
+  "runtime_ms": 15465,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "django/db/models/sql/query.py"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "tool": "context-router",
+  "task_id": "gson-t3",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+  ],
+  "est_tokens": 69,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+  ]
+}

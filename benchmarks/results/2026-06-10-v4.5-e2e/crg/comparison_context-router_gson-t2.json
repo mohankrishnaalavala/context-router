@@ -1,0 +1,21 @@
+{
+  "tool": "context-router",
+  "task_id": "gson-t2",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/LinkedTreeMap.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapTest.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/ConstructorConstructor.java"
+  ],
+  "est_tokens": 357,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java"
+  ]
+}
