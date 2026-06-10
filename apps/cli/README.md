@@ -465,16 +465,26 @@ capabilities:
   # Enable LLM-powered summarization (requires API key — future feature)
   llm_summarization: false
 
-# fnmatch patterns to exclude from indexing
+# fnmatch patterns to exclude from indexing (defaults shown — 20 patterns total, see contracts/config.py)
 ignore_patterns:
-  - ".git"
+  - ".venv*"
+  - "node_modules"
+  - "vendor"
+  - "dist"
+  - "build"
+  - "target"
+  - "site-packages"
   - "__pycache__"
   - "*.pyc"
   - "*.egg-info"
-  - ".venv"
-  - "node_modules"
-  - "dist"
-  - "build"
+  - ".git"
+  - ".tox"
+  - ".nox"
+  - ".mypy_cache"
+  - ".ruff_cache"
+  - ".pytest_cache"
+  - "*.min.js"
+  - "*.min.css"
 ```
 
 ---

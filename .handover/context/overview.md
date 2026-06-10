@@ -1,5 +1,5 @@
 # Project Overview
-<!-- Last updated: 2026-04-24 · v4.2.0 current, v4.3 planned -->
+<!-- Last updated: 2026-06-10 · v4.4.5 shipped · v4.5.0 in development -->
 
 context-router is a local-first CLI tool and MCP server that selects the minimum useful context for AI coding agents working on real engineering tasks. Instead of letting agents blindly open files, keyword-grep, or re-read the entire codebase, context-router routes each task through a ranked combination of code structure, runtime evidence, and durable project memory to produce a compact, explainable context pack.
 
@@ -9,7 +9,9 @@ The product is intentionally local-first and requires no API key for core featur
 
 The vision is to become the routing layer that sits between a coding agent and a repository: not a replacement for the agent's reasoning, but the piece that decides what evidence the agent should reason about. The architecture is fully modular and loosely coupled so that new languages, runtime sources, ranking strategies, and agent adapters can be added without rewriting the core.
 
-## Current release: v4.2.0 (2026-04-24)
+## Current release: v4.4.5 (2026-05-30)
+
+v4.5.0 "Trustworthy Context" is in development on `develop`. See [`docs/design/v4.5-trustworthy-context.md`](../../docs/design/v4.5-trustworthy-context.md).
 
 ### Shipped features by phase
 
@@ -34,8 +36,15 @@ The vision is to become the routing layer that sits between a coding agent and a
 - `budget: {total_tokens, memory_tokens, memory_ratio}` in all `--json` pack outputs
 - `memory_hits_summary: {committed, staged}` alongside `memory_hits` in JSON output
 
-### Upcoming: v4.3 — Staleness & Federation
-See [.handover/work/tasks.md](../work/tasks.md) for planned scope.
+**v4.3 / v4.4 — Symbol Packs, Language Expansion, Honesty**
+- `symbol_body` field in `ContextItem` — top-ranked symbol's source text in every pack
+- Six new language analyzers (Go, Rust, Ruby, PHP, SQL, YAML improvements)
+- FTS5-anchored implement-mode candidates (handles >10K-symbol repos)
+- Three holdout benchmark suites; workload-matched comparison vs `code-review-graph` (~88% fewer tokens)
+- v4.4.5 packaging hotfix: clean-machine install restored
+
+### In development: v4.5.0 — Trustworthy Context
+See [`docs/design/v4.5-trustworthy-context.md`](../../docs/design/v4.5-trustworthy-context.md) and [`.handover/work/tasks.md`](../work/tasks.md) for current scope.
 
 ## Architecture at a glance
 
