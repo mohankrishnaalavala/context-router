@@ -149,11 +149,9 @@ def check_index_pollution(project_root: Path | None = None) -> list[CheckResult]
     """
     from core.orchestrator import _find_project_root
 
-    root = project_root if project_root is not None else _find_project_root(Path.cwd())
-    db_path = root / ".context-router" / "context-router.db"
     name = "index-pollution"
 
-    if not db_path.exists():
+    def _no_index_result(db_path_str: str) -> list[CheckResult]:
         return [
             CheckResult(
                 name=name,
@@ -162,12 +160,27 @@ def check_index_pollution(project_root: Path | None = None) -> list[CheckResult]
                     "no index database found — run 'context-router init' "
                     "then 'context-router index' to build one"
                 ),
-                extras={"db_path": str(db_path), "total_symbols": 0},
+                extras={"db_path": db_path_str, "total_symbols": 0},
             )
         ]
 
-    conn = sqlite3.connect(db_path)
+    if project_root is not None:
+        root = project_root
+    else:
+        try:
+            root = _find_project_root(Path.cwd())
+        except FileNotFoundError:
+            # Fresh environment with no .context-router/ anywhere up the
+            # tree — doctor exists precisely to validate such installs.
+            return _no_index_result("<no .context-router/ found>")
+
+    db_path = root / ".context-router" / "context-router.db"
+    if not db_path.exists():
+        return _no_index_result(str(db_path))
+
+    conn = None
     try:
+        conn = sqlite3.connect(db_path)
         total = conn.execute("SELECT count(*) FROM symbols").fetchone()[0]
         if total == 0:
             return [
@@ -184,17 +197,18 @@ def check_index_pollution(project_root: Path | None = None) -> list[CheckResult]
             tuple(f"%{v}%" for v in VENDORED_LIKE),
         ).fetchone()[0]
     except sqlite3.Error as exc:
-        # A DB doctor can't read is itself a health failure — name it.
+        # A DB doctor can't open or read is itself a health failure — name it.
         return [
             CheckResult(
                 name=name,
                 status="WARN",
-                detail=f"could not read symbols table at {db_path}: {exc}",
+                detail=f"could not read index database at {db_path}: {exc}",
                 extras={"db_path": str(db_path)},
             )
         ]
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
 
     pct = round(100 * vendored / total)
     extras: dict[str, object] = {
@@ -248,13 +262,7 @@ def doctor(
     ] = False,
     project_root: Annotated[
         str,
-        typer.Option(
-            "--project-root",
-            help=(
-                "Project root containing .context-router/ "
-                "(default: auto-detect from the current directory)."
-            ),
-        ),
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
     ] = "",
 ) -> None:
     """Run health checks and exit non-zero if any check WARN/FAILs.

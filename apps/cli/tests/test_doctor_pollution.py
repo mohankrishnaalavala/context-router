@@ -110,3 +110,24 @@ class TestDoctorIndexPollution:
         # Doctor prints every check explicitly — a clean index reports PASS.
         assert "PASS index-pollution" in output, output
         assert "index hygiene ok" in output.lower(), output
+
+    def test_doctor_fresh_env_without_project_passes(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """No .context-router/ anywhere up the tree → PASS + init hint, not exit 2.
+
+        Doctor's whole purpose is validating fresh installs; auto-detect
+        failure must not surface as an internal error.
+        """
+        monkeypatch.chdir(tmp_path)  # tmp dir has no .context-router ancestor
+
+        with patch(
+            "cli.commands.doctor.check_analyzer_entry_points",
+            return_value=_PASSING_ANALYZER_CHECK,
+        ):
+            result = runner.invoke(doctor_app, [])
+
+        output = _combined_output(result)
+        assert result.exit_code == 0, output
+        assert "PASS index-pollution" in output, output
+        assert "context-router init" in output, output
