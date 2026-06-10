@@ -1,0 +1,73 @@
+{
+  "id": "e9dd7d1c-f2f8-4804-bc98-9d60e74a8b3f",
+  "mode": "review",
+  "query": "ParameterizedType typeArguments array not cloned when owner changed",
+  "selected_items": [
+    {
+      "id": "855e43c0-4d9d-4146-937c-c8253dcca216",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/$Gson$Types.java",
+      "title": "ParameterizedTypeImpl ($Gson$Types.java)",
+      "excerpt": "public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments)",
+      "reason": "Modified `ParameterizedTypeImpl` lines 520-536",
+      "confidence": 0.95,
+      "est_tokens": 69,
+      "freshness": "2026-06-10T13:41:21.507395Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 39,
+      "symbol_body": "    public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments) {\n      // TODO: Should this enforce that rawType is a Class? See JDK implementation of\n      // the ParameterizedType interface and https://bugs.openjdk.org/browse/JDK-8250659\n      requireNonNull(rawType);\n      if (ownerType == null && requiresOwnerType(rawType)) {\n        throw new IllegalArgumentException(\"Must specify owner type for \" + rawType);\n      }\n\n      this.ownerType = ownerType == null ? null : canonicalize(ownerType);\n      this.rawType = canonicalize(rawType);\n      this.typeArguments = typeArguments.clone();\n      for (int t = 0, length = this.typeArguments.length; t < length; t++) {\n        requireNonNull(this.typeArguments[t]);\n        checkNotPrimitive(this.typeArguments[t]);\n        this.typeArguments[t] = canonicalize(this.typeArguments[t]);\n      }\n    }",
+      "symbol_lines": [
+        520,
+        536
+      ]
+    }
+  ],
+  "total_est_tokens": 69,
+  "baseline_est_tokens": 280887,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:41:24.425081Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "8470a8b7-95d0-49d5-8301-eb63f6e0c750",
+      "57162940-8d83-4194-aca8-b49104b83bc3"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.95); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "855e43c0-4d9d-4146-937c-c8253dcca216",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/$Gson$Types.java",
+      "title": "ParameterizedTypeImpl ($Gson$Types.java)",
+      "excerpt": "public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments)",
+      "reason": "Modified `ParameterizedTypeImpl` lines 520-536",
+      "confidence": 0.95,
+      "est_tokens": 69,
+      "freshness": "2026-06-10T13:41:21.507395Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 39,
+      "symbol_body": "    public ParameterizedTypeImpl(Type ownerType, Type rawType, Type... typeArguments) {\n      // TODO: Should this enforce that rawType is a Class? See JDK implementation of\n      // the ParameterizedType interface and https://bugs.openjdk.org/browse/JDK-8250659\n      requireNonNull(rawType);\n      if (ownerType == null && requiresOwnerType(rawType)) {\n        throw new IllegalArgumentException(\"Must specify owner type for \" + rawType);\n      }\n\n      this.ownerType = ownerType == null ? null : canonicalize(ownerType);\n      this.rawType = canonicalize(rawType);\n      this.typeArguments = typeArguments.clone();\n      for (int t = 0, length = this.typeArguments.length; t < length; t++) {\n        requireNonNull(this.typeArguments[t]);\n        checkNotPrimitive(this.typeArguments[t]);\n        this.typeArguments[t] = canonicalize(this.typeArguments[t]);\n      }\n    }",
+      "symbol_lines": [
+        520,
+        536
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 69,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

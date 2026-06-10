@@ -1,0 +1,116 @@
+{
+  "id": "fdb5804a-82c8-4e5f-8be9-eafb19ed52ad",
+  "mode": "review",
+  "query": "actix-files panics when serving a file with mtime before the unix epoch",
+  "selected_items": [
+    {
+      "id": "c3f02ab6-fee1-4c10-b574-ae8ac1a26bee",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/named.rs",
+      "title": "file (named.rs)",
+      "excerpt": "fn file(...)",
+      "reason": "Modified `file` lines 255-257",
+      "confidence": 0.8002641270102249,
+      "est_tokens": 48,
+      "freshness": "2026-06-10T13:40:35.471073Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 32,
+      "symbol_body": "    pub fn file(&self) -> &File {\n        &self.file\n    }",
+      "symbol_lines": [
+        255,
+        257
+      ]
+    },
+    {
+      "id": "140116d4-0719-4fc3-bee2-b5e3ab1af858",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/files.rs",
+      "title": "index_file (files.rs)",
+      "excerpt": "fn index_file(...)",
+      "reason": "Referenced in codebase `index_file` lines 223-226",
+      "confidence": 0.676,
+      "est_tokens": 50,
+      "freshness": "2026-06-10T13:40:35.466282Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 24,
+      "symbol_body": null,
+      "symbol_lines": [
+        223,
+        226
+      ]
+    }
+  ],
+  "total_est_tokens": 98,
+  "baseline_est_tokens": 211047,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:40:38.194616Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "73d3394c-4e46-42db-b643-5ddd841bf8fe",
+      "6833a737-1724-49b1-bb01-fd8833d4e277",
+      "f6c3bb19-6e68-4c56-bdc7-f8dc6802dbf1"
+    ],
+    "external_dropped": 0,
+    "depth": "standard",
+    "depth_reason": "top1 0.80, top2 0.68, top3 0.00 \u2014 moderate confidence, consider the top few items",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "c3f02ab6-fee1-4c10-b574-ae8ac1a26bee",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/named.rs",
+      "title": "file (named.rs)",
+      "excerpt": "fn file(...)",
+      "reason": "Modified `file` lines 255-257",
+      "confidence": 0.8002641270102249,
+      "est_tokens": 48,
+      "freshness": "2026-06-10T13:40:35.471073Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 32,
+      "symbol_body": "    pub fn file(&self) -> &File {\n        &self.file\n    }",
+      "symbol_lines": [
+        255,
+        257
+      ]
+    },
+    {
+      "id": "140116d4-0719-4fc3-bee2-b5e3ab1af858",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/files.rs",
+      "title": "index_file (files.rs)",
+      "excerpt": "fn index_file(...)",
+      "reason": "Referenced in codebase `index_file` lines 223-226",
+      "confidence": 0.676,
+      "est_tokens": 50,
+      "freshness": "2026-06-10T13:40:35.466282Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 24,
+      "symbol_body": null,
+      "symbol_lines": [
+        223,
+        226
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 98,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

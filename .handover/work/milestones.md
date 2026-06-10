@@ -1,7 +1,7 @@
 # Milestones
-<!-- Last updated: 2026-04-24 · v4.2.0 shipped, v4.3 planned -->
+<!-- Last updated: 2026-06-10 · v4.4.5 shipped · v4.5.0 in progress -->
 
-Phases 0–8 are complete (public release baseline). Phases 9–11 (v4.0–v4.2) are released. Phase 12 (v4.3) is next.
+Phases 0–8 are complete (public release baseline). Phases 9–13 (v4.0–v4.4) are released. v4.5.0 is in progress on `develop`.
 
 ---
 
@@ -86,16 +86,40 @@ Phases 0–8 are complete (public release baseline). Phases 9–11 (v4.0–v4.2)
 
 ---
 
-## Milestone 12 — v4.3: Staleness & Federation 🔲 (planned)
-**Goal:** Stale observations are surfaced and prunable; memory search extends across workspace repos.
+## Milestone 12 — v4.3: Staleness & Federation ⏭ (superseded)
+**Goal:** Stale observations surfaced and prunable; cross-repo memory federation.
 
-**Planned scope:**
-- Stale observation detection: flag observations whose `files_touched` references files no longer present in HEAD
-- `memory stale` command: list stale observations with severity (missing-file vs old-commit)
-- `memory prune --stale` command: remove or archive stale observations
-- Stale index warning: detect when graph index is behind the last commit; warn to stderr at pack time
-- Cross-repo memory federation: `search_memory` queries all workspace repos when `--workspace` is active
-- Federated pack injection: `pack --use-memory --workspace` injects hits from sibling repo observations
-- `memory_hits_summary` extended with `{committed, staged, federated}` breakdown
+**Status:** This milestone was planned but not shipped. Its scope was reviewed in 2026-05 and split: the most critical work (index hygiene, graph trustworthiness) was reprioritised into v4.5.0. Staleness detection and cross-repo federation remain in the backlog.
 
-**Exit gate:** `scripts/smoke-v4.3.sh` passes all gates; stale detection and cross-repo memory verified end-to-end.
+---
+
+## Milestone 13 — v4.4: Symbol Packs + Language Expansion ✅ (2026-04-29)
+**Goal:** Agents receive actual code bodies (not file pointers); 10-language coverage; honest benchmark comparison.
+
+**Delivered:**
+- `symbol_body` field in `ContextItem` — top-ranked symbol's source text injected into every pack
+- Six new language analyzers (Go, Rust, Ruby, PHP, SQL, and YAML improvements)
+- FTS5-anchored implement-mode candidates (BM25-ranked `symbols_fts` virtual table; handles >10K-symbol repos)
+- Three holdout suites (A: gin/actix-web, B: gson/requests/zod, C: kubernetes) with reproducible anchors
+- Workload-matched competitor comparison vs `code-review-graph` at identical SHAs (~88% fewer tokens)
+- v4.4.4 honesty release: FTS5 anchor, correct benchmark framing, implement-mode regression fix
+- v4.4.5 packaging hotfix: drop unpublished `context-router-evaluation` dep; issue-reporting docs
+
+**Exit gates:**
+- v4.4.4: `scripts/smoke-v4.4.sh` passes; benchmark summary committed at `benchmarks/results/`
+- v4.4.5: clean-machine `uv tool install context-router-cli` succeeds
+
+---
+
+## Milestone 14 — v4.5: Trustworthy Context 🔄 (in progress)
+**Goal:** Index never ingests vendored code; `context-router graph` renders own-code symbols; token claims are end-to-end; retrieval F1 re-baselined.
+
+**Planned deliverables:**
+- `ignore_patterns` expanded to 20 defaults (`.venv*`, `node_modules`, `vendor`, `dist`, `build`, `target`, `site-packages`, `*.min.js`, `*.min.css`, and more); gitignore-aware scanner pruning
+- `SymbolRepository.get_all` ordered and capped with a loud stderr warning; ignored-path filter on graph nodes
+- `graph --json -o <file>` writes the file (was a silent no-op)
+- End-to-end benchmark: pack tokens + downstream read tokens + model-judge sufficiency across n ≥ 12 tasks
+- Retrieval re-baseline after hygiene: F1 0.613 (up from 0.394 pre-hygiene; see `docs/eval/2026-06-10-v4.5-phase-c-rebaseline.md`)
+- Docs currency sweep across `.handover/`, `docs/`, README
+
+**Exit gate:** `scripts/smoke-v4.5.sh` passes all gates; BENCHMARKS.md updated with end-to-end figures.

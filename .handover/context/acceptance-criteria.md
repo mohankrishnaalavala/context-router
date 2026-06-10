@@ -1,5 +1,5 @@
 # Acceptance Criteria — Definition of Done
-<!-- Last updated: 2026-04-24 · Phases 0–11 complete · v4.3 criteria added -->
+<!-- Last updated: 2026-06-10 · v4.4.x shipped · v4.5.0 in progress -->
 
 ---
 

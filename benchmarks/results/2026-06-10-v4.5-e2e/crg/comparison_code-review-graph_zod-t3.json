@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "zod-t3",
+  "sha": "3a818de145dc2fa9b5753bc8bf97b0b8484cfbaf",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "packages/zod/src/v4/classic/tests/number.test.ts",
+    "packages/zod/src/v4/core/util.ts"
+  ],
+  "est_tokens": 763,
+  "runtime_ms": 470,
+  "rank1_hit": 0,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "packages/zod/src/v4/core/util.ts"
+  ]
+}

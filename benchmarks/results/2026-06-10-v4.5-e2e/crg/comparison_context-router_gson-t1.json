@@ -1,0 +1,21 @@
+{
+  "tool": "context-router",
+  "task_id": "gson-t1",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/stream/JsonReader.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/stream/JsonReaderTest.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/JsonStreamParser.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/proto/src/main/java/com/google/gson/protobuf/LegacyProtoTypeAdapterFactory.java"
+  ],
+  "est_tokens": 489,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "gson/src/main/java/com/google/gson/stream/JsonReader.java"
+  ]
+}

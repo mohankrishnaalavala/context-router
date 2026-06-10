@@ -1,25 +1,47 @@
 # context-router Roadmap
-<!-- Last updated: 2026-04-24 · v4.2.0 current -->
+<!-- Last updated: 2026-06-10 · v4.4.5 shipped · v4.5.0 in progress -->
 
 ---
 
-## Current: v4.2.0 ✅ (2026-04-24)
+## Current: v4.4.5 ✅ (2026-05-30)
 
-Memory quality release. Shipped: memory sub-budget cap (15%), adaptive top-k confidence pruning, observation provenance (`committed`/`staged`/`branch_local`), `budget.memory_ratio` in all JSON outputs. See [CHANGELOG](../CHANGELOG.md) for full details.
+Packaging hotfix. Drops the unpublished `context-router-evaluation` dep that broke clean-machine installs; adds issue-reporting docs (GitHub templates, SECURITY.md, CONTRIBUTING.md). See [CHANGELOG](../CHANGELOG.md) for full details.
 
 ---
 
-## Next: v4.3 — Staleness & Federation
+## Shipped: v4.4.4 ✅ (2026-04-29)
 
-**Design spec:** [`docs/design/v4.3-staleness-federation.md`](design/v4.3-staleness-federation.md)
+Honesty release. FTS5-anchored implement-mode candidates for >10K-symbol repos; workload-matched comparison vs `code-review-graph` on identical SHAs and diffs (~88% fewer tokens, down from a cross-workload 91.5% claim in v4.4.3). Three holdout suites (gin/actix-web, gson/requests/zod, kubernetes).
 
-**Two outcomes:**
+---
 
-1. **Staleness detection** — `memory stale` lists observations whose `files_touched` paths are gone from HEAD. Stale hits in pack output carry `"stale": true` with a stderr warning. `memory prune --stale` removes them.
+## Shipped: v4.3 ✅ — merged into v4.4 scope
 
-2. **Memory federation** — `search_memory --workspace` and `pack --use-memory --workspace` query memory across all repos in `workspace.yaml`. Only committed observations federate. Each hit carries `source_repo`.
+v4.3 staleness-detection and memory-federation scope was reviewed in 2026-05 and superseded: the more urgent correctness failures (index pollution, graph trustworthiness) were prioritised into v4.5.0. Staleness and federation remain in the backlog.
 
-**Ship gate:** `scripts/smoke-v4.3.sh` — all gates pass.
+---
+
+## Shipped: v4.2.0 ✅ (2026-04-24)
+
+Memory quality release. Shipped: memory sub-budget cap (15%), adaptive top-k confidence pruning, observation provenance (`committed`/`staged`/`branch_local`), `budget.memory_ratio` in all JSON outputs.
+
+---
+
+## In progress: v4.5.0 — Trustworthy Context
+
+**Design spec:** [`docs/design/v4.5-trustworthy-context.md`](design/v4.5-trustworthy-context.md)
+
+**Four workstreams:**
+
+1. **Index hygiene** ✅ shipped to `develop` — `ignore_patterns` expanded to 20 defaults (`.venv*`, `node_modules`, `vendor`, `dist`, `build`, `target`, `site-packages`, `*.min.js`, `*.min.css`, and more). Index-time prune, `doctor` check for stale paths.
+
+2. **Graph trustworthiness** — `context-router graph` renders own-code symbols. `graph --json -o <file>` writes the file (was a silent no-op). Polluted index causes a named warning.
+
+3. **End-to-end token benchmark** — Pack tokens + downstream read tokens + model-judge sufficiency across n ≥ 12 holdout tasks. Headline stat updated to end-to-end.
+
+4. **Retrieval re-baseline** — Post-hygiene F1 0.613 (up from 0.394 pre-hygiene). See [`docs/eval/2026-06-10-v4.5-phase-c-rebaseline.md`](eval/2026-06-10-v4.5-phase-c-rebaseline.md).
+
+**Ship gate:** `scripts/smoke-v4.5.sh` — all gates pass.
 
 ---
 
@@ -55,6 +77,12 @@ This is the "Semantic staleness" scope from the v4 design doc §6.2. It is delib
 
 | Version | Theme | Date |
 |---------|-------|------|
+| v4.4.5 | Packaging hotfix: clean-machine install, issue-reporting docs | 2026-05-30 |
+| v4.4.4 | Honesty release: FTS5 anchor, workload-matched benchmark (~88% fewer tokens) | 2026-04-29 |
+| v4.4.3 | Holdout regressions fixed; AGENT_GUIDE.md; BENCHMARKS.md | 2026-04-28 |
+| v4.4.2 | symbol_body field; 6 new language analyzers; precision-first budgets | 2026-04-27 |
+| v4.4.1 | Measurement baseline; downstream token counting | 2026-04-26 |
+| v4.4.0 | Eval harness baseline; Phase A shipped | 2026-04-25 |
 | v4.2.0 | Memory quality (sub-budget, adaptive top-k, provenance) | 2026-04-24 |
 | v4.1.0 | Memory-as-code (git-tracked .md observations, --use-memory) | 2026-04-24 |
 | v4.0.0 | Evaluation harness, workspace.db, Recall@20 CI gate | 2026-04-23 |
@@ -63,3 +91,13 @@ This is the "Semantic staleness" scope from the v4 design doc §6.2. It is delib
 | v3.2.x | FastAPI/CRG evaluation, adapter polish | 2026-04-18 |
 | v3.1.x | Copilot custom agents, multi-repo workspace | 2026-04-17 |
 | v3.0.0 | Public release, benchmark harness, all 4 languages | 2026-04-18 |
+
+---
+
+## v4.6 candidates (not scheduled)
+
+These features are excluded from v4.5 scope but are the leading candidates for v4.6:
+
+- **Hook / passive interception mode** — watch editor events and auto-update the index without a manual `context-router index` call
+- **`pack-content-by-default`** — return symbol bodies in packs without requiring `--with-symbols`; controlled by a config flag
+- **Workspace semantic opt-in flag** — `--semantic-workspace` enables cross-repo embedding similarity for memory federation (BM25 remains the default)

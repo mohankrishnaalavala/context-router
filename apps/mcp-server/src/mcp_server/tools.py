@@ -314,13 +314,39 @@ def get_context_pack(
     # — keeps the existing ``build_pack`` call shape identical for the vast
     # majority of callers (including test mocks that don't accept the new
     # parameter) and only widens the signature for the review/pre-fix path.
-    build_pack_kwargs: dict = {
-        "page": page,
-        "page_size": page_size,
-        "use_embeddings": use_embeddings,
-        "progress": False,
-        "progress_cb": progress_cb,
-    }
+    #
+    # WorkspaceOrchestrator.build_pack only accepts (mode, query, error_file).
+    # Passing page/page_size/use_embeddings/progress/progress_cb would raise
+    # a TypeError.  Build a separate, narrower kwargs dict for that path and
+    # warn (no-silent-no-op rule) when the caller supplied non-default values
+    # that will be ignored.
+    _is_workspace_orch = type(_orch).__name__ == "WorkspaceOrchestrator"
+    if _is_workspace_orch:
+        import sys as _sys
+        _ignored: list[str] = []
+        if page != 0:
+            _ignored.append(f"page={page}")
+        if page_size != 0:
+            _ignored.append(f"page_size={page_size}")
+        if use_embeddings:
+            _ignored.append("use_embeddings=True")
+        if _ignored:
+            print(
+                "warning: use_workspace=True — the following kwargs are not "
+                f"supported by WorkspaceOrchestrator and will be ignored: "
+                f"{', '.join(_ignored)}",
+                file=_sys.stderr,
+                flush=True,
+            )
+        build_pack_kwargs: dict = {}
+    else:
+        build_pack_kwargs = {
+            "page": page,
+            "page_size": page_size,
+            "use_embeddings": use_embeddings,
+            "progress": False,
+            "progress_cb": progress_cb,
+        }
     if pre_fix:
         build_pack_kwargs["pre_fix"] = pre_fix
     # Only forward keep_low_signal when the caller opted in, so pre-existing

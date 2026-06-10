@@ -1,0 +1,199 @@
+{
+  "id": "0f3c8392-bb34-4a26-929e-48148c3f5d30",
+  "mode": "review",
+  "query": "kubectl set-context writes current-context into wrong kubeconfig file",
+  "selected_items": [
+    {
+      "id": "801b1c66-a4b0-44d9-b26f-b5494054df34",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+      "title": "currentMigrationRules (loader.go)",
+      "excerpt": "func currentMigrationRules(...)",
+      "reason": "Modified `currentMigrationRules` lines 55-65",
+      "confidence": 0.8279369144208562,
+      "est_tokens": 52,
+      "freshness": "2026-06-10T13:51:29.599847Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 44,
+      "symbol_body": "func currentMigrationRules() map[string]string {\n\tvar oldRecommendedHomeFileName string\n\tif goruntime.GOOS == \"windows\" {\n\t\toldRecommendedHomeFileName = RecommendedFileName\n\t} else {\n\t\toldRecommendedHomeFileName = \".kubeconfig\"\n\t}\n\treturn map[string]string{\n\t\tRecommendedHomeFile: filepath.Join(os.Getenv(\"HOME\"), RecommendedHomeDir, oldRecommendedHomeFileName),\n\t}\n}",
+      "symbol_lines": [
+        55,
+        65
+      ]
+    },
+    {
+      "id": "ad4fc144-64e7-430a-8dbf-69b64184a43c",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go",
+      "title": "getCurrentAuthInfo (kubeconfig.go)",
+      "excerpt": "func getCurrentAuthInfo(...)",
+      "reason": "Referenced in codebase `getCurrentAuthInfo` lines 213-225",
+      "confidence": 0.676,
+      "est_tokens": 53,
+      "freshness": "2026-06-10T13:51:29.105047Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 10,
+      "symbol_body": null,
+      "symbol_lines": [
+        213,
+        225
+      ]
+    },
+    {
+      "id": "d1a95931-515d-473a-a6e0-e1f3166fd5b1",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/cmd/phases/init/kubeconfig.go",
+      "title": "runKubeConfigFile (kubeconfig.go)",
+      "excerpt": "func runKubeConfigFile(...)",
+      "reason": "Referenced in codebase `runKubeConfigFile` lines 134-171",
+      "confidence": 0.5405222784339541,
+      "est_tokens": 57,
+      "freshness": "2026-06-10T13:51:28.962803Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 4,
+      "symbol_body": null,
+      "symbol_lines": [
+        134,
+        171
+      ]
+    },
+    {
+      "id": "dbf88a50-a4b0-4fd0-a6c5-da726ef0c9e5",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/phases/kubeconfig/kubeconfig.go",
+      "title": "CreateKubeConfigFile (kubeconfig.go)",
+      "excerpt": "func CreateKubeConfigFile(...)",
+      "reason": "Referenced in codebase `CreateKubeConfigFile` lines 110-113",
+      "confidence": 0.5405222784339541,
+      "est_tokens": 57,
+      "freshness": "2026-06-10T13:51:29.038710Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 20,
+      "symbol_body": null,
+      "symbol_lines": [
+        110,
+        113
+      ]
+    }
+  ],
+  "total_est_tokens": 219,
+  "baseline_est_tokens": 629550,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:53:21.472049Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "acd490f6-9d7c-4b31-8e29-9ed4a50974cf",
+      "a19186dc-fcf4-44de-aaaa-ee24c6a68c1c"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.83 is high and clearly leads the pack (gap to top2: 0.15); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "801b1c66-a4b0-44d9-b26f-b5494054df34",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+      "title": "currentMigrationRules (loader.go)",
+      "excerpt": "func currentMigrationRules(...)",
+      "reason": "Modified `currentMigrationRules` lines 55-65",
+      "confidence": 0.8279369144208562,
+      "est_tokens": 52,
+      "freshness": "2026-06-10T13:51:29.599847Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 44,
+      "symbol_body": "func currentMigrationRules() map[string]string {\n\tvar oldRecommendedHomeFileName string\n\tif goruntime.GOOS == \"windows\" {\n\t\toldRecommendedHomeFileName = RecommendedFileName\n\t} else {\n\t\toldRecommendedHomeFileName = \".kubeconfig\"\n\t}\n\treturn map[string]string{\n\t\tRecommendedHomeFile: filepath.Join(os.Getenv(\"HOME\"), RecommendedHomeDir, oldRecommendedHomeFileName),\n\t}\n}",
+      "symbol_lines": [
+        55,
+        65
+      ]
+    },
+    {
+      "id": "ad4fc144-64e7-430a-8dbf-69b64184a43c",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go",
+      "title": "getCurrentAuthInfo (kubeconfig.go)",
+      "excerpt": "func getCurrentAuthInfo(...)",
+      "reason": "Referenced in codebase `getCurrentAuthInfo` lines 213-225",
+      "confidence": 0.676,
+      "est_tokens": 53,
+      "freshness": "2026-06-10T13:51:29.105047Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 10,
+      "symbol_body": null,
+      "symbol_lines": [
+        213,
+        225
+      ]
+    },
+    {
+      "id": "d1a95931-515d-473a-a6e0-e1f3166fd5b1",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/cmd/phases/init/kubeconfig.go",
+      "title": "runKubeConfigFile (kubeconfig.go)",
+      "excerpt": "func runKubeConfigFile(...)",
+      "reason": "Referenced in codebase `runKubeConfigFile` lines 134-171",
+      "confidence": 0.5405222784339541,
+      "est_tokens": 57,
+      "freshness": "2026-06-10T13:51:28.962803Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 4,
+      "symbol_body": null,
+      "symbol_lines": [
+        134,
+        171
+      ]
+    },
+    {
+      "id": "dbf88a50-a4b0-4fd0-a6c5-da726ef0c9e5",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/phases/kubeconfig/kubeconfig.go",
+      "title": "CreateKubeConfigFile (kubeconfig.go)",
+      "excerpt": "func CreateKubeConfigFile(...)",
+      "reason": "Referenced in codebase `CreateKubeConfigFile` lines 110-113",
+      "confidence": 0.5405222784339541,
+      "est_tokens": 57,
+      "freshness": "2026-06-10T13:51:29.038710Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 20,
+      "symbol_body": null,
+      "symbol_lines": [
+        110,
+        113
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 219,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

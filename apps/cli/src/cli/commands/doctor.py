@@ -13,9 +13,11 @@ Per CLAUDE.md's silent-failure policy every check prints an explicit
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from dataclasses import dataclass, field
 from importlib.metadata import entry_points
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -29,6 +31,14 @@ doctor_app = typer.Typer(
 )
 
 ANALYZER_GROUP = "context_router.language_analyzers"
+
+# Substrings that mark a symbol's file_path as vendored/third-party. An
+# index dominated by these is the pre-v4.5 "indexed the dependency tree"
+# failure mode — retrieval quality collapses while everything looks green.
+VENDORED_LIKE = (".venv", "/venv/", "node_modules", "site-packages", "/vendor/")
+
+# WARN when at least this share of indexed symbols is vendored.
+POLLUTION_THRESHOLD_PCT = 20
 
 
 @dataclass
@@ -121,6 +131,115 @@ def check_analyzer_entry_points() -> list[CheckResult]:
     return results
 
 
+def check_index_pollution(project_root: Path | None = None) -> list[CheckResult]:
+    """Probe the symbol index for vendored-path pollution.
+
+    WARNs when >= POLLUTION_THRESHOLD_PCT of indexed symbols live under
+    vendored-looking paths (VENDORED_LIKE) — the signature of an index
+    built before v4.5's ignore rules pruned dependency trees. A missing
+    or empty index PASSes with an explicit "nothing indexed yet" detail
+    (doctor must not punish a fresh checkout), never as a bare "OK".
+
+    Args:
+        project_root: Project root containing ``.context-router/``.
+            Defaults to auto-detection from the current directory.
+
+    Returns:
+        A single-element list with the index-pollution CheckResult.
+    """
+    from core.orchestrator import _find_project_root
+
+    name = "index-pollution"
+
+    def _no_index_result(db_path_str: str) -> list[CheckResult]:
+        return [
+            CheckResult(
+                name=name,
+                status="PASS",
+                detail=(
+                    "no index database found — run 'context-router init' "
+                    "then 'context-router index' to build one"
+                ),
+                extras={"db_path": db_path_str, "total_symbols": 0},
+            )
+        ]
+
+    if project_root is not None:
+        root = project_root
+    else:
+        try:
+            root = _find_project_root(Path.cwd())
+        except FileNotFoundError:
+            # Fresh environment with no .context-router/ anywhere up the
+            # tree — doctor exists precisely to validate such installs.
+            return _no_index_result("<no .context-router/ found>")
+
+    db_path = root / ".context-router" / "context-router.db"
+    if not db_path.exists():
+        return _no_index_result(str(db_path))
+
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        total = conn.execute("SELECT count(*) FROM symbols").fetchone()[0]
+        if total == 0:
+            return [
+                CheckResult(
+                    name=name,
+                    status="PASS",
+                    detail="index empty — run 'context-router index'",
+                    extras={"db_path": str(db_path), "total_symbols": 0},
+                )
+            ]
+        clauses = " OR ".join("file_path LIKE ?" for _ in VENDORED_LIKE)
+        vendored = conn.execute(
+            f"SELECT count(*) FROM symbols WHERE {clauses}",  # noqa: S608
+            tuple(f"%{v}%" for v in VENDORED_LIKE),
+        ).fetchone()[0]
+    except sqlite3.Error as exc:
+        # A DB doctor can't open or read is itself a health failure — name it.
+        return [
+            CheckResult(
+                name=name,
+                status="WARN",
+                detail=f"could not read index database at {db_path}: {exc}",
+                extras={"db_path": str(db_path)},
+            )
+        ]
+    finally:
+        if conn is not None:
+            conn.close()
+
+    pct = round(100 * vendored / total)
+    extras: dict[str, object] = {
+        "db_path": str(db_path),
+        "total_symbols": total,
+        "vendored_symbols": vendored,
+        "vendored_pct": pct,
+    }
+    if pct >= POLLUTION_THRESHOLD_PCT:
+        return [
+            CheckResult(
+                name=name,
+                status="WARN",
+                detail=(
+                    f"index pollution: {pct}% of {total} symbols are under "
+                    "vendored paths — re-run 'context-router index' "
+                    "(v4.5+ prunes them)"
+                ),
+                extras=extras,
+            )
+        ]
+    return [
+        CheckResult(
+            name=name,
+            status="PASS",
+            detail=f"index hygiene OK ({pct}% vendored)",
+            extras=extras,
+        )
+    ]
+
+
 def _print_text(results: list[CheckResult]) -> None:
     """Render results as one PASS/WARN line per check.
 
@@ -141,6 +260,10 @@ def doctor(
         bool,
         typer.Option("--json", help="Emit results as JSON."),
     ] = False,
+    project_root: Annotated[
+        str,
+        typer.Option("--project-root", help="Project root. Auto-detected when omitted."),
+    ] = "",
 ) -> None:
     """Run health checks and exit non-zero if any check WARN/FAILs.
 
@@ -152,6 +275,7 @@ def doctor(
     try:
         results: list[CheckResult] = []
         results.extend(check_analyzer_entry_points())
+        results.extend(check_index_pollution(Path(project_root) if project_root else None))
 
         if json_output:
             payload = {

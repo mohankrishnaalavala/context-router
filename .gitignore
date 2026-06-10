@@ -227,6 +227,9 @@ graph.html
 internal_docs/ship-check/
 internal_docs/*
 .context-router/
+!.context-router/memory/
+.context-router/memory/*
+!.context-router/memory/observations/
 
 # Local agent-machine state — generated per-clone, never tracked.
 # Tracked exceptions are listed via "!" so they survive (docs-agent.md, ship-check
@@ -254,3 +257,17 @@ tests/fixtures/workspaces/real/*/
 !tests/fixtures/workspaces/real/*/queries.jsonl
 !tests/fixtures/workspaces/real/README.md
 !tests/fixtures/workspaces/real/.gitkeep
+
+# Virtualenv variants (covers .venv-crg and any other suffixed envs).
+.venv*/
+
+# FastAPI evaluation clone (local scratchpad; not part of the benchmark fixtures).
+fastapi/
+
+# Developer tooling state — generated per-clone, never tracked.
+.runwatch.txt
+.claude/scheduled_tasks.lock
+.playwright-mcp/
+
+# Generated benchmark visualisation artifacts.
+graph-repro.png

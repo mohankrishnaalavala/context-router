@@ -1,0 +1,202 @@
+{
+  "id": "5aee2fb4-5fae-4840-b705-5790a3a0f805",
+  "mode": "review",
+  "query": "ASGIRequest.path_info wrong when script name is set",
+  "selected_items": [
+    {
+      "id": "fd52481e-f9ed-4130-9e5d-6c1b61bc47f4",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/asgi.py",
+      "title": "get_script_prefix (asgi.py)",
+      "excerpt": "def get_script_prefix(scope):\n\n    Return the script prefix to use from either the scope or a setting.",
+      "reason": "Modified `get_script_prefix` lines 30-36",
+      "confidence": 0.95,
+      "est_tokens": 69,
+      "freshness": "2026-06-10T13:42:22.452656Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 21,
+      "symbol_body": "def get_script_prefix(scope):\n    \"\"\"\n    Return the script prefix to use from either the scope or a setting.\n    \"\"\"\n    if settings.FORCE_SCRIPT_NAME:\n        return settings.FORCE_SCRIPT_NAME\n    return scope.get(\"root_path\", \"\") or \"\"",
+      "symbol_lines": [
+        30,
+        36
+      ]
+    },
+    {
+      "id": "6da2bb20-9969-4f50-9c66-0580f0ee97d3",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/wsgi.py",
+      "title": "get_path_info (wsgi.py)",
+      "excerpt": "def get_path_info(environ):\nReturn the HTTP request's PATH_INFO as a string.",
+      "reason": "Depends on or is imported by `get_path_info` lines 147-151",
+      "confidence": 0.7646688435136335,
+      "est_tokens": 66,
+      "freshness": "2026-06-10T13:42:22.457444Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 18,
+      "symbol_body": null,
+      "symbol_lines": [
+        147,
+        151
+      ]
+    },
+    {
+      "id": "62e16c4b-e9c6-4bec-966b-1a9f0071269a",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/handlers/tests.py",
+      "title": "test_get_script_name_double_slashes (tests.py)",
+      "excerpt": "def test_get_script_name_double_slashes(self):\n\n        WSGI squashes multiple successive slashes in PATH_INFO, get_script_name\n        should take that into account when forming SCRIPT_NAME (#17133).",
+      "reason": "Modified `test_get_script_name_double_slashes` lines 278-289",
+      "confidence": 0.7442609022312531,
+      "est_tokens": 92,
+      "freshness": "2026-06-10T13:42:22.816440Z",
+      "tags": [],
+      "risk": "low",
+      "flow": null,
+      "duplicates_hidden": 44,
+      "symbol_body": null,
+      "symbol_lines": [
+        278,
+        289
+      ]
+    },
+    {
+      "id": "b8ea8730-7570-406c-a025-0607a37e7071",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/http/request.py",
+      "title": "to_asgi_name (request.py)",
+      "excerpt": "def to_asgi_name(cls, header):",
+      "reason": "Referenced in codebase `to_asgi_name` lines 540-541",
+      "confidence": 0.676,
+      "est_tokens": 57,
+      "freshness": "2026-06-10T13:42:22.791976Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 76,
+      "symbol_body": null,
+      "symbol_lines": [
+        540,
+        541
+      ]
+    }
+  ],
+  "total_est_tokens": 284,
+  "baseline_est_tokens": 640968,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:42:49.898095Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "49e7bfd2-eaac-47f2-84d8-ee41e9e1730e",
+      "97da4ffb-c461-4c0b-87e6-00ce1ea6a566",
+      "7238d112-d5d4-4976-9ffd-b81b711c82fc",
+      "2f8a7521-2012-44b2-b22f-c5c809fb1118",
+      "e62bb0c8-2046-4038-b06d-268c98fad85b"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.19); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "fd52481e-f9ed-4130-9e5d-6c1b61bc47f4",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/asgi.py",
+      "title": "get_script_prefix (asgi.py)",
+      "excerpt": "def get_script_prefix(scope):\n\n    Return the script prefix to use from either the scope or a setting.",
+      "reason": "Modified `get_script_prefix` lines 30-36",
+      "confidence": 0.95,
+      "est_tokens": 69,
+      "freshness": "2026-06-10T13:42:22.452656Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 21,
+      "symbol_body": "def get_script_prefix(scope):\n    \"\"\"\n    Return the script prefix to use from either the scope or a setting.\n    \"\"\"\n    if settings.FORCE_SCRIPT_NAME:\n        return settings.FORCE_SCRIPT_NAME\n    return scope.get(\"root_path\", \"\") or \"\"",
+      "symbol_lines": [
+        30,
+        36
+      ]
+    },
+    {
+      "id": "6da2bb20-9969-4f50-9c66-0580f0ee97d3",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/wsgi.py",
+      "title": "get_path_info (wsgi.py)",
+      "excerpt": "def get_path_info(environ):\nReturn the HTTP request's PATH_INFO as a string.",
+      "reason": "Depends on or is imported by `get_path_info` lines 147-151",
+      "confidence": 0.7646688435136335,
+      "est_tokens": 66,
+      "freshness": "2026-06-10T13:42:22.457444Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 18,
+      "symbol_body": null,
+      "symbol_lines": [
+        147,
+        151
+      ]
+    },
+    {
+      "id": "62e16c4b-e9c6-4bec-966b-1a9f0071269a",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/handlers/tests.py",
+      "title": "test_get_script_name_double_slashes (tests.py)",
+      "excerpt": "def test_get_script_name_double_slashes(self):\n\n        WSGI squashes multiple successive slashes in PATH_INFO, get_script_name\n        should take that into account when forming SCRIPT_NAME (#17133).",
+      "reason": "Modified `test_get_script_name_double_slashes` lines 278-289",
+      "confidence": 0.7442609022312531,
+      "est_tokens": 92,
+      "freshness": "2026-06-10T13:42:22.816440Z",
+      "tags": [],
+      "risk": "low",
+      "flow": null,
+      "duplicates_hidden": 44,
+      "symbol_body": null,
+      "symbol_lines": [
+        278,
+        289
+      ]
+    },
+    {
+      "id": "b8ea8730-7570-406c-a025-0607a37e7071",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/http/request.py",
+      "title": "to_asgi_name (request.py)",
+      "excerpt": "def to_asgi_name(cls, header):",
+      "reason": "Referenced in codebase `to_asgi_name` lines 540-541",
+      "confidence": 0.676,
+      "est_tokens": 57,
+      "freshness": "2026-06-10T13:42:22.791976Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 76,
+      "symbol_body": null,
+      "symbol_lines": [
+        540,
+        541
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 284,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

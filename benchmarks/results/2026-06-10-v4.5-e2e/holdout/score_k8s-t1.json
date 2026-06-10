@@ -1,0 +1,21 @@
+{
+  "repo": "kubernetes",
+  "task_id": "k8s-t1",
+  "anchor": "parent-sha-with-diff",
+  "mode": "review",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "pkg/kubelet/status/status_manager.go"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager_test.go",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/apis/core/validation/validation.go"
+  ],
+  "n_items": 3,
+  "est_tokens_total": 169,
+  "precision": 0.3333333333333333,
+  "recall": 1.0,
+  "f1": 0.5,
+  "rank1_hit": 1
+}

@@ -1,0 +1,245 @@
+{
+  "id": "78514268-1543-49d4-9b0b-ecc6fa688304",
+  "mode": "review",
+  "query": "JsonReader NumberFormatException missing location info on malformed input",
+  "selected_items": [
+    {
+      "id": "bd05cc54-834e-4713-b02e-91728df334ab",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/stream/JsonReader.java",
+      "title": "nextDouble (JsonReader.java)",
+      "excerpt": "public double nextDouble() throws IOException\nReturns the {@link JsonToken#NUMBER double} value of the next token, consuming it. If the next token is a string, this method will attempt to parse it as a double using {@link Double#parseDouble(String)}. @throws IllegalStateException if the next token is neither a number nor a string. @throws NumberFormatException if the next literal value cannot be parsed as a double. @throws MalformedJsonException if the next literal value is NaN or Infinity and this reader is not {@link #setStrictness(Strictness) lenient}.",
+      "reason": "Modified `nextDouble` lines 1029-1061",
+      "confidence": 0.95,
+      "est_tokens": 165,
+      "freshness": "2026-06-10T13:41:02.052262Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 47,
+      "symbol_body": "  public double nextDouble() throws IOException {\n    int p = peeked;\n    if (p == PEEKED_NONE) {\n      p = doPeek();\n    }\n\n    if (p == PEEKED_LONG) {\n      peeked = PEEKED_NONE;\n      pathIndices[stackSize - 1]++;\n      return (double) peekedLong;\n    }\n\n    if (p == PEEKED_NUMBER) {\n      peekedString = new String(buffer, pos, peekedNumberLength);\n      pos += peekedNumberLength;\n    } else if (p == PEEKED_SINGLE_QUOTED || p == PEEKED_DOUBLE_QUOTED) {\n      peekedString = nextQuotedValue(p == PEEKED_SINGLE_QUOTED ? '\\'' : '\"');\n    } else if (p == PEEKED_UNQUOTED) {\n      peekedString = nextUnquotedValue();\n    } else if (p != PEEKED_BUFFERED) {\n      throw unexpectedTokenError(\"a double\");\n    }\n\n    peeked = PEEKED_BUFFERED;\n    double result = Double.parseDouble(peekedString); // don't catch this NumberFormatException.\n    if (strictness != Strictness.LENIENT && (Double.isNaN(result) || Double.isInfinite(result))) {\n      throw syntaxError(\"JSON forbids NaN and infinities: \" + result);\n    }\n    peekedString = null;\n    peeked = PEEKED_NONE;\n    pathIndices[stackSize - 1]++;\n    return result;\n  }",
+      "symbol_lines": [
+        1029,
+        1061
+      ]
+    },
+    {
+      "id": "67e039d6-28fc-4db3-8b1c-826c178fd7e7",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/stream/JsonReaderTest.java",
+      "title": "assertStrictError (JsonReaderTest.java)",
+      "excerpt": "private static void assertStrictError(MalformedJsonException exception, String expectedLocation)",
+      "reason": "Modified `assertStrictError` lines 2140-2148",
+      "confidence": 0.7518250000000001,
+      "est_tokens": 66,
+      "freshness": "2026-06-10T13:41:02.291054Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 158,
+      "symbol_body": null,
+      "symbol_lines": [
+        2140,
+        2148
+      ]
+    },
+    {
+      "id": "bf9d4674-fdf6-432f-ba05-bfdba331a094",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java",
+      "title": "locationString (JsonTreeReader.java)",
+      "excerpt": "private String locationString()",
+      "reason": "Depends on or is imported by `locationString` lines 388-390",
+      "confidence": 0.7353071879393398,
+      "est_tokens": 53,
+      "freshness": "2026-06-10T13:41:02.011978Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 30,
+      "symbol_body": null,
+      "symbol_lines": [
+        388,
+        390
+      ]
+    },
+    {
+      "id": "98e13ac0-2d19-48ef-9f71-eaa888231ca2",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/JsonStreamParser.java",
+      "title": "hasNext (JsonStreamParser.java)",
+      "excerpt": "@Override @Override\n  public boolean hasNext()\nReturns true if a {@link JsonElement} is available on the input for consumption @return true if a {@link JsonElement} is available on the input, false otherwise @throws JsonParseException if the incoming stream is malformed JSON. @since 1.4",
+      "reason": "Depends on or is imported by `hasNext` lines 102-113",
+      "confidence": 0.6584217892315802,
+      "est_tokens": 110,
+      "freshness": "2026-06-10T13:41:01.970423Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 5,
+      "symbol_body": null,
+      "symbol_lines": [
+        102,
+        113
+      ]
+    },
+    {
+      "id": "71085271-f296-4704-9b42-129439f693d9",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/proto/src/main/java/com/google/gson/protobuf/LegacyProtoTypeAdapterFactory.java",
+      "title": "readOneofField (LegacyProtoTypeAdapterFactory.java)",
+      "excerpt": "private boolean readOneofField(\n        String fieldName,\n        Map<String, Integer> oneofNameToCaseNumber,\n        Map<String, String> oneofNameToValue,\n        JsonReader in)\n        throws IOException",
+      "reason": "Depends on or is imported by `readOneofField` lines 287-303",
+      "confidence": 0.573651644285082,
+      "est_tokens": 95,
+      "freshness": "2026-06-10T13:41:02.299982Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 31,
+      "symbol_body": null,
+      "symbol_lines": [
+        287,
+        303
+      ]
+    }
+  ],
+  "total_est_tokens": 489,
+  "baseline_est_tokens": 292994,
+  "reduction_pct": 99.8,
+  "created_at": "2026-06-10T13:41:04.991632Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "bd05cc54-834e-4713-b02e-91728df334ab",
+      "b74db418-ed2f-4eb3-bd09-653549f2b5dc",
+      "9d092fb6-726b-4b40-ac1e-ed0a4f4b736b",
+      "13089a10-c227-4fb4-8919-f12de3d10963",
+      "3849c1a8-e2a6-4687-b822-e3be9592717e",
+      "80829204-8059-4068-800c-0f4e8d400309"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.95 is high and clearly leads the pack (gap to top2: 0.20); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "bd05cc54-834e-4713-b02e-91728df334ab",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/stream/JsonReader.java",
+      "title": "nextDouble (JsonReader.java)",
+      "excerpt": "public double nextDouble() throws IOException\nReturns the {@link JsonToken#NUMBER double} value of the next token, consuming it. If the next token is a string, this method will attempt to parse it as a double using {@link Double#parseDouble(String)}. @throws IllegalStateException if the next token is neither a number nor a string. @throws NumberFormatException if the next literal value cannot be parsed as a double. @throws MalformedJsonException if the next literal value is NaN or Infinity and this reader is not {@link #setStrictness(Strictness) lenient}.",
+      "reason": "Modified `nextDouble` lines 1029-1061",
+      "confidence": 0.95,
+      "est_tokens": 165,
+      "freshness": "2026-06-10T13:41:02.052262Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 47,
+      "symbol_body": "  public double nextDouble() throws IOException {\n    int p = peeked;\n    if (p == PEEKED_NONE) {\n      p = doPeek();\n    }\n\n    if (p == PEEKED_LONG) {\n      peeked = PEEKED_NONE;\n      pathIndices[stackSize - 1]++;\n      return (double) peekedLong;\n    }\n\n    if (p == PEEKED_NUMBER) {\n      peekedString = new String(buffer, pos, peekedNumberLength);\n      pos += peekedNumberLength;\n    } else if (p == PEEKED_SINGLE_QUOTED || p == PEEKED_DOUBLE_QUOTED) {\n      peekedString = nextQuotedValue(p == PEEKED_SINGLE_QUOTED ? '\\'' : '\"');\n    } else if (p == PEEKED_UNQUOTED) {\n      peekedString = nextUnquotedValue();\n    } else if (p != PEEKED_BUFFERED) {\n      throw unexpectedTokenError(\"a double\");\n    }\n\n    peeked = PEEKED_BUFFERED;\n    double result = Double.parseDouble(peekedString); // don't catch this NumberFormatException.\n    if (strictness != Strictness.LENIENT && (Double.isNaN(result) || Double.isInfinite(result))) {\n      throw syntaxError(\"JSON forbids NaN and infinities: \" + result);\n    }\n    peekedString = null;\n    peeked = PEEKED_NONE;\n    pathIndices[stackSize - 1]++;\n    return result;\n  }",
+      "symbol_lines": [
+        1029,
+        1061
+      ]
+    },
+    {
+      "id": "67e039d6-28fc-4db3-8b1c-826c178fd7e7",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/stream/JsonReaderTest.java",
+      "title": "assertStrictError (JsonReaderTest.java)",
+      "excerpt": "private static void assertStrictError(MalformedJsonException exception, String expectedLocation)",
+      "reason": "Modified `assertStrictError` lines 2140-2148",
+      "confidence": 0.7518250000000001,
+      "est_tokens": 66,
+      "freshness": "2026-06-10T13:41:02.291054Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 158,
+      "symbol_body": null,
+      "symbol_lines": [
+        2140,
+        2148
+      ]
+    },
+    {
+      "id": "bf9d4674-fdf6-432f-ba05-bfdba331a094",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java",
+      "title": "locationString (JsonTreeReader.java)",
+      "excerpt": "private String locationString()",
+      "reason": "Depends on or is imported by `locationString` lines 388-390",
+      "confidence": 0.7353071879393398,
+      "est_tokens": 53,
+      "freshness": "2026-06-10T13:41:02.011978Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 30,
+      "symbol_body": null,
+      "symbol_lines": [
+        388,
+        390
+      ]
+    },
+    {
+      "id": "98e13ac0-2d19-48ef-9f71-eaa888231ca2",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/JsonStreamParser.java",
+      "title": "hasNext (JsonStreamParser.java)",
+      "excerpt": "@Override @Override\n  public boolean hasNext()\nReturns true if a {@link JsonElement} is available on the input for consumption @return true if a {@link JsonElement} is available on the input, false otherwise @throws JsonParseException if the incoming stream is malformed JSON. @since 1.4",
+      "reason": "Depends on or is imported by `hasNext` lines 102-113",
+      "confidence": 0.6584217892315802,
+      "est_tokens": 110,
+      "freshness": "2026-06-10T13:41:01.970423Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 5,
+      "symbol_body": null,
+      "symbol_lines": [
+        102,
+        113
+      ]
+    },
+    {
+      "id": "71085271-f296-4704-9b42-129439f693d9",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/proto/src/main/java/com/google/gson/protobuf/LegacyProtoTypeAdapterFactory.java",
+      "title": "readOneofField (LegacyProtoTypeAdapterFactory.java)",
+      "excerpt": "private boolean readOneofField(\n        String fieldName,\n        Map<String, Integer> oneofNameToCaseNumber,\n        Map<String, String> oneofNameToValue,\n        JsonReader in)\n        throws IOException",
+      "reason": "Depends on or is imported by `readOneofField` lines 287-303",
+      "confidence": 0.573651644285082,
+      "est_tokens": 95,
+      "freshness": "2026-06-10T13:41:02.299982Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 31,
+      "symbol_body": null,
+      "symbol_lines": [
+        287,
+        303
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 489,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "django-t2",
+  "sha": "b33c31d992591bc8e8d20ac156809e4ae5b45375",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "django/core/handlers/asgi.py",
+    "tests/handlers/tests.py"
+  ],
+  "est_tokens": 1701,
+  "runtime_ms": 4824,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "django/core/handlers/asgi.py"
+  ]
+}

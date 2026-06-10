@@ -6,6 +6,44 @@ ground-truth file the upstream fix touched, the natural-language query an
 agent might type, and the suggested pack mode. Per-task artifacts live
 under `benchmarks/results/<run-date>-<version>{,-fresh}/`.
 
+## Headline — v4.5 end-to-end methodology (2026-06-10)
+
+**This section supersedes pack-token-only comparisons.** Prior headlines counted
+only the tokens *in the pack*; packs are partly file pointers, so the agent
+still pays to read files afterwards. From v4.5 the headline metric is
+**end-to-end tokens = pack tokens + downstream read tokens**
+(`evaluation.downstream.estimate_downstream_read_tokens`: symbol-body items
+cost only their line span; pointer items cost the whole file).
+
+Workload-matched comparison vs `code-review-graph` 2.3.2 — same 21 tasks,
+7 repos (gin, actix-web, django, gson, requests, zod, kubernetes),
+anchor `parent-sha-with-diff`, indexes built with v4.5 hygiene
+(vendored/gitignored trees excluded and pruned):
+
+| Metric (21 tasks) | context-router | code-review-graph |
+|---|---:|---:|
+| Rank-1 hit | **21 / 21** | 16 / 21 |
+| Pack tokens | 4,498 | 27,470 |
+| Downstream read tokens | 10,827 | 352,790 |
+| **End-to-end tokens** | **15,325** | **380,260** |
+| **End-to-end reduction** | **96.0%** | — |
+
+Per-task downstream cost averages ~515 tokens — symbol-body packs hit the
+v4.4 Phase B target (≤500/task) within noise.
+
+**Model-judge status: PENDING.** `benchmark/judge_packs.py` (judge:
+`claude-fable-5`) asks whether each pack alone suffices to locate and start
+the fix. All 21 calls failed with *"Credit balance is too low"* at run time,
+so `judge_sufficient_rate` is **null — not zero**. Re-run when credits allow:
+`python3 benchmark/judge_packs.py benchmarks/results/2026-06-10-v4.5-e2e/all_scores.json`.
+
+Artifacts: `benchmarks/results/2026-06-10-v4.5-e2e/` (`summary.json`,
+per-task scores, raw packs, CRG comparison).
+
+Caveats: downstream cost assumes the agent reads exactly the pack's items
+(pointer items = full file) — it does not model extra exploratory reads by
+either tool; CRG emits file lists only, so all its items are full-file reads.
+
 ## Headline — v4.4.3 (2026-04-28)
 
 Two independent holdout suites, same code, two different sets of repos.

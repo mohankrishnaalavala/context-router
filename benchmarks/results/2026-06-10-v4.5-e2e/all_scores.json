@@ -1,0 +1,453 @@
+{
+  "per_task": [
+    {
+      "repo": "actix-web",
+      "task_id": "actix-t1",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "actix-files/src/named.rs"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/named.rs",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-files/src/files.rs"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 98,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "actix-web",
+      "task_id": "actix-t2",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "actix-web/src/route.rs"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/route.rs",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-web/src/service.rs"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 102,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "actix-web",
+      "task_id": "actix-t3",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "awc/src/client/h1proto.rs"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/chunked.rs",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/request.rs",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/encoder.rs",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/decoder.rs"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 255,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "django",
+      "task_id": "django-t1",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "django/db/models/sql/query.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/sql/query.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/query.py"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 123,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "django",
+      "task_id": "django-t2",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "django/core/handlers/asgi.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/asgi.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/core/handlers/wsgi.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/tests/handlers/tests.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/http/request.py"
+      ],
+      "n_items": 4,
+      "est_tokens_total": 284,
+      "precision": 0.25,
+      "recall": 1.0,
+      "f1": 0.4,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "django",
+      "task_id": "django-t3",
+      "anchor": "parent-sha-with-diff",
+      "mode": "implement",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "django/db/models/fields/__init__.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/__init__.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/forms/fields.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/related.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/contrib/gis/gdal/field.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/django/django/db/models/fields/composite.py"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 299,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gin",
+      "task_id": "gin-t1",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "tree.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/tree_test.go"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 120,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gin",
+      "task_id": "gin-t2",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "context.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/context_test.go"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 114,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gin",
+      "task_id": "gin-t3",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "binding/form_mapping.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gin/binding/form_mapping_test.go"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 105,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gson",
+      "task_id": "gson-t1",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "gson/src/main/java/com/google/gson/stream/JsonReader.java"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/stream/JsonReader.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/stream/JsonReaderTest.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/JsonStreamParser.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/proto/src/main/java/com/google/gson/protobuf/LegacyProtoTypeAdapterFactory.java"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 489,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gson",
+      "task_id": "gson-t2",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/LinkedTreeMap.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/functional/MapTest.java",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/ConstructorConstructor.java"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 357,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "gson",
+      "task_id": "gson-t3",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/$Gson$Types.java"
+      ],
+      "n_items": 1,
+      "est_tokens_total": 69,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t1",
+      "anchor": "parent-sha-with-diff",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "pkg/kubelet/status/status_manager.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/kubelet/status/status_manager_test.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/apis/core/validation/validation.go"
+      ],
+      "n_items": 3,
+      "est_tokens_total": 169,
+      "precision": 0.3333333333333333,
+      "recall": 1.0,
+      "f1": 0.5,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t2",
+      "anchor": "parent-sha-with-diff",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "staging/src/k8s.io/client-go/tools/clientcmd/loader.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/staging/src/k8s.io/client-go/tools/clientcmd/loader.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/util/kubeconfig/kubeconfig.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/cmd/phases/init/kubeconfig.go",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/cmd/kubeadm/app/phases/kubeconfig/kubeconfig.go"
+      ],
+      "n_items": 4,
+      "est_tokens_total": 219,
+      "precision": 0.25,
+      "recall": 1.0,
+      "f1": 0.4,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "kubernetes",
+      "task_id": "k8s-t3",
+      "anchor": "parent-sha-with-diff",
+      "mode": "review",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "pkg/proxy/winkernel/proxier.go"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/kubernetes/pkg/proxy/winkernel/proxier.go"
+      ],
+      "n_items": 1,
+      "est_tokens_total": 65,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "requests",
+      "task_id": "requests-t1",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "src/requests/utils.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/models.py"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 341,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "requests",
+      "task_id": "requests-t2",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "src/requests/utils.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/structures.py"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 323,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "requests",
+      "task_id": "requests-t3",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "src/requests/exceptions.py"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/exceptions.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/models.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_lowlevel.py",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 365,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "zod",
+      "task_id": "zod-t1",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "packages/zod/src/v4/core/schemas.ts"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/schemas.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/tests/record-constructor.test.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/refine.test.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/custom.test.ts"
+      ],
+      "n_items": 5,
+      "est_tokens_total": 289,
+      "precision": 0.2,
+      "recall": 1.0,
+      "f1": 0.33333333333333337,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "zod",
+      "task_id": "zod-t2",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "packages/zod/src/v4/classic/schemas.ts"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/schemas.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/transform.test.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/preprocess.test.ts"
+      ],
+      "n_items": 4,
+      "est_tokens_total": 212,
+      "precision": 0.25,
+      "recall": 1.0,
+      "f1": 0.4,
+      "rank1_hit": 1
+    },
+    {
+      "repo": "zod",
+      "task_id": "zod-t3",
+      "anchor": "parent-sha-with-diff",
+      "mode": "debug",
+      "effective_mode": "review",
+      "ground_truth_files": [
+        "packages/zod/src/v4/core/util.ts"
+      ],
+      "predicted_top5": [
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/util.ts",
+        "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts"
+      ],
+      "n_items": 2,
+      "est_tokens_total": 100,
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.6666666666666666,
+      "rank1_hit": 1
+    }
+  ]
+}

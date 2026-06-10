@@ -1,0 +1,116 @@
+{
+  "id": "546fda08-f0be-4e06-a551-527645cbb254",
+  "mode": "review",
+  "query": "floatSafeRemainder mishandles multi-digit exponents in scientific notation",
+  "selected_items": [
+    {
+      "id": "78a424c6-eda0-4190-8b8b-7d61eb235775",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/util.ts",
+      "title": "floatSafeRemainder (util.ts)",
+      "excerpt": "",
+      "reason": "Modified `floatSafeRemainder` lines 247-262",
+      "confidence": 0.95,
+      "est_tokens": 50,
+      "freshness": "2026-06-10T13:42:05.944707Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 132,
+      "symbol_body": "export function floatSafeRemainder(val: number, step: number): number {\n  const valDecCount = (val.toString().split(\".\")[1] || \"\").length;\n  const stepString = step.toString();\n  let stepDecCount = (stepString.split(\".\")[1] || \"\").length;\n  if (stepDecCount === 0 && /\\d?e-\\d?/.test(stepString)) {\n    const match = stepString.match(/\\d?e-(\\d?)/);\n    if (match?.[1]) {\n      stepDecCount = Number.parseInt(match[1]);\n    }\n  }\n\n  const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;\n  const valInt = Number.parseInt(val.toFixed(decCount).replace(\".\", \"\"));\n  const stepInt = Number.parseInt(step.toFixed(decCount).replace(\".\", \"\"));\n  return (valInt % stepInt) / 10 ** decCount;\n}",
+      "symbol_lines": [
+        247,
+        262
+      ]
+    },
+    {
+      "id": "7c4cbcfb-07c0-452e-93b3-b2fb96f74906",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+      "title": "floatSafeRemainder (types.ts)",
+      "excerpt": "",
+      "reason": "Depends on or is imported by `floatSafeRemainder` lines 1354-1361",
+      "confidence": 0.8200000000000001,
+      "est_tokens": 50,
+      "freshness": "2026-06-10T13:42:05.697748Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 316,
+      "symbol_body": null,
+      "symbol_lines": [
+        1354,
+        1361
+      ]
+    }
+  ],
+  "total_est_tokens": 100,
+  "baseline_est_tokens": 244647,
+  "reduction_pct": 100.0,
+  "created_at": "2026-06-10T13:42:09.110057Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "2a3d8e5d-5415-4603-ac57-83887b1ebe59",
+      "b0818e2a-a65f-49ca-8dbb-f8761a7f83c4",
+      "78a424c6-eda0-4190-8b8b-7d61eb235775"
+    ],
+    "external_dropped": 0,
+    "depth": "standard",
+    "depth_reason": "top1 0.95, top2 0.82, top3 0.00 \u2014 moderate confidence, consider the top few items",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "78a424c6-eda0-4190-8b8b-7d61eb235775",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/util.ts",
+      "title": "floatSafeRemainder (util.ts)",
+      "excerpt": "",
+      "reason": "Modified `floatSafeRemainder` lines 247-262",
+      "confidence": 0.95,
+      "est_tokens": 50,
+      "freshness": "2026-06-10T13:42:05.944707Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 132,
+      "symbol_body": "export function floatSafeRemainder(val: number, step: number): number {\n  const valDecCount = (val.toString().split(\".\")[1] || \"\").length;\n  const stepString = step.toString();\n  let stepDecCount = (stepString.split(\".\")[1] || \"\").length;\n  if (stepDecCount === 0 && /\\d?e-\\d?/.test(stepString)) {\n    const match = stepString.match(/\\d?e-(\\d?)/);\n    if (match?.[1]) {\n      stepDecCount = Number.parseInt(match[1]);\n    }\n  }\n\n  const decCount = valDecCount > stepDecCount ? valDecCount : stepDecCount;\n  const valInt = Number.parseInt(val.toFixed(decCount).replace(\".\", \"\"));\n  const stepInt = Number.parseInt(step.toFixed(decCount).replace(\".\", \"\"));\n  return (valInt % stepInt) / 10 ** decCount;\n}",
+      "symbol_lines": [
+        247,
+        262
+      ]
+    },
+    {
+      "id": "7c4cbcfb-07c0-452e-93b3-b2fb96f74906",
+      "source_type": "blast_radius",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+      "title": "floatSafeRemainder (types.ts)",
+      "excerpt": "",
+      "reason": "Depends on or is imported by `floatSafeRemainder` lines 1354-1361",
+      "confidence": 0.8200000000000001,
+      "est_tokens": 50,
+      "freshness": "2026-06-10T13:42:05.697748Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 316,
+      "symbol_body": null,
+      "symbol_lines": [
+        1354,
+        1361
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 100,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

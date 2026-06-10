@@ -1,0 +1,23 @@
+{
+  "repo": "gson",
+  "task_id": "gson-t1",
+  "anchor": "parent-sha-with-diff",
+  "mode": "debug",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "gson/src/main/java/com/google/gson/stream/JsonReader.java"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/stream/JsonReader.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/test/java/com/google/gson/stream/JsonReaderTest.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/internal/bind/JsonTreeReader.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/gson/src/main/java/com/google/gson/JsonStreamParser.java",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/gson/proto/src/main/java/com/google/gson/protobuf/LegacyProtoTypeAdapterFactory.java"
+  ],
+  "n_items": 5,
+  "est_tokens_total": 489,
+  "precision": 0.2,
+  "recall": 1.0,
+  "f1": 0.33333333333333337,
+  "rank1_hit": 1
+}

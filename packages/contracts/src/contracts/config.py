@@ -75,7 +75,13 @@ class ContextRouterConfig(BaseModel):
     capabilities: CapabilitiesConfig = Field(default_factory=CapabilitiesConfig)
     language_analyzers: list[str] = Field(default_factory=list)
     ignore_patterns: list[str] = Field(
-        default_factory=lambda: [".git", "__pycache__", "*.pyc", "*.egg-info", ".venv"]
+        default_factory=lambda: [
+            ".git", "__pycache__", "*.pyc", "*.egg-info",
+            ".venv*", "venv", "env", ".tox", ".nox",
+            "node_modules", "vendor", "dist", "build", "target",
+            ".mypy_cache", ".ruff_cache", ".pytest_cache", "site-packages",
+            "*.min.js", "*.min.css",
+        ]
     )
     # Per-mode confidence overrides. Outer keys: review | implement | debug | handover.
     # Each inner dict maps source_type -> float in [0, 1]. Missing keys fall back to
@@ -181,5 +187,20 @@ ignore_patterns:
   - "__pycache__"
   - "*.pyc"
   - "*.egg-info"
-  - ".venv"
+  - ".venv*"
+  - "venv"
+  - "env"
+  - ".tox"
+  - ".nox"
+  - "node_modules"
+  - "vendor"
+  - "dist"
+  - "build"
+  - "target"
+  - ".mypy_cache"
+  - ".ruff_cache"
+  - ".pytest_cache"
+  - "site-packages"
+  - "*.min.js"
+  - "*.min.css"
 """

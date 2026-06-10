@@ -1,0 +1,21 @@
+{
+  "tool": "context-router",
+  "task_id": "actix-t3",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/chunked.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/request.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/encoder.rs",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/decoder.rs"
+  ],
+  "est_tokens": 255,
+  "runtime_ms": null,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "awc/src/client/h1proto.rs"
+  ]
+}

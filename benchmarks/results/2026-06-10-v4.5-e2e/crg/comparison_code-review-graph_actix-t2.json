@@ -1,0 +1,18 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "actix-t2",
+  "sha": "d3bf929040129241d9141dfce9826c40acec549f",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "actix-web/src/route.rs"
+  ],
+  "est_tokens": 2781,
+  "runtime_ms": 419,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "actix-web/src/route.rs"
+  ]
+}

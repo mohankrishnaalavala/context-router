@@ -1,0 +1,242 @@
+{
+  "id": "17cb69b1-f3c0-4d5e-9490-16a89a5f21ad",
+  "mode": "review",
+  "query": "awc h1 client sends Transfer-Encoding chunked even when request body is empty",
+  "selected_items": [
+    {
+      "id": "ed3a2c3e-06a5-4490-bb2f-dab7f5dba9bb",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+      "title": "send_body (h1proto.rs)",
+      "excerpt": "fn send_body(...)",
+      "reason": "Modified `send_body` lines 159-203",
+      "confidence": 0.8512504094774683,
+      "est_tokens": 52,
+      "freshness": "2026-06-10T13:40:52.551319Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 4,
+      "symbol_body": "pub(crate) async fn send_body<Io, B>(\n    body: B,\n    mut framed: Pin<&mut Framed<Io, h1::ClientCodec>>,\n) -> Result<(), SendRequestError>\nwhere\n    Io: ConnectionIo,\n    B: MessageBody,\n    B::Error: Into<BoxError>,\n{\n    actix_rt::pin!(body);\n\n    let mut eof = false;\n    while !eof {\n        while !eof && !framed.as_ref().is_write_buf_full() {\n            match poll_fn(|cx| body.as_mut().poll_next(cx)).await {\n                Some(Ok(chunk)) => {\n                    framed.as_mut().write(h1::Message::Chunk(Some(chunk)))?;\n                }\n                Some(Err(err)) => return Err(SendRequestError::Body(err.into())),\n                None => {\n                    eof = true;\n                    framed.as_mut().write(h1::Message::Chunk(None))?;\n                }\n            }\n        }\n\n        if !framed.as_ref().is_write_buf_empty() {\n            poll_fn(|cx| match framed.as_mut().flush(cx) {\n                Poll::Ready(Ok(_)) => Poll::Ready(Ok(())),\n                Poll::Ready(Err(err)) => Poll::Ready(Err(err)),\n                Poll::Pending => {\n                    if !framed.as_ref().is_write_buf_full() {\n                        Poll::Ready(Ok(()))\n                    } else {\n                        Poll::Pending\n                    }\n                }\n            })\n            .await?;\n        }\n    }\n\n    framed.get_mut().flush().await?;\n    Ok(())\n}",
+      "symbol_lines": [
+        159,
+        203
+      ]
+    },
+    {
+      "id": "ffd90c19-2e4c-44cb-bab2-6339b29e3511",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/chunked.rs",
+      "title": "read_body (chunked.rs)",
+      "excerpt": "fn read_body(...)",
+      "reason": "Referenced in codebase `read_body` lines 123-149",
+      "confidence": 0.583236215892301,
+      "est_tokens": 51,
+      "freshness": "2026-06-10T13:40:52.331317Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 18,
+      "symbol_body": null,
+      "symbol_lines": [
+        123,
+        149
+      ]
+    },
+    {
+      "id": "b4e87ff0-c94e-44ef-aa46-9f61943d3572",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/request.rs",
+      "title": "ClientRequest (request.rs)",
+      "excerpt": "struct ClientRequest",
+      "reason": "Referenced in codebase `ClientRequest` lines 44-54",
+      "confidence": 0.5213040386903084,
+      "est_tokens": 49,
+      "freshness": "2026-06-10T13:40:52.538168Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 39,
+      "symbol_body": null,
+      "symbol_lines": [
+        44,
+        54
+      ]
+    },
+    {
+      "id": "1cbc92c2-ce82-4261-80f1-47f864389413",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/encoder.rs",
+      "title": "TransferEncoding (encoder.rs)",
+      "excerpt": "struct TransferEncoding",
+      "reason": "Referenced in codebase `TransferEncoding` lines 368-370",
+      "confidence": 0.52,
+      "est_tokens": 49,
+      "freshness": "2026-06-10T13:40:52.344818Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 24,
+      "symbol_body": null,
+      "symbol_lines": [
+        368,
+        370
+      ]
+    },
+    {
+      "id": "cc8649bd-dea6-4c01-9cf3-8a57c19f39da",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/decoder.rs",
+      "title": "transfer_encoding_agrees (decoder.rs)",
+      "excerpt": "fn transfer_encoding_agrees(...)",
+      "reason": "Referenced in codebase `transfer_encoding_agrees` lines 1168-1184",
+      "confidence": 0.52,
+      "est_tokens": 54,
+      "freshness": "2026-06-10T13:40:52.339873Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 61,
+      "symbol_body": null,
+      "symbol_lines": [
+        1168,
+        1184
+      ]
+    }
+  ],
+  "total_est_tokens": 255,
+  "baseline_est_tokens": 202845,
+  "reduction_pct": 99.9,
+  "created_at": "2026-06-10T13:40:55.087323Z",
+  "has_more": false,
+  "total_items": 0,
+  "duplicates_hidden": 0,
+  "metadata": {
+    "boosted_items": [
+      "d45afc2a-ab4f-475b-a77b-18ec21308514",
+      "20866eae-2333-4e0a-948d-bf1f896571e9",
+      "ed3a2c3e-06a5-4490-bb2f-dab7f5dba9bb"
+    ],
+    "external_dropped": 0,
+    "depth": "narrow",
+    "depth_reason": "top1 confidence 0.85 is high and clearly leads the pack (gap to top2: 0.27); trust the top item",
+    "feedback_applied": []
+  },
+  "items": [
+    {
+      "id": "ed3a2c3e-06a5-4490-bb2f-dab7f5dba9bb",
+      "source_type": "changed_file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/client/h1proto.rs",
+      "title": "send_body (h1proto.rs)",
+      "excerpt": "fn send_body(...)",
+      "reason": "Modified `send_body` lines 159-203",
+      "confidence": 0.8512504094774683,
+      "est_tokens": 52,
+      "freshness": "2026-06-10T13:40:52.551319Z",
+      "tags": [],
+      "risk": "high",
+      "flow": null,
+      "duplicates_hidden": 4,
+      "symbol_body": "pub(crate) async fn send_body<Io, B>(\n    body: B,\n    mut framed: Pin<&mut Framed<Io, h1::ClientCodec>>,\n) -> Result<(), SendRequestError>\nwhere\n    Io: ConnectionIo,\n    B: MessageBody,\n    B::Error: Into<BoxError>,\n{\n    actix_rt::pin!(body);\n\n    let mut eof = false;\n    while !eof {\n        while !eof && !framed.as_ref().is_write_buf_full() {\n            match poll_fn(|cx| body.as_mut().poll_next(cx)).await {\n                Some(Ok(chunk)) => {\n                    framed.as_mut().write(h1::Message::Chunk(Some(chunk)))?;\n                }\n                Some(Err(err)) => return Err(SendRequestError::Body(err.into())),\n                None => {\n                    eof = true;\n                    framed.as_mut().write(h1::Message::Chunk(None))?;\n                }\n            }\n        }\n\n        if !framed.as_ref().is_write_buf_empty() {\n            poll_fn(|cx| match framed.as_mut().flush(cx) {\n                Poll::Ready(Ok(_)) => Poll::Ready(Ok(())),\n                Poll::Ready(Err(err)) => Poll::Ready(Err(err)),\n                Poll::Pending => {\n                    if !framed.as_ref().is_write_buf_full() {\n                        Poll::Ready(Ok(()))\n                    } else {\n                        Poll::Pending\n                    }\n                }\n            })\n            .await?;\n        }\n    }\n\n    framed.get_mut().flush().await?;\n    Ok(())\n}",
+      "symbol_lines": [
+        159,
+        203
+      ]
+    },
+    {
+      "id": "ffd90c19-2e4c-44cb-bab2-6339b29e3511",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/chunked.rs",
+      "title": "read_body (chunked.rs)",
+      "excerpt": "fn read_body(...)",
+      "reason": "Referenced in codebase `read_body` lines 123-149",
+      "confidence": 0.583236215892301,
+      "est_tokens": 51,
+      "freshness": "2026-06-10T13:40:52.331317Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 18,
+      "symbol_body": null,
+      "symbol_lines": [
+        123,
+        149
+      ]
+    },
+    {
+      "id": "b4e87ff0-c94e-44ef-aa46-9f61943d3572",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/awc/src/request.rs",
+      "title": "ClientRequest (request.rs)",
+      "excerpt": "struct ClientRequest",
+      "reason": "Referenced in codebase `ClientRequest` lines 44-54",
+      "confidence": 0.5213040386903084,
+      "est_tokens": 49,
+      "freshness": "2026-06-10T13:40:52.538168Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 39,
+      "symbol_body": null,
+      "symbol_lines": [
+        44,
+        54
+      ]
+    },
+    {
+      "id": "1cbc92c2-ce82-4261-80f1-47f864389413",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/encoder.rs",
+      "title": "TransferEncoding (encoder.rs)",
+      "excerpt": "struct TransferEncoding",
+      "reason": "Referenced in codebase `TransferEncoding` lines 368-370",
+      "confidence": 0.52,
+      "est_tokens": 49,
+      "freshness": "2026-06-10T13:40:52.344818Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 24,
+      "symbol_body": null,
+      "symbol_lines": [
+        368,
+        370
+      ]
+    },
+    {
+      "id": "cc8649bd-dea6-4c01-9cf3-8a57c19f39da",
+      "source_type": "file",
+      "repo": "default",
+      "path_or_ref": "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/actix-web/actix-http/src/h1/decoder.rs",
+      "title": "transfer_encoding_agrees (decoder.rs)",
+      "excerpt": "fn transfer_encoding_agrees(...)",
+      "reason": "Referenced in codebase `transfer_encoding_agrees` lines 1168-1184",
+      "confidence": 0.52,
+      "est_tokens": 54,
+      "freshness": "2026-06-10T13:40:52.339873Z",
+      "tags": [],
+      "risk": "none",
+      "flow": null,
+      "duplicates_hidden": 61,
+      "symbol_body": null,
+      "symbol_lines": [
+        1168,
+        1184
+      ]
+    }
+  ],
+  "budget": {
+    "total_tokens": 255,
+    "memory_tokens": 0,
+    "memory_ratio": 0.0
+  }
+}

@@ -7,6 +7,53 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [4.5.0] — 2026-06-10 — "Trustworthy Context"
+
+### Fixed
+- **Index hygiene (P0).** Default `ignore_patterns` now cover `.venv*`, `venv`, `env`,
+  `node_modules`, `vendor`, `dist`, `build`, `target`, cache dirs, `site-packages`,
+  and minified assets (`*.min.js`, `*.min.css`). Previously only the literal `.venv`
+  was excluded — on this repo 91% of indexed symbols (44,661 of 48,970) were vendored
+  junk, which poisoned ranking, packs, and the graph.
+- **Gitignore-aware scanner.** The indexer honours `.gitignore` (gitwildmatch via
+  `pathspec`) and prunes ignored directories during the walk instead of scanning and
+  discarding. An unreadable `.gitignore` warns to stderr and falls back to patterns.
+- **Self-healing reindex.** A full `context-router index` deletes symbols/edges whose
+  files are no longer eligible (now-ignored or removed), prints the pruned count, and
+  rebuilds the FTS index. Skipped with a warning when no files are eligible
+  (zero-analyzer guard). Incremental runs never prune.
+- **Graph shows your code.** `context-router graph` previously rendered vendored
+  symbols only (top-by-degree over a polluted, unordered 10k slice). `get_all` is now
+  deterministic (`ORDER BY id`) and warns when its row cap truncates; graph drops
+  ignored-path symbols with a warning; `graph --json -o file.json` now writes the file
+  instead of silently ignoring `-o`.
+- `doctor` flags index pollution (>=20% vendored symbols) and no longer crashes in a
+  fresh environment without `.context-router/`.
+- `capabilities.embeddings_enabled` in config.yaml is now honoured as the semantic
+  ranking default (was a silent no-op).
+- MCP `get_context_pack(use_workspace=True)` no longer raises TypeError with a real
+  `workspace.yaml`; unsupported params warn instead of silently disappearing.
+
+### Changed
+- **Semantic re-rank is opt-in again.** Ablation on the clean index showed default-on
+  semantic costs −0.076 F1 (0.613 → 0.537). Workspace packs, which silently inherited
+  semantic-on since v4.4, are affected — use `--with-semantic`/`use_embeddings` to
+  opt in.
+- **Benchmark methodology.** Headline metric is now end-to-end tokens
+  (pack + downstream reads). Workload-matched vs code-review-graph, n=21 tasks /
+  7 repos: 15,325 vs 380,260 tokens (−96.0%), rank-1 21/21 vs 16/21. Model-judge
+  sufficiency (`benchmark/judge_packs.py`, claude-fable-5) recorded as null pending
+  API credits — never fabricated. See BENCHMARKS.md.
+- Retrieval quality re-baselined post-hygiene: judge F1 0.613 (v4.3 was 0.394,
+  v3.3.0 was 0.577). See docs/eval/2026-06-10-v4.5-phase-c-rebaseline.md.
+
+### Upgrade note
+- If your project has `.context-router/config.yaml` with an `ignore_patterns` list,
+  it REPLACES the new defaults — refresh it (or delete the key) and run a full
+  `context-router index` to prune previously ingested vendored symbols. `doctor`
+  will tell you if your index is polluted.
+
+
 ---
 
 ## [4.4.5] - 2026-05-30

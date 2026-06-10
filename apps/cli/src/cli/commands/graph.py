@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import sys
@@ -24,6 +25,17 @@ _DEFAULT_MAX_NODES = 500
 _LOW_SIGNAL_KINDS = frozenset({"external", "file", "import"})
 
 graph_app = typer.Typer(help="Generate an interactive graph visualization.")
+
+
+def _is_ignored_path(file_path: str, root: Path, patterns: list[str]) -> bool:
+    """Defense-in-depth for stale indexes built before v4.5 hygiene."""
+    try:
+        rel = Path(file_path).relative_to(root)
+    except ValueError:
+        return True  # outside the project root entirely
+    return any(
+        fnmatch.fnmatch(part, pat) for pat in patterns for part in rel.parts
+    )
 
 
 def _load_d3_source() -> str:
@@ -346,10 +358,13 @@ def graph(
     # like --output don't collide with the subcommand's semantics.
     if ctx.invoked_subcommand is not None:
         return
+    from contracts.config import load_config
     from storage_sqlite.database import Database
     from storage_sqlite.repositories import EdgeRepository, SymbolRepository
 
     root = Path(project_root).resolve() if project_root else _find_project_root()
+    config = load_config(root)
+    ignore_patterns = config.ignore_patterns
     db_path = root / ".context-router" / "context-router.db"
 
     if not db_path.exists():
@@ -367,8 +382,13 @@ def graph(
         # Build node list
         sym_id_map: dict[int, str] = {}  # rowid → uuid-like id
         nodes_raw: list[dict] = []
+        dropped_ignored = 0
         for sym in symbols:
             if not include_low_signal and sym.kind in _LOW_SIGNAL_KINDS:
+                continue
+            if _is_ignored_path(str(sym.file), root, ignore_patterns):
+                # Stale index built before v4.5 hygiene — drop, count, warn.
+                dropped_ignored += 1
                 continue
             sym_id = sym_repo.get_id(
                 "default", str(sym.file), sym.name, sym.kind
@@ -386,6 +406,14 @@ def graph(
                 "docstring": sym.docstring,
                 "line": sym.line_start,
             })
+
+        if dropped_ignored > 0:
+            # No-silent-failure policy — stale-index symbols must be visible.
+            print(
+                f"WARN: dropped {dropped_ignored} symbols from ignored paths "
+                "— stale index; re-run 'context-router index' to prune them.",
+                file=sys.stderr,
+            )
 
         # Build edge list from raw DB
         rows = db.connection.execute(
@@ -446,7 +474,17 @@ def graph(
     }
 
     if json_only:
-        typer.echo(json.dumps(graph_data, indent=2))
+        payload = json.dumps(graph_data, indent=2)
+        if output != "graph.html":
+            # User explicitly passed -o — honour it instead of silently
+            # printing to stdout and ignoring the flag.
+            Path(output).write_text(payload)
+            typer.echo(
+                f"Graph JSON: {output} ({len(nodes)} nodes, {len(links)} edges)",
+                err=True,
+            )
+        else:
+            typer.echo(payload)
         return
 
     # Embed into HTML. D3 is inlined (rather than loaded from a CDN) so the

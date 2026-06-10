@@ -87,7 +87,7 @@ class TestPackCache:
                     },
                     "modes": {},
                     "confidence_weights": {},
-                    "capabilities": type("C", (), {"llm_summarization": False})(),
+                    "capabilities": type("C", (), {"llm_summarization": False, "embeddings_enabled": False})(),
                     "memory": type("M", (), {"recency_weight": 0.0})(),
                 },
             )(),

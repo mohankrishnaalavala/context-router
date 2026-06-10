@@ -1,0 +1,20 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "gson-t2",
+  "sha": "f4d371d29c04066dbe7fdb31f642831f9c7f40cd",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java",
+    "gson/src/test/java/com/google/gson/functional/MapAsArrayTypeAdapterTest.java",
+    "gson/src/test/java/com/google/gson/functional/MapTest.java"
+  ],
+  "est_tokens": 3139,
+  "runtime_ms": 731,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "gson/src/main/java/com/google/gson/internal/bind/MapTypeAdapterFactory.java"
+  ]
+}

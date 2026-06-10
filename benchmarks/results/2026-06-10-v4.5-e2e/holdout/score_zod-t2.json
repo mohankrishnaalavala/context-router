@@ -1,0 +1,22 @@
+{
+  "repo": "zod",
+  "task_id": "zod-t2",
+  "anchor": "parent-sha-with-diff",
+  "mode": "debug",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "packages/zod/src/v4/classic/schemas.ts"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/schemas.ts",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/transform.test.ts",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/classic/tests/preprocess.test.ts"
+  ],
+  "n_items": 4,
+  "est_tokens_total": 212,
+  "precision": 0.25,
+  "recall": 1.0,
+  "f1": 0.4,
+  "rank1_hit": 1
+}

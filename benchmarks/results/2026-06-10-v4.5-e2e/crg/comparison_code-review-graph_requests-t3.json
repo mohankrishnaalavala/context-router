@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "requests-t3",
+  "sha": "3ff3ff21dd45957c9e143cd500291959bb15f690",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "src/requests/exceptions.py",
+    "tests/test_requests.py"
+  ],
+  "est_tokens": 1072,
+  "runtime_ms": 468,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "src/requests/exceptions.py"
+  ]
+}

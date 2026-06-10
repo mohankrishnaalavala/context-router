@@ -565,7 +565,7 @@ class ContextRanker:
     def __init__(
         self,
         token_budget: int = 8_000,
-        use_embeddings: bool = True,
+        use_embeddings: bool = False,
         progress_cb: Callable[[str], None] | None = None,
         use_hub_boost: bool | None = None,
         db_connection: Any | None = None,
@@ -579,8 +579,12 @@ class ContextRanker:
                 returned item list.  0 means unlimited.
             use_embeddings: If True, apply semantic similarity boosting via
                 sentence-transformers (requires ``pip install sentence-transformers``).
-                Defaults to True; when the model is unavailable a stderr warning is
-                emitted and ranking proceeds without semantic boosting.
+                Defaults to False (opt-in, matching the CLI ``--with-semantic``
+                flag): the 2026-06-10 post-hygiene re-baseline measured
+                default-on at avg F1 0.537 vs 0.613 lexical-only on the
+                12-task tuning set (see docs/eval/). When enabled but the
+                model is unavailable, a stderr warning is emitted and
+                ranking proceeds without semantic boosting.
             progress_cb: Optional callback invoked with status messages during
                 first-time model download (see :func:`_get_embed_model`).
                 Used by the CLI to render a rich progress bar; must be None

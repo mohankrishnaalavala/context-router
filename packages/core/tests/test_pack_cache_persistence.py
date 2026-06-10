@@ -74,7 +74,7 @@ def _stub_config(monkeypatch: pytest.MonkeyPatch, token_budget: int = 8_000) -> 
                 },
                 "modes": {},
                 "confidence_weights": {},
-                "capabilities": type("C", (), {"llm_summarization": False})(),
+                "capabilities": type("C", (), {"llm_summarization": False, "embeddings_enabled": False})(),
                 "memory": type("M", (), {"recency_weight": 0.0})(),
             },
         )(),

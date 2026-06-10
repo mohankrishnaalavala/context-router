@@ -1,0 +1,20 @@
+{
+  "repo": "zod",
+  "task_id": "zod-t3",
+  "anchor": "parent-sha-with-diff",
+  "mode": "debug",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "packages/zod/src/v4/core/util.ts"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v4/core/util.ts",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/zod/packages/zod/src/v3/types.ts"
+  ],
+  "n_items": 2,
+  "est_tokens_total": 100,
+  "precision": 0.5,
+  "recall": 1.0,
+  "f1": 0.6666666666666666,
+  "rank1_hit": 1
+}

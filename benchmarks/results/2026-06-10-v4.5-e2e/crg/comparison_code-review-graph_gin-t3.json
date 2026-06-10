@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "gin-t3",
+  "sha": "c3d1092b3b48addf6f9cd00fe274ec3bd14650eb",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "binding/form_mapping.go",
+    "binding/form_mapping_test.go"
+  ],
+  "est_tokens": 656,
+  "runtime_ms": 429,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "binding/form_mapping.go"
+  ]
+}

@@ -7,6 +7,8 @@ plugins, and persistence to SymbolWriter.
 
 from __future__ import annotations
 
+import sqlite3
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -14,10 +16,17 @@ from pathlib import Path
 from contracts.config import ContextRouterConfig
 from contracts.interfaces import LanguageAnalyzer
 from core.plugin_loader import PluginLoader
-from graph_index.scanner import FileScanner
-from graph_index.writer import SymbolWriter
 from storage_sqlite.database import Database
 from storage_sqlite.repositories import EdgeRepository, SymbolRepository
+
+from graph_index.scanner import FileScanner
+from graph_index.writer import SymbolWriter
+
+# Files per DELETE chunk when pruning. The edges DELETE binds each chunk
+# twice (from_symbol_id + to_symbol_id subqueries), so params per statement
+# is 2*chunk + 3. At 400 that is 803 — safely under the 999 bound-variable
+# limit of legacy SQLite builds (SQLITE_MAX_VARIABLE_NUMBER pre-3.32).
+_PRUNE_CHUNK_SIZE = 400
 
 
 @dataclass
@@ -79,22 +88,30 @@ class Indexer:
 
         scanner = FileScanner(root, self._config.ignore_patterns, self._plugin_loader)
 
+        eligible: set[str] = set()
         for file_path, ext in scanner.scan():
+            eligible.add(str(file_path))
             result.files_scanned += 1
             try:
                 analyzer: LanguageAnalyzer | None = self._plugin_loader.get_analyzer(ext)
                 if analyzer is None:
                     continue
                 analysis = analyzer.analyze(file_path)
-                syms, edges = self._writer.write_file_results(
-                    self._repo_name, analysis, file_path
-                )
+                syms, edges = self._writer.write_file_results(self._repo_name, analysis, file_path)
                 result.symbols_written += syms
                 result.edges_written += edges
             except Exception as exc:  # noqa: BLE001
                 result.errors.append(f"{file_path}: {exc}")
 
         result.duration_seconds = time.monotonic() - start
+        # Prune symbols (and their edges) from files that no longer pass the
+        # scanner filter — heals DBs polluted before the v4.5 ignore-pattern
+        # fix. Must run BEFORE finalize so TESTED_BY linking and community
+        # detection operate on the cleaned graph, not on thousands of junk
+        # symbols about to be deleted. Full runs only: run_incremental sees
+        # just the changed files, so pruning there would delete every other
+        # symbol in the repo.
+        self._prune_stale_files(eligible)
         # Post-indexing passes: TESTED_BY links + community detection
         try:
             tested_by, communities = self._writer.finalize(self._repo_name)
@@ -102,6 +119,70 @@ class Indexer:
         except Exception:  # noqa: BLE001
             pass
         return result
+
+    def _prune_stale_files(self, eligible: set[str]) -> None:
+        """Delete symbols/edges whose file_path is no longer scanner-eligible.
+
+        Args:
+            eligible: Absolute file paths the scanner yielded during this
+                full run. Any symbol row for this repo whose file_path is
+                not in this set is stale (ignored or deleted) and removed.
+        """
+        conn = self._db.connection
+        # kind='external' rows are writer-materialized stubs for out-of-repo
+        # inheritance targets (file_path '<external>'); they never correspond
+        # to a scanned file and must survive the prune or every full run
+        # would silently drop all implements/extends-to-framework edges.
+        rows = conn.execute(
+            "SELECT DISTINCT file_path FROM symbols"
+            " WHERE repo = ? AND kind != 'external'",
+            (self._repo_name,),
+        ).fetchall()
+        db_files = {row[0] for row in rows}
+        if not eligible and db_files:
+            # Zero eligible files but a populated index almost always means a
+            # broken environment (e.g. no analyzer installed for this repo's
+            # language), not a repo that genuinely lost every source file.
+            # Pruning here would wipe the whole index — refuse and warn.
+            print(
+                "WARN: skipping prune — no eligible files found "
+                "(no analyzers for this repo?); index left untouched.",
+                file=sys.stderr,
+            )
+            return
+        stale = sorted(db_files - eligible)
+        if not stale:
+            return
+
+        for i in range(0, len(stale), _PRUNE_CHUNK_SIZE):
+            chunk = stale[i : i + _PRUNE_CHUNK_SIZE]
+            placeholders = ",".join("?" * len(chunk))
+            conn.execute(
+                "DELETE FROM edges WHERE repo = ? AND ("
+                "from_symbol_id IN (SELECT id FROM symbols WHERE repo = ? "
+                f"AND file_path IN ({placeholders})) "
+                "OR to_symbol_id IN (SELECT id FROM symbols WHERE repo = ? "
+                f"AND file_path IN ({placeholders})))",
+                (self._repo_name, self._repo_name, *chunk, self._repo_name, *chunk),
+            )
+            conn.execute(
+                f"DELETE FROM symbols WHERE repo = ? AND file_path IN ({placeholders})",
+                (self._repo_name, *chunk),
+            )
+        conn.commit()
+
+        # Keep the FTS index consistent with the pruned base table. Older
+        # DBs without the symbols_fts migration raise OperationalError.
+        try:
+            conn.execute("INSERT INTO symbols_fts(symbols_fts) VALUES ('rebuild')")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        print(
+            f"Pruned {len(stale)} symbol file(s) no longer eligible (ignored or deleted).",
+            file=sys.stderr,
+        )
 
     def run_incremental(self, changed_files: list[Path]) -> IndexResult:
         """Incremental index: re-index only the specified files.
@@ -131,9 +212,7 @@ class Indexer:
             result.files_scanned += 1
             try:
                 analysis = analyzer.analyze(file_path)
-                syms, edges = self._writer.write_file_results(
-                    self._repo_name, analysis, file_path
-                )
+                syms, edges = self._writer.write_file_results(self._repo_name, analysis, file_path)
                 result.symbols_written += syms
                 result.edges_written += edges
             except Exception as exc:  # noqa: BLE001

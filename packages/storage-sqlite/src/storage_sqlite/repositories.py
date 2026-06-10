@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -537,12 +538,17 @@ class SymbolRepository:
     def get_all(self, repo: str, limit: int = 10_000) -> list[Symbol]:
         """Return all symbols for a repository, up to *limit* rows.
 
+        Rows are returned in deterministic insertion order (``ORDER BY id``).
+        If exactly *limit* rows come back, the result is assumed truncated and
+        a warning is emitted to stderr — callers needing the full set must
+        page or raise the limit.
+
         Args:
             repo: Logical repository name.
             limit: Maximum number of symbols to return (default 10 000).
 
         Returns:
-            List of Symbol dataclass instances.
+            List of Symbol dataclass instances, ordered by id.
         """
         rows = self._conn.execute(
             """
@@ -550,10 +556,18 @@ class SymbolRepository:
                    language, signature, docstring, community_id
             FROM symbols
             WHERE repo = ?
+            ORDER BY id
             LIMIT ?
             """,
             (repo, limit),
         ).fetchall()
+        if len(rows) == limit:
+            print(
+                f"WARN: get_all hit the {limit}-row cap for repo '{repo}'; "
+                "results are a partial slice. Callers needing the full set "
+                "must page or raise the limit.",
+                file=sys.stderr,
+            )
         return [
             Symbol(
                 name=r["name"],

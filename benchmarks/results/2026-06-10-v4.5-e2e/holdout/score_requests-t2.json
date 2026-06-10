@@ -1,0 +1,23 @@
+{
+  "repo": "requests",
+  "task_id": "requests-t2",
+  "anchor": "parent-sha-with-diff",
+  "mode": "debug",
+  "effective_mode": "review",
+  "ground_truth_files": [
+    "src/requests/utils.py"
+  ],
+  "predicted_top5": [
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/utils.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_requests.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/cookies.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/tests/test_utils.py",
+    "/Users/mohankrishnaalavala/Documents/project_context/holdout-repos/requests/src/requests/structures.py"
+  ],
+  "n_items": 5,
+  "est_tokens_total": 323,
+  "precision": 0.2,
+  "recall": 1.0,
+  "f1": 0.33333333333333337,
+  "rank1_hit": 1
+}

@@ -553,3 +553,94 @@ outcomes:
           bad=[x for x in d['project']['dependencies'] if x.startswith('context-router-')];
           print('internal deps:', bad); sys.exit(1 if bad else 0)"
         expected_stdout_contains: "internal deps: []"
+
+  - id: v4.5-index-hygiene
+    priority: P0
+    description: >-
+      The indexer must never ingest vendored/ignored code. Defaults cover
+      .venv*, venv, env, node_modules, vendor, dist, build, target and
+      cache dirs; .gitignore is honoured when present.
+    dod:
+      outcome: >-
+        Indexing a repo containing a `.venv-crg/` and `node_modules/` tree
+        produces zero symbols from those trees.
+      threshold: >-
+        On the context-router repo itself after reindex:
+        SELECT count(*) FROM symbols WHERE file_path LIKE '%.venv%' = 0
+        and total symbol count drops from ~49,000 to under 10,000.
+      negative_case: >-
+        An unreadable .gitignore writes "WARN: could not read .gitignore"
+        with the OS reason to stderr and indexing proceeds with the
+        built-in ignore patterns; exit code stays 0.
+      verify:
+        cmd: >-
+          uv run context-router index --json 2>/dev/null &&
+          sqlite3 .context-router/context-router.db
+          "SELECT count(*) FROM symbols WHERE file_path LIKE '%.venv%'
+           OR file_path LIKE '%node_modules%'"
+        expected_stdout_contains: "0"
+
+  - id: v4.5-graph-own-code
+    priority: P0
+    description: >-
+      `context-router graph` must show the user's own code, never a
+      vendored-symbol graph, and must not silently no-op the -o flag.
+    dod:
+      outcome: >-
+        On this repo, the rendered graph contains symbols from packages/
+        and apps/, and `graph --json -o out.json` writes the file.
+      threshold: >-
+        graph --json output contains at least one node whose file path
+        starts with the project root + "/packages/".
+      negative_case: >-
+        Running graph against a stale polluted index writes
+        "WARN: dropped N symbols from ignored paths — re-run
+        'context-router index'" to stderr instead of rendering them.
+      verify:
+        cmd: >-
+          uv run context-router graph --json --no-open | python3 -c
+          "import json,sys; d=json.load(sys.stdin);
+           print(any('/packages/' in n['file'] for n in d['nodes']))"
+        expected_stdout_contains: "True"
+
+  - id: v4.5-e2e-tokens
+    priority: P1
+    description: >-
+      Token-saving claims must be end-to-end (pack + downstream reads),
+      judged sufficient by a model, on n>=12 holdout tasks.
+    dod:
+      outcome: >-
+        BENCHMARKS.md headline reports end-to-end downstream tokens with a
+        model-judge sufficiency rate, replacing pack-only token counts.
+      threshold: >-
+        Results JSON covers >= 12 tasks across >= 4 holdout repos and
+        every task row has downstream_read_tokens and judge.sufficient.
+      negative_case: >-
+        When the `claude` CLI is missing, benchmark/judge_packs.py exits 1
+        with "ERROR: claude CLI not found — judge step requires it" on
+        stderr; it never writes a results file with empty judgements.
+      verify:
+        cmd: >-
+          python3 -c "import json;
+          d=json.load(open(sorted(__import__('glob').glob(
+          'benchmarks/results/*-v4.5-e2e/summary.json'))[-1]));
+          print(d['aggregate']['n_tasks'] >= 12)"
+        expected_stdout_contains: "True"
+
+  - id: v4.5-docs-current
+    priority: P1
+    description: >-
+      User-facing docs must state the shipped version and the honest
+      benchmark claim.
+    dod:
+      outcome: >-
+        README, roadmap, and .handover docs all reference the current
+        release and the workload-matched benchmark framing.
+      threshold: >-
+        grep finds no "4.4.3" and no standalone "91%" claim in README.md;
+        docs/roadmap.md header names v4.5.
+      negative_case: >-
+        N/A (docs change); reviewer checks the diff against CHANGELOG.
+      verify:
+        cmd: grep -c "4\.4\.3" README.md || true
+        expected_stdout_contains: "0"

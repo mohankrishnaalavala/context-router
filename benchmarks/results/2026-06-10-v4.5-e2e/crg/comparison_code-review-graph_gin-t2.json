@@ -1,0 +1,19 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "gin-t2",
+  "sha": "9914178584e42458ff7d23891463a880f58c9d86",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "context.go",
+    "context_test.go"
+  ],
+  "est_tokens": 905,
+  "runtime_ms": 499,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "context.go"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "tool": "code-review-graph",
+  "task_id": "django-t3",
+  "sha": "e779bc7d78cbcadd395d48e5b6b00acea07ce503",
+  "anchor": "parent-sha-with-diff",
+  "predicted_files": [
+    "django/db/models/fields/__init__.py"
+  ],
+  "est_tokens": 778,
+  "runtime_ms": 6600,
+  "rank1_hit": 1,
+  "exit_status": 0,
+  "stderr_excerpt": "",
+  "error": null,
+  "ground_truth_files": [
+    "django/db/models/fields/__init__.py"
+  ]
+}

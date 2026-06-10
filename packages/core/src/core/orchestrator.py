@@ -952,6 +952,19 @@ class Orchestrator:
                 file=sys.stderr,
             )
         config = load_config(self._root)
+
+        # Honour ``capabilities.embeddings_enabled`` as a config-level default
+        # for semantic ranking.  Precedence contract (documented in
+        # CapabilitiesConfig): an explicit ``use_embeddings=True`` call-site
+        # argument always wins; when the caller left the param at its False
+        # default AND the config opts in, treat it as enabled.
+        # NOTE: there is no way to distinguish "caller explicitly passed False"
+        # from "caller accepted the default False" with a bare bool param, so
+        # config=true + explicit-false cannot be differentiated — config acts
+        # purely as a default, not an override.  That is the intended contract.
+        if not use_embeddings and config.capabilities.embeddings_enabled:
+            use_embeddings = True
+
         repo_scope = str(self._root.resolve())
         db_path = self._root / ".context-router" / "context-router.db"
 
