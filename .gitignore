@@ -226,7 +226,10 @@ graph.html
 # Outputs (run reports, per-phase re-reviews, smoke diffs) go here:
 internal_docs/ship-check/
 internal_docs/*
-.context-router/
+# Ignore generated index/cache state but keep git-tracked memory observations.
+# NOTE: must be `/*` (not the bare directory) — git never descends into an
+# ignored directory, so negations under `.context-router/` would be dead rules.
+.context-router/*
 !.context-router/memory/
 .context-router/memory/*
 !.context-router/memory/observations/
