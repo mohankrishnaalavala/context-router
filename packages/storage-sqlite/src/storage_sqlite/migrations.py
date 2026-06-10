@@ -7,7 +7,16 @@ any that haven't been applied yet, tracking state in schema_version.
 from __future__ import annotations
 
 import sqlite3
+import sys
 from pathlib import Path
+
+# Migrations that delete rows from ``pack_cache`` because the schema (or
+# the identity semantics it encodes) changed underneath the cached packs.
+# Applying one of these to a pre-existing database emits a stderr WARN so
+# the discard is loud, never silent (CLAUDE.md no-silent-failure rule).
+# 0017: symbol identity became scope-qualified (v4.6 A2) — cached packs
+#       reference pre-qualification symbol identities.
+_CACHE_INVALIDATING_VERSIONS: frozenset[int] = frozenset({17})
 
 
 class MigrationRunner:
@@ -61,3 +70,16 @@ class MigrationRunner:
                 (file_version,),
             )
             self._conn.commit()
+
+            # A fresh database (current == 0) has no caches to go stale;
+            # an upgrade of an existing database that crosses a
+            # cache-invalidating migration must say so out loud.
+            if current > 0 and file_version in _CACHE_INVALIDATING_VERSIONS:
+                print(
+                    f"WARN: schema migration {sql_file.stem} discarded the "
+                    "stored pack cache (reason: symbol identity is "
+                    "scope-qualified as of v4.6; cached packs referenced "
+                    "pre-qualification identities). Packs rebuild on next "
+                    "request.",
+                    file=sys.stderr,
+                )

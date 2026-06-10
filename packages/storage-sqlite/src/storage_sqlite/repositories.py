@@ -367,8 +367,8 @@ class SymbolRepository:
             """
             INSERT INTO symbols
                 (repo, file_path, name, kind, line_start, line_end,
-                 language, signature, docstring)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 language, signature, docstring, qualified_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 repo,
@@ -380,26 +380,33 @@ class SymbolRepository:
                 sym.language,
                 sym.signature,
                 sym.docstring,
+                sym.qualified_name or sym.name,
             ),
         )
         self._conn.commit()
         return cursor.lastrowid  # type: ignore[return-value]
 
-    def add_bulk(self, syms: list[Symbol], repo: str) -> None:
+    def add_bulk(self, syms: list[Symbol], repo: str) -> list[int]:
         """Insert multiple symbols in a single transaction.
 
         Args:
             syms: List of Symbol objects to insert.
             repo: Logical repository name.
+
+        Returns:
+            The inserted rowids, in the same order as *syms* — the writer
+            needs per-occurrence ids so same-named symbols at different
+            definition sites stay distinct identities (v4.6 A2).
         """
-        self._conn.executemany(
-            """
-            INSERT INTO symbols
-                (repo, file_path, name, kind, line_start, line_end,
-                 language, signature, docstring)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
+        ids: list[int] = []
+        for s in syms:
+            cursor = self._conn.execute(
+                """
+                INSERT INTO symbols
+                    (repo, file_path, name, kind, line_start, line_end,
+                     language, signature, docstring, qualified_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (
                     repo,
                     str(s.file),
@@ -410,11 +417,12 @@ class SymbolRepository:
                     s.language,
                     s.signature,
                     s.docstring,
-                )
-                for s in syms
-            ],
-        )
+                    s.qualified_name or s.name,
+                ),
+            )
+            ids.append(cursor.lastrowid)  # type: ignore[arg-type]
         self._conn.commit()
+        return ids
 
     def delete_by_file(self, repo: str, file_path: str) -> None:
         """Delete all symbols for a given file (used before incremental re-index).
@@ -442,7 +450,8 @@ class SymbolRepository:
         rows = self._conn.execute(
             """
             SELECT id, name, kind, file_path, line_start, line_end,
-                   language, signature, docstring, community_id
+                   language, signature, docstring, community_id,
+                   COALESCE(qualified_name, name) AS qualified_name
             FROM symbols
             WHERE repo = ? AND file_path = ?
             """,
@@ -460,6 +469,7 @@ class SymbolRepository:
                 docstring=r["docstring"] or "",
                 community_id=r["community_id"],
                 id=r["id"],
+                qualified_name=r["qualified_name"] or r["name"],
             )
             for r in rows
         ]
@@ -553,7 +563,8 @@ class SymbolRepository:
         rows = self._conn.execute(
             """
             SELECT id, name, kind, file_path, line_start, line_end,
-                   language, signature, docstring, community_id
+                   language, signature, docstring, community_id,
+                   COALESCE(qualified_name, name) AS qualified_name
             FROM symbols
             WHERE repo = ?
             ORDER BY id
@@ -580,6 +591,7 @@ class SymbolRepository:
                 docstring=r["docstring"] or "",
                 community_id=r["community_id"],
                 id=r["id"],
+                qualified_name=r["qualified_name"] or r["name"],
             )
             for r in rows
         ]
@@ -600,7 +612,8 @@ class SymbolRepository:
         rows = self._conn.execute(
             f"""
             SELECT id, name, kind, file_path, line_start, line_end,
-                   language, signature, docstring, community_id
+                   language, signature, docstring, community_id,
+                   COALESCE(qualified_name, name) AS qualified_name
             FROM symbols
             WHERE repo = ? AND file_path IN ({placeholders})
             """,
@@ -618,6 +631,7 @@ class SymbolRepository:
                 docstring=r["docstring"] or "",
                 community_id=r["community_id"],
                 id=r["id"],
+                qualified_name=r["qualified_name"] or r["name"],
             )
             for r in rows
         ]
@@ -659,7 +673,8 @@ class SymbolRepository:
 
         sql = """
             SELECT s.id, s.name, s.kind, s.file_path, s.line_start, s.line_end,
-                   s.language, s.signature, s.docstring, s.community_id
+                   s.language, s.signature, s.docstring, s.community_id,
+                   COALESCE(s.qualified_name, s.name) AS qualified_name
             FROM symbols_fts AS f
             JOIN symbols AS s ON s.id = f.rowid
             WHERE f.symbols_fts MATCH ?
@@ -690,6 +705,7 @@ class SymbolRepository:
                 docstring=r["docstring"] or "",
                 community_id=r["community_id"],
                 id=r["id"],
+                qualified_name=r["qualified_name"] or r["name"],
             )
             for r in rows
         ]

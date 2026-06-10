@@ -30,6 +30,40 @@ _INHERITANCE_SOURCE_KINDS: frozenset[str] = frozenset(
 )
 
 
+def _qualify_symbols(symbols: list[Symbol]) -> None:
+    """Assign scope-qualified identities to *symbols* in place (v4.6 A2).
+
+    Analyzers emit flat symbols without parent links, but the enclosing
+    scope is recoverable from line containment: a symbol whose line range
+    strictly encloses another's is its ancestor. The qualified identity is
+    the parent-symbol chain joined with ``.`` (``test_a.Model``), which
+    keeps same-named definitions at different sites in one file DISTINCT.
+
+    Fallback (DoD v4.6-symbol-qualification): when the parent chain cannot
+    disambiguate — e.g. two module-level redefinitions of the same name —
+    the colliding occurrence is suffixed with its definition line
+    (``setup@7``). Applied ONLY on collision so stable, human-readable
+    chains stay the common case.
+    """
+    # Outer scopes first: by start line, then widest span on ties.
+    ordered = sorted(symbols, key=lambda s: (s.line_start, -(s.line_end or 0)))
+    stack: list[Symbol] = []
+    assigned: set[str] = set()
+    for sym in ordered:
+        while stack and not (
+            stack[-1].line_start <= sym.line_start
+            and (stack[-1].line_end or 0) >= (sym.line_end or 0)
+        ):
+            stack.pop()
+        chain = [parent.name for parent in stack]
+        qualified = ".".join([*chain, sym.name])
+        if qualified in assigned:
+            qualified = f"{qualified}@{sym.line_start}"
+        assigned.add(qualified)
+        sym.qualified_name = qualified
+        stack.append(sym)
+
+
 class SymbolWriter:
     """Writes Symbol and DependencyEdge objects to the SQLite graph store.
 
@@ -81,20 +115,33 @@ class SymbolWriter:
         self._sym_repo.delete_by_file(repo, file_str)
 
         symbols = [r for r in results if isinstance(r, Symbol)]
-        edges = [r for r in results if isinstance(r, DependencyEdge)]
 
-        # Pass 1: bulk-insert symbols
+        # v4.6 A2: compute scope-qualified identities BEFORE insert so
+        # same-named symbols at different definition sites in this file
+        # persist as distinct identities (DoD v4.6-symbol-qualification).
+        _qualify_symbols(symbols)
+
+        # Pass 1: bulk-insert symbols, keeping per-occurrence rowids.
+        sym_row_ids: dict[int, int] = {}  # id(Symbol object) -> rowid
         if symbols:
-            self._sym_repo.add_bulk(symbols, repo)
+            inserted_ids = self._sym_repo.add_bulk(symbols, repo)
+            sym_row_ids = {
+                id(sym): rid for sym, rid in zip(symbols, inserted_ids)
+            }
 
-        # Build a name → id map for edge resolution.
+        # Build name → id maps for edge resolution.
         # v3 phase4/edge-source-resolution-fix: also build a class-kind
         # overlay so inheritance / tested_by source resolution can
         # disambiguate class vs. constructor rows that share a name.
+        # v4.6 A2: these whole-file maps are the FALLBACK for forward
+        # references; the per-occurrence positional maps built while
+        # walking ``results`` below take precedence so each edge anchors
+        # on the definition site that emitted it, not on the first row
+        # that happened to share the name.
         id_map: dict[str, int] = {}
         class_id_map: dict[str, int] = {}
         for sym in symbols:
-            sym_id = self._sym_repo.get_id(repo, file_str, sym.name, sym.kind)
+            sym_id = sym_row_ids.get(id(sym))
             if sym_id is not None:
                 # First writer wins for id_map so we don't accidentally
                 # overwrite a class row with its constructor row (same
@@ -109,6 +156,12 @@ class SymbolWriter:
         # name in another file.  The writer also resolves a file-path
         # source (used for ``imports`` edges whose from_symbol is the file).
         resolved: list[tuple[DependencyEdge, int, int]] = []
+        # v4.6 A2 positional maps: while walking ``results`` in analyzer
+        # emission order, these always hold the MOST RECENT definition of
+        # each name, so an edge emitted right after its defining symbol
+        # (the analyzer's contract) anchors on that exact occurrence.
+        last_id_by_name: dict[str, int] = {}
+        last_class_id_by_name: dict[str, int] = {}
         # v3 phase3/edge-kinds-extended: inheritance edges often point at
         # external framework types (``Serializable``, ``JpaRepository``,
         # ``WebMvcConfigurer``) that are not defined in-project.  Rather
@@ -176,8 +229,15 @@ class SymbolWriter:
             if edge.edge_type not in _INHERITANCE_SOURCE_KINDS:
                 return None  # legacy path handles this case
 
-            # 1. Prefer the class-like row in the current file.
-            fid = class_id_map.get(name)
+            # 1. Prefer the class-like row in the current file — the most
+            # recently defined occurrence first (v4.6 A2: nested
+            # same-named classes are distinct identities, and the edge the
+            # analyzer emitted right after a definition belongs to that
+            # definition), then the whole-file first-wins map for forward
+            # references.
+            fid = last_class_id_by_name.get(name)
+            if fid is None:
+                fid = class_id_map.get(name)
             if fid is not None:
                 return fid
 
@@ -226,7 +286,21 @@ class SymbolWriter:
             )
             return None
 
-        for edge in edges:
+        # v4.6 A2: walk ``results`` in analyzer emission order so each
+        # edge resolves against the definitions seen SO FAR. Analyzers
+        # emit a definition's edges immediately after its Symbol, so the
+        # "most recent occurrence" is the defining scope — this is what
+        # keeps N same-named nested classes anchored to N distinct rows.
+        for item in results:
+            if isinstance(item, Symbol):
+                rid = sym_row_ids.get(id(item))
+                if rid is not None:
+                    last_id_by_name[item.name] = rid
+                    if item.kind in _CLASS_LIKE_KINDS:
+                        last_class_id_by_name[item.name] = rid
+                continue
+
+            edge = item
             # v3 phase4/edge-source-resolution-fix: for inheritance /
             # tested_by edges the source anchoring is class-kind-strict.
             # The helper handles in-file preference, kind-filtered
@@ -234,12 +308,18 @@ class SymbolWriter:
             # it returns None we skip the edge entirely.
             if edge.edge_type in _INHERITANCE_SOURCE_KINDS:
                 from_id = _resolve_source_symbol_id(edge)
-                to_id = id_map.get(edge.to_symbol)
+                to_id = last_id_by_name.get(edge.to_symbol)
+                if to_id is None:
+                    to_id = id_map.get(edge.to_symbol)
                 if to_id is None:
                     to_id = self._sym_repo.get_id_by_name(repo, edge.to_symbol)
             else:
-                from_id = id_map.get(edge.from_symbol)
-                to_id = id_map.get(edge.to_symbol)
+                from_id = last_id_by_name.get(edge.from_symbol)
+                if from_id is None:
+                    from_id = id_map.get(edge.from_symbol)
+                to_id = last_id_by_name.get(edge.to_symbol)
+                if to_id is None:
+                    to_id = id_map.get(edge.to_symbol)
 
                 # Cross-file resolution: from_symbol may be an absolute file path
                 if from_id is None and ("/" in edge.from_symbol or "\\" in edge.from_symbol):
