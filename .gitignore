@@ -227,6 +227,9 @@ graph.html
 internal_docs/ship-check/
 internal_docs/*
 .context-router/
+!.context-router/memory/
+.context-router/memory/*
+!.context-router/memory/observations/
 
 # Local agent-machine state — generated per-clone, never tracked.
 # Tracked exceptions are listed via "!" so they survive (docs-agent.md, ship-check
