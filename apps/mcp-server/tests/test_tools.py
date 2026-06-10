@@ -450,3 +450,118 @@ def test_get_context_pack_use_workspace_falls_back_with_warning(tmp_path, capfd)
     _, err = capfd.readouterr()
     assert "no workspace.yaml" in err.lower()
     assert isinstance(result, dict)
+
+
+# ---------------------------------------------------------------------------
+# Bug fix: use_workspace=True + unsupported kwargs must not crash with
+# TypeError and must emit a stderr warning (no-silent-no-op rule).
+# ---------------------------------------------------------------------------
+
+def test_get_context_pack_use_workspace_with_page_size_no_typeerror(
+    tmp_path, monkeypatch, capfd
+):
+    """use_workspace=True with page_size != 0 must not raise TypeError.
+
+    WorkspaceOrchestrator.build_pack does not accept page/page_size/
+    use_embeddings kwargs.  Before the fix, get_context_pack passed them
+    unconditionally, causing an uncaught TypeError.  After the fix the call
+    succeeds and the ignored params are reported on stderr.
+    """
+    import sys
+    from pathlib import Path
+    from contracts.models import ContextPack
+
+    # Create a workspace.yaml so the workspace code path is taken.
+    ws_yaml = tmp_path / "workspace.yaml"
+    ws_yaml.write_text("repos:\n  - path: .\n    name: test-repo\n")
+
+    # Monkeypatch WorkspaceOrchestrator.build_pack with a strict-signature stub
+    # (only mode + query accepted) to prove the fixed call is compatible and
+    # no TypeError fires.
+    _stub_called_with: list[dict] = []
+
+    def _stub_build_pack(self, mode, query, error_file=None):
+        _stub_called_with.append({"mode": mode, "query": query})
+        return ContextPack(
+            mode=mode,
+            query=query,
+            selected_items=[],
+            total_est_tokens=0,
+            baseline_est_tokens=0,
+            reduction_pct=0.0,
+        )
+
+    from core import workspace_orchestrator as _wo_mod
+    monkeypatch.setattr(
+        _wo_mod.WorkspaceOrchestrator, "build_pack", _stub_build_pack
+    )
+
+    from mcp_server.tools import get_context_pack
+    result = get_context_pack(
+        mode="implement",
+        query="test",
+        project_root=str(tmp_path),
+        use_workspace=True,
+        page_size=5,
+    )
+
+    # No TypeError — result must be a dict (not an exception / error key)
+    assert isinstance(result, dict), f"Expected dict result, got: {result!r}"
+    assert "error" not in result, f"Unexpected error in result: {result.get('error')}"
+
+    # Stub must have been called exactly once with mode + query only.
+    assert _stub_called_with, "WorkspaceOrchestrator.build_pack was never called"
+    assert _stub_called_with[0]["mode"] == "implement"
+    assert _stub_called_with[0]["query"] == "test"
+
+    # Stderr must mention the ignored param (no-silent-no-op rule).
+    _, err = capfd.readouterr()
+    assert "page_size" in err, (
+        f"Expected 'page_size' in stderr warning, got: {err!r}"
+    )
+    assert "workspace" in err.lower(), (
+        f"Expected workspace mention in stderr warning, got: {err!r}"
+    )
+
+
+def test_get_context_pack_use_workspace_no_warning_for_defaults(
+    tmp_path, monkeypatch, capfd
+):
+    """use_workspace=True with default page/page_size/use_embeddings must not warn."""
+    from contracts.models import ContextPack
+
+    ws_yaml = tmp_path / "workspace.yaml"
+    ws_yaml.write_text("repos:\n  - path: .\n    name: test-repo\n")
+
+    def _stub_build_pack(self, mode, query, error_file=None):
+        return ContextPack(
+            mode=mode,
+            query=query,
+            selected_items=[],
+            total_est_tokens=0,
+            baseline_est_tokens=0,
+            reduction_pct=0.0,
+        )
+
+    from core import workspace_orchestrator as _wo_mod
+    monkeypatch.setattr(
+        _wo_mod.WorkspaceOrchestrator, "build_pack", _stub_build_pack
+    )
+
+    from mcp_server.tools import get_context_pack
+    get_context_pack(
+        mode="implement",
+        query="test",
+        project_root=str(tmp_path),
+        use_workspace=True,
+        # All unsupported kwargs at their defaults — no warning expected.
+        page=0,
+        page_size=0,
+        use_embeddings=False,
+    )
+
+    _, err = capfd.readouterr()
+    # Should not warn about ignored params when all are at their defaults.
+    assert "ignored" not in err, (
+        f"Unexpected 'ignored' warning in stderr: {err!r}"
+    )
