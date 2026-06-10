@@ -129,8 +129,13 @@ class Indexer:
                 not in this set is stale (ignored or deleted) and removed.
         """
         conn = self._db.connection
+        # kind='external' rows are writer-materialized stubs for out-of-repo
+        # inheritance targets (file_path '<external>'); they never correspond
+        # to a scanned file and must survive the prune or every full run
+        # would silently drop all implements/extends-to-framework edges.
         rows = conn.execute(
-            "SELECT DISTINCT file_path FROM symbols WHERE repo = ?",
+            "SELECT DISTINCT file_path FROM symbols"
+            " WHERE repo = ? AND kind != 'external'",
             (self._repo_name,),
         ).fetchall()
         db_files = {row[0] for row in rows}

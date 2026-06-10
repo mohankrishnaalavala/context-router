@@ -163,3 +163,54 @@ def test_run_does_not_prune_when_no_files_eligible(
     err = capsys.readouterr().err
     assert "WARN: skipping prune" in err
     assert "Pruned" not in err
+
+
+def test_prune_preserves_external_inheritance_stubs(
+    tmp_path: Path, db: Database, indexer: Indexer, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Writer-materialized external stubs (file '<external>') must survive.
+
+    Inheritance targets outside the repo (framework classes) are stored as
+    kind='external' symbols with a non-file path. The prune pass must never
+    treat them as stale, or every full run would drop all implements/extends
+    edges that point at framework types.
+    """
+    app = tmp_path / "app"
+    app.mkdir()
+    (app / "main.py").write_text(
+        "class Mixin:\n    pass\n\n\nclass Thing(Mixin, ExternalBase):\n    pass\n"
+    )
+
+    indexer.run(tmp_path)
+
+    externals = db.connection.execute(
+        "SELECT count(*) FROM symbols WHERE repo = ? AND kind = 'external'",
+        (REPO,),
+    ).fetchone()[0]
+    err = capsys.readouterr().err
+    assert "Pruned" not in err, f"fresh index must not prune: {err}"
+    if externals:
+        inh = db.connection.execute(
+            "SELECT count(*) FROM edges WHERE repo = ?"
+            " AND edge_type IN ('extends', 'implements')",
+            (REPO,),
+        ).fetchone()[0]
+        assert inh >= 1, "external stubs present but inheritance edges missing"
+    else:
+        # The Python analyzer may resolve in-file bases only; the guard is
+        # still exercised via the SQL filter — assert no stub was deleted by
+        # checking a manually inserted one survives a second run.
+        db.connection.execute(
+            "INSERT INTO symbols (repo, file_path, name, kind, line_start,"
+            " line_end, language, signature)"
+            " VALUES (?, '<external>', 'ExternalBase', 'external', 0, 0,"
+            " 'external', 'external ExternalBase')",
+            (REPO,),
+        )
+        db.connection.commit()
+        indexer.run(tmp_path)
+        survivors = db.connection.execute(
+            "SELECT count(*) FROM symbols WHERE repo = ? AND kind = 'external'",
+            (REPO,),
+        ).fetchone()[0]
+        assert survivors == 1, "external stub was pruned"
