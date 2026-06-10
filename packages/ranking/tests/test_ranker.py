@@ -916,7 +916,13 @@ def test_adaptive_topk_item_at_0_41_survives_plateau_cut() -> None:
     assert "b" in titles, "item at conf=0.41 should survive with ABS_FLOOR=0.40"
 
 
-def test_use_embeddings_default_is_true() -> None:
-    """use_embeddings defaults to True (v4.4 C2: semantic re-rank enabled by default)."""
+def test_use_embeddings_default_is_false() -> None:
+    """use_embeddings defaults to False (v4.5: C2 default-on re-judged).
+
+    The v4.4 C2 default-on was measured post index-hygiene on the 12-task
+    tuning set (2026-06-10): semantic-on scored avg F1 0.537 vs 0.613 for
+    lexical-only, so semantic re-ranking stays opt-in — matching the CLI
+    ``--with-semantic`` flag and the Orchestrator's explicit default.
+    """
     ranker = ContextRanker(token_budget=0)
-    assert ranker._use_embeddings is True
+    assert ranker._use_embeddings is False
