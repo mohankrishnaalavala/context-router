@@ -263,10 +263,15 @@ class SymbolWriter:
             if from_id is not None and to_id is not None:
                 resolved.append((edge, from_id, to_id))
 
-        if resolved:
-            self._edge_repo.add_bulk(resolved, repo)
+        # v4.6 A1: add_bulk pre-aggregates duplicate occurrences into a
+        # single weighted row, so the count it returns (unique rows
+        # written) is the honest "edges written" number — len(resolved)
+        # would overstate by the collapsed multiplicity.
+        edges_written = (
+            self._edge_repo.add_bulk(resolved, repo) if resolved else 0
+        )
 
-        return len(symbols), len(resolved)
+        return len(symbols), edges_written
 
     def finalize(self, repo: str) -> tuple[int, int]:
         """Run post-indexing passes: TESTED_BY link detection and community detection.

@@ -839,7 +839,12 @@ class SymbolRepository:
         rows = self._conn.execute(
             """
             WITH hot AS (
-                SELECT to_symbol_id AS sid, COUNT(*) AS inbound
+                -- v4.6 A1: degree = SUM(weight), not COUNT(*). Since
+                -- migration 0016 duplicate occurrences are collapsed into
+                -- one row carrying their summed weight, so counting rows
+                -- would flatten the repeat-reference signal.
+                SELECT to_symbol_id AS sid,
+                       CAST(SUM(weight) AS INTEGER) AS inbound
                 FROM edges
                 WHERE repo = ? AND edge_type IN ('calls', 'imports')
                 GROUP BY to_symbol_id
@@ -903,7 +908,12 @@ class EdgeRepository:
         from_id: int,
         to_id: int,
     ) -> int:
-        """Insert an edge row and return its rowid.
+        """Insert or replace an edge row and return its rowid.
+
+        Edges are unique per (repo, from_symbol_id, to_symbol_id,
+        edge_type) since migration 0016. A conflicting insert REPLACES the
+        stored weight (it does not accumulate) so the delete-then-insert
+        re-index path stays idempotent: same input twice = same DB state.
 
         Args:
             edge: The DependencyEdge to persist.
@@ -912,40 +922,69 @@ class EdgeRepository:
             to_id: Rowid of the target symbol.
 
         Returns:
-            The integer rowid of the inserted row.
+            The integer rowid of the inserted/updated row.
         """
-        cursor = self._conn.execute(
+        self._conn.execute(
             """
             INSERT INTO edges (repo, from_symbol_id, to_symbol_id, edge_type, weight)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo, from_symbol_id, to_symbol_id, edge_type)
+            DO UPDATE SET weight = excluded.weight
             """,
             (repo, from_id, to_id, edge.edge_type, edge.weight),
         )
         self._conn.commit()
-        return cursor.lastrowid  # type: ignore[return-value]
+        row = self._conn.execute(
+            "SELECT id FROM edges WHERE repo = ? AND from_symbol_id = ?"
+            " AND to_symbol_id = ? AND edge_type = ?",
+            (repo, from_id, to_id, edge.edge_type),
+        ).fetchone()
+        return row["id"]
 
     def add_bulk(
         self,
         edges_with_ids: list[tuple[DependencyEdge, int, int]],
         repo: str,
-    ) -> None:
-        """Insert multiple edges in a single transaction.
+    ) -> int:
+        """Insert multiple edges in a single transaction, deduplicated.
+
+        v4.6 A1 (DoD v4.6-edge-dedup): occurrences of the same logical edge
+        within the batch are pre-aggregated into a single row whose weight
+        is the SUM of the collapsed occurrences' weights — a file calling
+        the same function 10 times yields ONE row with weight 10, so the
+        repeat-reference signal survives as weight, not row multiplicity.
+
+        Conflicts with rows from earlier batches REPLACE the stored weight
+        (``DO UPDATE SET weight = excluded.weight``): the writer's
+        delete-then-insert re-index path means a conflict is a re-emission
+        of the same logical edge, and accumulating would break re-index
+        idempotency (same input twice must equal the same DB state).
 
         Args:
             edges_with_ids: List of (DependencyEdge, from_id, to_id) tuples.
             repo: Logical repository name.
+
+        Returns:
+            Number of unique edge rows written (post-aggregation).
         """
+        aggregated: dict[tuple[int, int, str], float] = {}
+        for edge, from_id, to_id in edges_with_ids:
+            key = (from_id, to_id, edge.edge_type)
+            aggregated[key] = aggregated.get(key, 0.0) + edge.weight
         self._conn.executemany(
             """
             INSERT INTO edges (repo, from_symbol_id, to_symbol_id, edge_type, weight)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo, from_symbol_id, to_symbol_id, edge_type)
+            DO UPDATE SET weight = excluded.weight
             """,
             [
-                (repo, from_id, to_id, edge.edge_type, edge.weight)
-                for edge, from_id, to_id in edges_with_ids
+                (repo, from_id, to_id, edge_type, weight)
+                for (from_id, to_id, edge_type), weight in aggregated.items()
             ],
         )
         self._conn.commit()
+        return len(aggregated)
 
     def delete_by_file(self, repo: str, file_path: str) -> None:
         """Delete all edges originating from symbols in a given file.
