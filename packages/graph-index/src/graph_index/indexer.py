@@ -22,6 +22,12 @@ from storage_sqlite.repositories import EdgeRepository, SymbolRepository
 from graph_index.scanner import FileScanner
 from graph_index.writer import SymbolWriter
 
+# Files per DELETE chunk when pruning. The edges DELETE binds each chunk
+# twice (from_symbol_id + to_symbol_id subqueries), so params per statement
+# is 2*chunk + 3. At 400 that is 803 — safely under the 999 bound-variable
+# limit of legacy SQLite builds (SQLITE_MAX_VARIABLE_NUMBER pre-3.32).
+_PRUNE_CHUNK_SIZE = 400
+
 
 @dataclass
 class IndexResult:
@@ -98,17 +104,20 @@ class Indexer:
                 result.errors.append(f"{file_path}: {exc}")
 
         result.duration_seconds = time.monotonic() - start
+        # Prune symbols (and their edges) from files that no longer pass the
+        # scanner filter — heals DBs polluted before the v4.5 ignore-pattern
+        # fix. Must run BEFORE finalize so TESTED_BY linking and community
+        # detection operate on the cleaned graph, not on thousands of junk
+        # symbols about to be deleted. Full runs only: run_incremental sees
+        # just the changed files, so pruning there would delete every other
+        # symbol in the repo.
+        self._prune_stale_files(eligible)
         # Post-indexing passes: TESTED_BY links + community detection
         try:
             tested_by, communities = self._writer.finalize(self._repo_name)
             result.edges_written += tested_by
         except Exception:  # noqa: BLE001
             pass
-        # Prune symbols (and their edges) from files that no longer pass the
-        # scanner filter — heals DBs polluted before the v4.5 ignore-pattern
-        # fix. Full runs only: run_incremental sees just the changed files,
-        # so pruning there would delete every other symbol in the repo.
-        self._prune_stale_files(eligible)
         return result
 
     def _prune_stale_files(self, eligible: set[str]) -> None:
@@ -140,9 +149,8 @@ class Indexer:
         if not stale:
             return
 
-        chunk_size = 500
-        for i in range(0, len(stale), chunk_size):
-            chunk = stale[i : i + chunk_size]
+        for i in range(0, len(stale), _PRUNE_CHUNK_SIZE):
+            chunk = stale[i : i + _PRUNE_CHUNK_SIZE]
             placeholders = ",".join("?" * len(chunk))
             conn.execute(
                 "DELETE FROM edges WHERE repo = ? AND ("

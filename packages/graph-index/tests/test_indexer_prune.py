@@ -96,8 +96,7 @@ def test_run_prunes_symbols_from_ignored_files(
     assert edge_count == 0, "edges referencing pruned symbols must be deleted"
 
     err = capsys.readouterr().err
-    assert "Pruned" in err
-    assert "1" in err
+    assert "Pruned 1 symbol file" in err
 
 
 def test_run_prunes_nothing_and_stays_silent_when_db_is_clean(
