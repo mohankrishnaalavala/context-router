@@ -481,3 +481,71 @@ def test_build_pack_applies_configured_confidence_weights(tmp_path: Path) -> Non
     # With BM25 boost the final confidence is 0.6*base + 0.4*bm25; since query
     # "task" doesn't match, bm25 = 0 → final = 0.6 * 0.42 = 0.252
     assert abs(fn_items[0].confidence - 0.252) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# Bug fix: capabilities.embeddings_enabled treated as config-level default
+# (no-silent-no-op rule) — when config sets embeddings_enabled=true the
+# Orchestrator must construct ContextRanker with use_embeddings=True even
+# when the caller did not pass use_embeddings explicitly.
+# ---------------------------------------------------------------------------
+
+def test_embeddings_enabled_config_activates_ranker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """capabilities.embeddings_enabled=true in config makes ContextRanker receive use_embeddings=True."""
+    from ranking.ranker import ContextRanker
+
+    root = _make_project(tmp_path)
+    # Write config that opts into semantic ranking.
+    (root / ".context-router" / "config.yaml").write_text(
+        "capabilities:\n  embeddings_enabled: true\n",
+        encoding="utf-8",
+    )
+
+    captured_kwargs: list[dict] = []
+    _original_init = ContextRanker.__init__
+
+    def _capture_init(self, **kwargs):  # type: ignore[override]
+        captured_kwargs.append(dict(kwargs))
+        # Immediately disable embeddings for the real init so no model download fires.
+        kwargs["use_embeddings"] = False
+        _original_init(self, **kwargs)
+
+    monkeypatch.setattr(ContextRanker, "__init__", _capture_init)
+
+    # Caller does NOT pass use_embeddings — the config value must activate it.
+    Orchestrator(project_root=root).build_pack("implement", "task")
+
+    assert captured_kwargs, "ContextRanker.__init__ was never called"
+    assert captured_kwargs[0].get("use_embeddings") is True, (
+        "expected ContextRanker to receive use_embeddings=True from config, "
+        f"got: {captured_kwargs[0]}"
+    )
+
+
+def test_embeddings_explicit_false_default_overridden_by_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without config flag, ContextRanker gets use_embeddings=False (default unchanged)."""
+    from ranking.ranker import ContextRanker
+
+    root = _make_project(tmp_path)
+    # No config.yaml → embeddings_enabled defaults to False.
+
+    captured_kwargs: list[dict] = []
+    _original_init = ContextRanker.__init__
+
+    def _capture_init(self, **kwargs):  # type: ignore[override]
+        captured_kwargs.append(dict(kwargs))
+        _original_init(self, **kwargs)
+
+    monkeypatch.setattr(ContextRanker, "__init__", _capture_init)
+
+    Orchestrator(project_root=root).build_pack("implement", "task")
+
+    assert captured_kwargs, "ContextRanker.__init__ was never called"
+    assert captured_kwargs[0].get("use_embeddings") is False, (
+        "expected ContextRanker to receive use_embeddings=False when config is absent, "
+        f"got: {captured_kwargs[0]}"
+    )
