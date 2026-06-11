@@ -32,12 +32,11 @@ def link_tests(
     Returns:
         Number of TESTED_BY edges written.
     """
-    all_symbols = sym_repo.get_all(repo)
-
     non_test_by_name: dict[str, int] = {}
     test_func_ids: dict[str, int] = {}
 
-    for sym in all_symbols:
+    # iter_all pages without a cap; get_all silently truncates at 10k rows.
+    for sym in sym_repo.iter_all(repo):
         sid = sym.id
         if sid is None:
             continue
