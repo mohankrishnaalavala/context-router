@@ -42,9 +42,13 @@ class TestCountByType:
         edge_repo = EdgeRepository(db.connection)
         a = sym_repo.add(_sym("a"), "r")
         b = sym_repo.add(_sym("b"), "r")
+        c = sym_repo.add(_sym("c"), "r")
         edge_repo.add_raw("r", a, b, "calls")
         edge_repo.add_raw("r", a, b, "tested_by")
+        # v4.6 A1: a duplicate (repo, from, to, type) insert is ignored —
+        # edges are unique per logical relationship since migration 0016.
         edge_repo.add_raw("r", a, b, "tested_by")
+        edge_repo.add_raw("r", a, c, "tested_by")
         assert edge_repo.count_by_type("r", "calls") == 1
         assert edge_repo.count_by_type("r", "tested_by") == 2
 

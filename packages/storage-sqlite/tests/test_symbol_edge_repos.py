@@ -236,7 +236,16 @@ class TestGetAdjacentFiles:
             (repo, "/src/a.py", "/src/a.py"),
         ).fetchall()
         plan_text = " ".join(str(row["detail"]) for row in plan)
-        assert "idx_edges_repo_from" in plan_text or "idx_edges_repo_to" in plan_text
+        # v4.6 A1: migration 0016 added UNIQUE(repo, from_symbol_id,
+        # to_symbol_id, edge_type), whose autoindex is a covering index the
+        # planner may legitimately prefer over idx_edges_repo_from/_to.
+        # The invariant under test is "no full scan of edges".
+        assert (
+            "idx_edges_repo_from" in plan_text
+            or "idx_edges_repo_to" in plan_text
+            or "sqlite_autoindex_edges" in plan_text
+        )
+        assert "SCAN e" not in plan_text
 
 
 class TestGetCallChainFiles:
