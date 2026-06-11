@@ -10,6 +10,7 @@ import json
 import re
 import sqlite3
 import sys
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -545,13 +546,35 @@ class SymbolRepository:
         ).fetchone()
         return row["id"] if row else None
 
+    @staticmethod
+    def _symbol_from_row(r: sqlite3.Row) -> Symbol:
+        """Hydrate a Symbol from a full symbols-table row.
+
+        Shared by :meth:`get_all` and :meth:`iter_all` so both APIs return
+        the exact same Symbol shape (including ``qualified_name``,
+        migration 0017).
+        """
+        return Symbol(
+            name=r["name"],
+            kind=r["kind"],
+            file=Path(r["file_path"]),
+            line_start=r["line_start"] or 0,
+            line_end=r["line_end"] or 0,
+            language=r["language"] or "",
+            signature=r["signature"] or "",
+            docstring=r["docstring"] or "",
+            community_id=r["community_id"],
+            id=r["id"],
+            qualified_name=r["qualified_name"] or r["name"],
+        )
+
     def get_all(self, repo: str, limit: int = 10_000) -> list[Symbol]:
         """Return all symbols for a repository, up to *limit* rows.
 
         Rows are returned in deterministic insertion order (``ORDER BY id``).
         If exactly *limit* rows come back, the result is assumed truncated and
         a warning is emitted to stderr — callers needing the full set must
-        page or raise the limit.
+        use :meth:`iter_all`, which pages without a cap.
 
         Args:
             repo: Logical repository name.
@@ -576,25 +599,52 @@ class SymbolRepository:
             print(
                 f"WARN: get_all hit the {limit}-row cap for repo '{repo}'; "
                 "results are a partial slice. Callers needing the full set "
-                "must page or raise the limit.",
+                "should use iter_all(), which pages without a cap.",
                 file=sys.stderr,
             )
-        return [
-            Symbol(
-                name=r["name"],
-                kind=r["kind"],
-                file=Path(r["file_path"]),
-                line_start=r["line_start"] or 0,
-                line_end=r["line_end"] or 0,
-                language=r["language"] or "",
-                signature=r["signature"] or "",
-                docstring=r["docstring"] or "",
-                community_id=r["community_id"],
-                id=r["id"],
-                qualified_name=r["qualified_name"] or r["name"],
-            )
-            for r in rows
-        ]
+        return [self._symbol_from_row(r) for r in rows]
+
+    def iter_all(self, repo: str, batch_size: int = 5000) -> Iterator[Symbol]:
+        """Yield every symbol for a repository in id order — no row cap.
+
+        Internal-pipeline API (v4.6 A4, DoD ``v4.6-getall-paging``): the
+        orchestrator's candidate assembly, community boost, flow annotation,
+        and grounding paths consume this instead of :meth:`get_all` so
+        ranking covers the full symbol set on >10k-symbol repos without
+        tripping the cap WARN.
+
+        Uses keyset pagination (``WHERE id > last_id ORDER BY id LIMIT
+        batch_size``) — never OFFSET, which degrades to O(n^2) over the
+        full scan. Returns the same Symbol shape as :meth:`get_all`.
+
+        Args:
+            repo: Logical repository name.
+            batch_size: Rows fetched per keyset page (default 5000).
+
+        Yields:
+            Symbol dataclass instances, ordered by id.
+        """
+        last_id = 0
+        while True:
+            rows = self._conn.execute(
+                """
+                SELECT id, name, kind, file_path, line_start, line_end,
+                       language, signature, docstring, community_id,
+                       COALESCE(qualified_name, name) AS qualified_name
+                FROM symbols
+                WHERE repo = ? AND id > ?
+                ORDER BY id
+                LIMIT ?
+                """,
+                (repo, last_id, batch_size),
+            ).fetchall()
+            if not rows:
+                return
+            for r in rows:
+                yield self._symbol_from_row(r)
+            last_id = rows[-1]["id"]
+            if len(rows) < batch_size:
+                return
 
     def get_for_files(self, repo: str, file_paths: list[str] | set[str]) -> list[Symbol]:
         """Return all symbols belonging to *file_paths*, bypassing the get_all cap.
