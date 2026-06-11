@@ -57,6 +57,40 @@ class CapabilitiesConfig(BaseModel):
     coupling_warn_threshold: int = 50
 
 
+class StalenessConfig(BaseModel):
+    """Pack-time index staleness self-heal (v4.6 B1).
+
+    Before assembling any pack the orchestrator compares stored per-file
+    fingerprints against disk. ``check: false`` disables the comparison
+    (a named stderr notice is emitted — never a silent no-op);
+    ``max_inline_reindex`` caps how many stale files are re-indexed
+    inline before the orchestrator falls back to a loud WARN suggesting
+    a full ``context-router index`` run.
+    """
+
+    check: bool = True
+    max_inline_reindex: int = 25
+
+    @field_validator("max_inline_reindex", mode="before")
+    @classmethod
+    def _validate_max_inline_reindex(cls, value: object) -> int:
+        try:
+            v = int(value)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            sys.stderr.write(
+                "warning: staleness.max_inline_reindex is not an integer; "
+                "using 25\n"
+            )
+            return 25
+        if v < 0:
+            sys.stderr.write(
+                "warning: staleness.max_inline_reindex must be >= 0; "
+                "using 25\n"
+            )
+            return 25
+        return v
+
+
 class ContextRouterConfig(BaseModel):
     """Project-level configuration for context-router."""
 
@@ -73,6 +107,9 @@ class ContextRouterConfig(BaseModel):
         default_factory=lambda: dict(_MODE_BUDGET_DEFAULTS)
     )
     capabilities: CapabilitiesConfig = Field(default_factory=CapabilitiesConfig)
+    # v4.6 B1: pack-time staleness self-heal knobs (`staleness.check`,
+    # `staleness.max_inline_reindex`). See StalenessConfig.
+    staleness: StalenessConfig = Field(default_factory=StalenessConfig)
     language_analyzers: list[str] = Field(default_factory=list)
     ignore_patterns: list[str] = Field(
         default_factory=lambda: [

@@ -852,6 +852,158 @@ class Orchestrator:
             )
 
     # ------------------------------------------------------------------
+    # Pack-time staleness self-heal (v4.6 B1)
+    # ------------------------------------------------------------------
+
+    def _self_heal_staleness(
+        self,
+        config: ContextRouterConfig,
+        db_path: Path,
+        repo_name: str = "default",
+    ) -> None:
+        """Detect and heal index drift before a pack is assembled.
+
+        Compares stored per-file fingerprints (``mtime_ns`` + ``size``,
+        recorded at index time — migration 0018) against disk:
+
+        * 0 stale files: return silently — the common case costs one
+          batched DB read plus an ``os.stat`` per indexed file.
+        * 1..``staleness.max_inline_reindex`` stale files: re-index
+          exactly those files inline (the watcher's per-file machinery:
+          delete old rows + re-analyze; deleted files just lose their
+          rows), drop the now-invalid pack caches, and emit
+          ``info: re-indexed K stale files`` to stderr.
+        * more than ``staleness.max_inline_reindex``: emit a WARN naming
+          the count and suggesting ``context-router index``; proceed with
+          the stale index — never silently.
+        * no fingerprints stored (index built pre-v4.6): WARN naming the
+          missing-fingerprint reason; behavior otherwise matches v4.5.
+        * ``staleness.check: false``: named stderr notice, no check.
+
+        New files never indexed are NOT discovered here — only a full
+        ``context-router index`` run picks those up (documented limitation).
+
+        Args:
+            config: Loaded project configuration (``config.staleness``).
+            db_path: Path to the index database (exists — checked by caller).
+            repo_name: Logical repo name; the orchestrator's single-repo
+                paths always use ``"default"``.
+        """
+        if not config.staleness.check:
+            print(
+                "notice: pack staleness check disabled "
+                "(config staleness.check=false); the pack may be built "
+                "from a stale index.",
+                file=sys.stderr,
+            )
+            return
+
+        import sqlite3
+
+        try:
+            with sqlite3.connect(db_path) as conn:
+                try:
+                    rows = conn.execute(
+                        "SELECT file_path, mtime_ns, size"
+                        " FROM file_fingerprints WHERE repo = ?",
+                        (repo_name,),
+                    ).fetchall()
+                except sqlite3.OperationalError:
+                    # Table missing: DB predates migration 0018 and has not
+                    # been opened through Database.initialize() yet.
+                    rows = []
+                has_symbols = (
+                    conn.execute(
+                        "SELECT 1 FROM symbols WHERE repo = ? LIMIT 1",
+                        (repo_name,),
+                    ).fetchone()
+                    is not None
+                )
+        except Exception as exc:  # noqa: BLE001 — check is best-effort
+            print(
+                "WARN: pack staleness check skipped — could not read "
+                f"freshness fingerprints ({exc}).",
+                file=sys.stderr,
+            )
+            return
+
+        if not rows:
+            if has_symbols:
+                print(
+                    "WARN: index has no freshness fingerprints — re-run "
+                    "'context-router index' to enable staleness self-heal.",
+                    file=sys.stderr,
+                )
+            # Empty index: nothing to be stale against; pack path warns
+            # about the missing/empty index on its own.
+            return
+
+        stale: list[Path] = []
+        for file_path, mtime_ns, size in rows:
+            try:
+                st = os.stat(file_path)
+            except OSError:
+                # Deleted (or unreadable) on disk — stale: its rows must go.
+                stale.append(Path(file_path))
+                continue
+            if st.st_mtime_ns != int(mtime_ns) or st.st_size != int(size):
+                stale.append(Path(file_path))
+
+        if not stale:
+            return
+
+        max_inline = config.staleness.max_inline_reindex
+        if len(stale) > max_inline:
+            print(
+                f"WARN: index is stale ({len(stale)} files changed) — "
+                "run 'context-router index'.",
+                file=sys.stderr,
+            )
+            return
+
+        # Inline re-index of exactly the stale files via the watcher's
+        # per-file machinery. Lazy import: graph_index depends on core, so
+        # a module-level import here would be circular at package init.
+        try:
+            from core.plugin_loader import PluginLoader
+            from graph_index.indexer import Indexer
+        except ImportError as exc:  # pragma: no cover — broken install
+            print(
+                f"WARN: index is stale ({len(stale)} files changed) but "
+                f"inline re-index is unavailable ({exc}) — run "
+                "'context-router index'.",
+                file=sys.stderr,
+            )
+            return
+
+        try:
+            with Database(db_path) as db:
+                loader = PluginLoader()
+                loader.discover()
+                indexer = Indexer(db, loader, config, repo_name)
+                result = indexer.run_incremental(stale)
+        except Exception as exc:  # noqa: BLE001 — never fail the pack
+            print(
+                f"WARN: inline re-index of {len(stale)} stale files failed "
+                f"({exc}) — run 'context-router index'; proceeding with "
+                "the stale index.",
+                file=sys.stderr,
+            )
+            return
+
+        for err in result.errors:
+            print(f"WARN: stale-file re-index error: {err}", file=sys.stderr)
+        # The healed rows invalidate every cached pack: the repo_id cache
+        # key usually rotates with the symbols-table shape, but a
+        # same-shape rewrite (e.g. one function edited in place) would
+        # collide with the pre-edit key — drop caches explicitly.
+        self.invalidate_cache(reason="staleness self-heal")
+        print(
+            f"info: re-indexed {len(stale)} stale files",
+            file=sys.stderr,
+        )
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -973,6 +1125,11 @@ class Orchestrator:
                 f"Index database not found at {db_path}. "
                 "Run 'context-router index' first."
             )
+
+        # v4.6 B1 (DoD v4.6-pack-staleness-selfheal): detect index drift
+        # BEFORE any cache lookup so a stale pack is never served. Small
+        # drift is healed inline; large drift warns loudly and proceeds.
+        self._self_heal_staleness(config, db_path)
 
         # Resolve the effective caller-level token budget. `None` means "use
         # config default" for backward compatibility. v4.4 precision-first:
