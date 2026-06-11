@@ -19,6 +19,7 @@ from cli.commands.eval_cmd import evaluation_app
 from cli.commands.explain import explain_app
 from cli.commands.feedback import feedback_app
 from cli.commands.graph import graph_app
+from cli.commands.hooks import hooks_app
 from cli.commands.index import index_app
 from cli.commands.init import init_app
 from cli.commands.mcp import mcp_app
@@ -98,6 +99,7 @@ app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(workspace_app, name="workspace")
 app.add_typer(setup_app, name="setup")
 app.add_typer(mcp_app, name="mcp")
+app.add_typer(hooks_app, name="hooks")
 app.add_typer(graph_app, name="graph")
 app.add_typer(audit_app, name="audit")
 app.add_typer(doctor_app, name="doctor")
