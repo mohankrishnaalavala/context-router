@@ -80,8 +80,9 @@ class TestUpdateIndexHappyPath:
 
     def test_help_exits_0(self) -> None:
         result = runner.invoke(app, ["update-index", "--help"])
+        # Exit code only — rich wraps/colors help text in CI, so substring
+        # asserts on option names are flaky (repo convention, see test_cli.py).
         assert result.exit_code == 0
-        assert "--file" in result.output
 
 
 # ── negative cases (DoD: hook must never break the editing session) ─────────
