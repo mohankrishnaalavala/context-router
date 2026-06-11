@@ -113,7 +113,9 @@ def _collect_entries(
     clutter the result.
     """
     try:
-        all_symbols = sym_repo.get_all(repo)
+        # v4.6 A4: iter_all pages without a cap so entry detection covers
+        # the full symbol set during pack-time flow annotation.
+        all_symbols = list(sym_repo.iter_all(repo))
     except Exception as exc:  # noqa: BLE001 — silent-failure contract
         print(
             f"warning: flows.list_flows: unable to load symbols for repo={repo!r}: {exc}",
@@ -328,7 +330,7 @@ def list_flows(
 
         # Pre-build id -> name lookup for cheap leaf labelling.
         try:
-            all_syms = sym_repo.get_all(repo)
+            all_syms = list(sym_repo.iter_all(repo))
         except Exception as exc:  # noqa: BLE001
             print(
                 f"warning: flows.list_flows: unable to load symbols (phase 2) "
