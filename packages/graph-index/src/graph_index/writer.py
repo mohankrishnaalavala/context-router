@@ -343,13 +343,17 @@ class SymbolWriter:
             if from_id is not None and to_id is not None:
                 resolved.append((edge, from_id, to_id))
 
-        # v4.6 A1: add_bulk pre-aggregates duplicate occurrences into a
-        # single weighted row, so the count it returns (unique rows
-        # written) is the honest "edges written" number — len(resolved)
-        # would overstate by the collapsed multiplicity.
-        edges_written = (
-            self._edge_repo.add_bulk(resolved, repo) if resolved else 0
-        )
+        if resolved:
+            self._edge_repo.add_bulk(resolved, repo)
+
+        # v4.6 A3 (DoD v4.6-edge-count-consistency): report the rows the
+        # database actually stores for this file, not the emission count.
+        # len(resolved) overstates by the duplicate multiplicity add_bulk
+        # collapses into weight (A1), and the batch may include edges
+        # anchored on other files' symbols via cross-file resolution —
+        # counting stored rows keeps "reported == stored" exact on the
+        # incremental (watcher) path too.
+        edges_written = self._edge_repo.count_for_file(repo, file_str)
 
         return len(symbols), edges_written
 

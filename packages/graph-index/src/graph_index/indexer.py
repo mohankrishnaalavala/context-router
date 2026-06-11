@@ -114,10 +114,18 @@ class Indexer:
         self._prune_stale_files(eligible)
         # Post-indexing passes: TESTED_BY links + community detection
         try:
-            tested_by, communities = self._writer.finalize(self._repo_name)
-            result.edges_written += tested_by
+            self._writer.finalize(self._repo_name)
         except Exception:  # noqa: BLE001
             pass
+        # v4.6 A3 (DoD v4.6-edge-count-consistency): the reported edge
+        # count is the post-dedup stored count — exactly what
+        # `SELECT count(*) FROM edges WHERE repo = ?` returns after the
+        # run. Accumulated per-file counts drift from storage (cross-file
+        # re-resolution on re-runs, finalize's tested_by links, pruning),
+        # which is how pydantic reported 24,718 / 27,915 while storing
+        # 24,253. Reading the total back from the DB makes reported ==
+        # stored by construction, identical on an immediate re-run.
+        result.edges_written = self._edge_repo.count(self._repo_name)
         return result
 
     def _prune_stale_files(self, eligible: set[str]) -> None:

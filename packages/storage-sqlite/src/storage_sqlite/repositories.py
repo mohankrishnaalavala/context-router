@@ -1201,6 +1201,35 @@ class EdgeRepository:
         ).fetchone()
         return row[0]
 
+    def count_for_file(self, repo: str, file_path: str) -> int:
+        """Return the stored edge rows anchored on *file_path*'s symbols.
+
+        v4.6 A3 (DoD v4.6-edge-count-consistency): the per-file count an
+        incremental index reports must be the rows the database actually
+        stores for that file — same anchoring rule as
+        :meth:`delete_by_file` (``from_symbol_id`` in the file), so
+        "reported delta" and "rows replaced on re-index" describe the
+        same set.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Path string matching the symbols.file_path column.
+
+        Returns:
+            Integer row count.
+        """
+        row = self._conn.execute(
+            """
+            SELECT COUNT(*) FROM edges
+            WHERE repo = ?
+              AND from_symbol_id IN (
+                  SELECT id FROM symbols WHERE repo = ? AND file_path = ?
+              )
+            """,
+            (repo, repo, file_path),
+        ).fetchone()
+        return row[0]
+
     def count_by_type(self, repo: str, edge_type: str) -> int:
         """Return the number of edges of a given type for a repository.
 
