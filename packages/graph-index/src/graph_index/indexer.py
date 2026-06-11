@@ -17,7 +17,11 @@ from contracts.config import ContextRouterConfig
 from contracts.interfaces import LanguageAnalyzer
 from core.plugin_loader import PluginLoader
 from storage_sqlite.database import Database
-from storage_sqlite.repositories import EdgeRepository, SymbolRepository
+from storage_sqlite.repositories import (
+    EdgeRepository,
+    FileFingerprintRepository,
+    SymbolRepository,
+)
 
 from graph_index.scanner import FileScanner
 from graph_index.writer import SymbolWriter
@@ -72,7 +76,22 @@ class Indexer:
         self._repo_name = repo_name
         self._sym_repo = SymbolRepository(db.connection)
         self._edge_repo = EdgeRepository(db.connection)
+        self._fp_repo = FileFingerprintRepository(db.connection)
         self._writer = SymbolWriter(self._sym_repo, self._edge_repo)
+
+    @staticmethod
+    def _stat_fingerprint(path: Path) -> tuple[int, int] | None:
+        """Return ``(mtime_ns, size)`` for *path*, or None if unreadable.
+
+        Captured BEFORE analysis so a write racing the indexer leaves the
+        file looking stale (self-heals on the next pack) rather than
+        looking fresh while the stored rows describe older content.
+        """
+        try:
+            st = path.stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size)
 
     def run(self, root: Path) -> IndexResult:
         """Full index: scan all files under root and write to DB.
@@ -89,6 +108,11 @@ class Indexer:
         scanner = FileScanner(root, self._config.ignore_patterns, self._plugin_loader)
 
         eligible: set[str] = set()
+        # v4.6 B1 (DoD v4.6-pack-staleness-selfheal): per-file freshness
+        # fingerprints, captured pre-analysis and committed as one atomic
+        # replace at the end of the run so pruned/ignored files lose their
+        # rows in the same transaction.
+        fingerprints: dict[str, tuple[int, int]] = {}
         for file_path, ext in scanner.scan():
             eligible.add(str(file_path))
             result.files_scanned += 1
@@ -96,10 +120,16 @@ class Indexer:
                 analyzer: LanguageAnalyzer | None = self._plugin_loader.get_analyzer(ext)
                 if analyzer is None:
                     continue
+                fingerprint = self._stat_fingerprint(file_path)
                 analysis = analyzer.analyze(file_path)
                 syms, edges = self._writer.write_file_results(self._repo_name, analysis, file_path)
                 result.symbols_written += syms
                 result.edges_written += edges
+                # Record only on success: a failed file keeps no (or a
+                # stale) fingerprint, so pack-time self-heal retries it
+                # loudly instead of trusting rows that were never written.
+                if fingerprint is not None:
+                    fingerprints[str(file_path)] = fingerprint
             except Exception as exc:  # noqa: BLE001
                 result.errors.append(f"{file_path}: {exc}")
 
@@ -112,6 +142,10 @@ class Indexer:
         # just the changed files, so pruning there would delete every other
         # symbol in the repo.
         self._prune_stale_files(eligible)
+        # Replace the repo's fingerprint set with exactly the files this
+        # run indexed — files that disappeared or became ignored drop out
+        # here, mirroring the symbol prune above.
+        self._fp_repo.replace_all(self._repo_name, fingerprints)
         # Post-indexing passes: TESTED_BY links + community detection
         try:
             self._writer.finalize(self._repo_name)
@@ -207,9 +241,11 @@ class Indexer:
 
         for file_path in changed_files:
             if not file_path.is_file():
-                # Deleted — clean up existing records
+                # Deleted — clean up existing records (incl. fingerprint so
+                # pack-time staleness checks stop tracking the file).
                 self._sym_repo.delete_by_file(self._repo_name, str(file_path))
                 self._edge_repo.delete_by_file(self._repo_name, str(file_path))
+                self._fp_repo.delete(self._repo_name, str(file_path))
                 continue
 
             ext = file_path.suffix.lstrip(".")
@@ -219,10 +255,15 @@ class Indexer:
 
             result.files_scanned += 1
             try:
+                fingerprint = self._stat_fingerprint(file_path)
                 analysis = analyzer.analyze(file_path)
                 syms, edges = self._writer.write_file_results(self._repo_name, analysis, file_path)
                 result.symbols_written += syms
                 result.edges_written += edges
+                if fingerprint is not None:
+                    self._fp_repo.upsert(
+                        self._repo_name, str(file_path), *fingerprint
+                    )
             except Exception as exc:  # noqa: BLE001
                 result.errors.append(f"{file_path}: {exc}")
 
@@ -243,7 +284,10 @@ class Indexer:
             return
 
         try:
+            fingerprint = self._stat_fingerprint(path)
             analysis = analyzer.analyze(path)
             self._writer.write_file_results(self._repo_name, analysis, path)
+            if fingerprint is not None:
+                self._fp_repo.upsert(self._repo_name, str(path), *fingerprint)
         except Exception:  # noqa: BLE001
             pass  # Watcher must not crash on a single bad file

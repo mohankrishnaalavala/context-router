@@ -64,6 +64,9 @@ class _DebounceHandler(FileSystemEventHandler):
             self._indexer._edge_repo.delete_by_file(
                 self._indexer._repo_name, path
             )
+            # v4.6 B1: drop the freshness fingerprint too, or every
+            # subsequent pack would see the deleted file as stale.
+            self._indexer._fp_repo.delete(self._indexer._repo_name, path)
             print(f"[context-router] removed {path}", file=sys.stderr)
         else:
             self._indexer.index_file(file_path)

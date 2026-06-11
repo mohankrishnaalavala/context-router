@@ -88,6 +88,10 @@ class TestPackCache:
                     "modes": {},
                     "confidence_weights": {},
                     "capabilities": type("C", (), {"llm_summarization": False, "embeddings_enabled": False})(),
+                    # v4.6 B1: build_pack consults config.staleness before
+                    # the cache lookup. The fixture DB is a fake byte blob,
+                    # so the check warns-and-skips without touching ranking.
+                    "staleness": type("S", (), {"check": True, "max_inline_reindex": 25})(),
                     "memory": type("M", (), {"recency_weight": 0.0})(),
                 },
             )(),

@@ -2014,3 +2014,85 @@ class EmbeddingRepository:
                 (repo, model),
             ).fetchone()
         return int(row[0]) if row else 0
+
+
+class FileFingerprintRepository:
+    """Typed access to the ``file_fingerprints`` table (migration 0018).
+
+    v4.6 B1 (DoD ``v4.6-pack-staleness-selfheal``): the indexer stores one
+    ``(mtime_ns, size)`` row per successfully indexed file so the
+    orchestrator can detect stale files at pack time with a single batched
+    read plus one ``os.stat`` per file. Content is never re-hashed on the
+    fresh path — mtime/size equality is the freshness contract.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open SQLite connection."""
+        self._conn = conn
+
+    def upsert(self, repo: str, file_path: str, mtime_ns: int, size: int) -> None:
+        """Insert or replace the fingerprint for one file.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Absolute path of the indexed file (string form).
+            mtime_ns: ``os.stat().st_mtime_ns`` captured before analysis.
+            size: ``os.stat().st_size`` captured before analysis.
+        """
+        self._conn.execute(
+            "INSERT OR REPLACE INTO file_fingerprints"
+            " (repo, file_path, mtime_ns, size) VALUES (?, ?, ?, ?)",
+            (repo, file_path, mtime_ns, size),
+        )
+        self._conn.commit()
+
+    def replace_all(
+        self, repo: str, fingerprints: dict[str, tuple[int, int]]
+    ) -> None:
+        """Atomically replace every fingerprint row for *repo*.
+
+        Used by full index runs: the recorded set is exactly the files the
+        run indexed, so rows for pruned/ignored/deleted files disappear in
+        the same transaction.
+
+        Args:
+            repo: Logical repository name.
+            fingerprints: ``{file_path: (mtime_ns, size)}`` for every file
+                successfully indexed by this run.
+        """
+        self._conn.execute(
+            "DELETE FROM file_fingerprints WHERE repo = ?", (repo,)
+        )
+        self._conn.executemany(
+            "INSERT OR REPLACE INTO file_fingerprints"
+            " (repo, file_path, mtime_ns, size) VALUES (?, ?, ?, ?)",
+            [
+                (repo, path, mtime_ns, size)
+                for path, (mtime_ns, size) in fingerprints.items()
+            ],
+        )
+        self._conn.commit()
+
+    def get_all(self, repo: str) -> dict[str, tuple[int, int]]:
+        """Return ``{file_path: (mtime_ns, size)}`` for every row in *repo*."""
+        rows = self._conn.execute(
+            "SELECT file_path, mtime_ns, size FROM file_fingerprints"
+            " WHERE repo = ?",
+            (repo,),
+        ).fetchall()
+        return {row[0]: (int(row[1]), int(row[2])) for row in rows}
+
+    def delete(self, repo: str, file_path: str) -> None:
+        """Delete the fingerprint row for one file (deleted-on-disk path)."""
+        self._conn.execute(
+            "DELETE FROM file_fingerprints WHERE repo = ? AND file_path = ?",
+            (repo, file_path),
+        )
+        self._conn.commit()
+
+    def count(self, repo: str) -> int:
+        """Return the number of fingerprint rows stored for *repo*."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM file_fingerprints WHERE repo = ?", (repo,)
+        ).fetchone()
+        return int(row[0]) if row else 0
