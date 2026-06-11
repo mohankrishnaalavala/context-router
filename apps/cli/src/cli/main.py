@@ -25,6 +25,7 @@ from cli.commands.mcp import mcp_app
 from cli.commands.memory import memory_app
 from cli.commands.pack import pack_app
 from cli.commands.setup import setup_app
+from cli.commands.update_index import update_index_app
 from cli.commands.watch import watch_app
 from cli.commands.workspace import workspace_app
 
@@ -84,6 +85,7 @@ def _root(
 
 app.add_typer(init_app, name="init")
 app.add_typer(index_app, name="index")
+app.add_typer(update_index_app, name="update-index")
 app.add_typer(watch_app, name="watch")
 app.add_typer(embed_app, name="embed")
 app.add_typer(evaluation_app, name="eval")
