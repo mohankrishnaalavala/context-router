@@ -75,6 +75,10 @@ def _stub_config(monkeypatch: pytest.MonkeyPatch, token_budget: int = 8_000) -> 
                 "modes": {},
                 "confidence_weights": {},
                 "capabilities": type("C", (), {"llm_summarization": False, "embeddings_enabled": False})(),
+                # v4.6 B1: build_pack consults config.staleness before the
+                # cache lookup; the seeded DBs have no symbols, so the check
+                # stays silent with the production default (check=True).
+                "staleness": type("S", (), {"check": True, "max_inline_reindex": 25})(),
                 "memory": type("M", (), {"recency_weight": 0.0})(),
             },
         )(),

@@ -143,7 +143,11 @@ def _inbound_degrees(
     try:
         rows = conn.execute(
             """
-            SELECT to_symbol_id, COUNT(*) AS n
+            -- v4.6 A1: degree = SUM(weight), not COUNT(*) — migration 0016
+            -- collapses duplicate edge rows into one row whose weight is
+            -- the occurrence count, so row counting would flatten the
+            -- "(inbound=N)" hub annotation.
+            SELECT to_symbol_id, CAST(SUM(weight) AS INTEGER) AS n
             FROM edges
             WHERE repo = ?
               AND edge_type IN ('calls', 'imports', 'extends', 'implements')

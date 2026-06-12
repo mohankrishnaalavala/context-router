@@ -32,6 +32,12 @@ class Symbol:
     docstring: str = ""
     community_id: int | None = None
     id: int | None = None
+    # v4.6 A2 (DoD v4.6-symbol-qualification): scope-qualified identity,
+    # e.g. ``test_a.Model`` for a class defined inside ``test_a``. Empty
+    # string means "same as name" (module-level, unqualified). ``name``
+    # stays the short display name so retrieval by short name keeps
+    # matching.
+    qualified_name: str = ""
 
 
 @dataclass

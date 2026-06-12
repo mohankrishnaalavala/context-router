@@ -89,21 +89,21 @@ def test_fts_anchor_recovers_gt_symbol_outside_truncated_slice(
     """
     root = _make_project_with_fts_only_target(tmp_path, decoy_count=300)
 
-    orig_get_all = SymbolRepository.get_all
-
-    def truncated_get_all(self, repo, limit=10):  # noqa: ARG001
+    # v4.6 A4: the orchestrator's base scan is now ``iter_all`` (uncapped),
+    # so to keep exercising the FTS-recovery path we truncate THAT scan.
+    def truncated_iter_all(self, repo, batch_size=5000):  # noqa: ARG001
         # Cap to 50 rows AND order by id DESC so the GT row (id=1) is
-        # guaranteed to fall outside the slice — this mirrors the real bug
-        # where get_all returns whichever 10K rows SQLite chose without
-        # ORDER BY, leaving the orchestrator blind to the rest.
+        # guaranteed to fall outside the slice — this mirrors the original
+        # bug where the base scan returned whichever rows SQLite chose,
+        # leaving the orchestrator blind to the rest.
         rows = self._conn.execute(
             "SELECT id, name, kind, file_path, line_start, line_end,"
             " language, signature, docstring, community_id"
             " FROM symbols WHERE repo = ? ORDER BY id DESC LIMIT ?",
             (repo, 50),
         ).fetchall()
-        return [
-            Symbol(
+        for r in rows:
+            yield Symbol(
                 name=r["name"],
                 kind=r["kind"],
                 file=Path(r["file_path"]),
@@ -115,10 +115,8 @@ def test_fts_anchor_recovers_gt_symbol_outside_truncated_slice(
                 community_id=r["community_id"],
                 id=r["id"],
             )
-            for r in rows
-        ]
 
-    monkeypatch.setattr(SymbolRepository, "get_all", truncated_get_all)
+    monkeypatch.setattr(SymbolRepository, "iter_all", truncated_iter_all)
 
     pack = Orchestrator(project_root=root).build_pack(
         "implement",
@@ -133,8 +131,6 @@ def test_fts_anchor_recovers_gt_symbol_outside_truncated_slice(
         f"selected={selected_paths!r}"
     )
 
-    # Restore so other tests aren't affected.
-    monkeypatch.setattr(SymbolRepository, "get_all", orig_get_all)
 
 
 def test_fts_zero_hits_emits_stderr_warning(
@@ -142,18 +138,20 @@ def test_fts_zero_hits_emits_stderr_warning(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """When FTS returns 0 matches AND get_all hit its cap, we must warn.
+    """When FTS returns 0 matches on a >=10K-symbol repo, we must warn.
 
-    The CLAUDE.md no-silent-failures rule applies here because that is the
-    exact scenario where the FTS path was *supposed* to recover the GT
-    symbol — the user is on a large monorepo, the cap silently truncates
-    rows, and FTS missed too. We do NOT warn on small repos where the
-    miss has no observable effect (covered by the blank-query test).
+    The CLAUDE.md no-silent-failures rule applies here because on a large
+    monorepo the FTS anchor is what orients ranking toward the query — a
+    zero-hit means the query terms matched nothing in the index and the
+    pool degrades to unanchored heuristics. We do NOT warn on small repos
+    where the miss has no observable effect (covered by the blank-query
+    test).
     """
     root = _make_project_with_fts_only_target(tmp_path, decoy_count=5)
 
-    # Pin get_all to >=10K rows so the warning's gate fires. We don't need
-    # 10K real symbols — we just need len(get_all_result) >= 10000.
+    # Pin iter_all (v4.6 A4: the pipeline's base scan) to >=10K rows so the
+    # warning's large-repo gate fires. We don't need 10K real symbols — we
+    # just need the consumed set to reach 10000.
     fake_rows = [
         Symbol(
             name=f"row_{i}",
@@ -167,7 +165,9 @@ def test_fts_zero_hits_emits_stderr_warning(
         for i in range(10_000)
     ]
     monkeypatch.setattr(
-        SymbolRepository, "get_all", lambda self, repo, limit=10_000: fake_rows
+        SymbolRepository,
+        "iter_all",
+        lambda self, repo, batch_size=5000: iter(fake_rows),
     )
 
     Orchestrator(project_root=root).build_pack(

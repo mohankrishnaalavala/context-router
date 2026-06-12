@@ -1,9 +1,34 @@
 # context-router Roadmap
-<!-- Last updated: 2026-06-10 · v4.4.5 shipped · v4.5.0 in progress -->
+<!-- Last updated: 2026-06-10 · v4.5.0 shipped · v4.6.0 in progress -->
 
 ---
 
-## Current: v4.4.5 ✅ (2026-05-30)
+## In progress: v4.6.0 — Hands-Free Context
+
+**Design spec:** [`docs/design/v4.6-hands-free-context.md`](design/v4.6-hands-free-context.md) · **DoD:** `docs/release/v4-outcomes.yaml` ids `v4.6-*`
+
+Phase A — graph accuracy (edge dedup + weight semantics, scope-qualified
+symbol identity, edge-count consistency, full-set ranking past the 10k cap,
+ground-truth edge precision/recall audit). Phase B — auto-fresh index
+(pack-time staleness self-heal, `hooks install` for Claude Code).
+
+Split decision (2026-06-10): auto-save observations + memory health and the
+localhost savings dashboard moved to **v4.7.0** ("visible memory"). Plan:
+`docs/superpowers/plans/2026-06-10-v4.6-roadmap.md`.
+
+---
+
+## Shipped: v4.5.0 ✅ (2026-06-10) — Trustworthy Context
+
+Index hygiene (20 default ignore patterns, doctor check), real graph
+rendering (+ `--json -o` fix), end-to-end token benchmark, retrieval
+re-baseline (F1 0.613). Release-gated on a real-world validation: pydantic
+issue #13215, ground-truth file rank 3/37, ~94.5% end-to-end token
+reduction ([report](../benchmarks/realworld-pydantic-13215.md)).
+
+---
+
+## Shipped: v4.4.5 ✅ (2026-05-30)
 
 Packaging hotfix. Drops the unpublished `context-router-evaluation` dep that broke clean-machine installs; adds issue-reporting docs (GitHub templates, SECURITY.md, CONTRIBUTING.md). See [CHANGELOG](../CHANGELOG.md) for full details.
 
@@ -24,24 +49,6 @@ v4.3 staleness-detection and memory-federation scope was reviewed in 2026-05 and
 ## Shipped: v4.2.0 ✅ (2026-04-24)
 
 Memory quality release. Shipped: memory sub-budget cap (15%), adaptive top-k confidence pruning, observation provenance (`committed`/`staged`/`branch_local`), `budget.memory_ratio` in all JSON outputs.
-
----
-
-## In progress: v4.5.0 — Trustworthy Context
-
-**Design spec:** [`docs/design/v4.5-trustworthy-context.md`](design/v4.5-trustworthy-context.md)
-
-**Four workstreams:**
-
-1. **Index hygiene** ✅ shipped to `develop` — `ignore_patterns` expanded to 20 defaults (`.venv*`, `node_modules`, `vendor`, `dist`, `build`, `target`, `site-packages`, `*.min.js`, `*.min.css`, and more). Index-time prune, `doctor` check for stale paths.
-
-2. **Graph trustworthiness** — `context-router graph` renders own-code symbols. `graph --json -o <file>` writes the file (was a silent no-op). Polluted index causes a named warning.
-
-3. **End-to-end token benchmark** — Pack tokens + downstream read tokens + model-judge sufficiency across n ≥ 12 holdout tasks. Headline stat updated to end-to-end.
-
-4. **Retrieval re-baseline** — Post-hygiene F1 0.613 (up from 0.394 pre-hygiene). See [`docs/eval/2026-06-10-v4.5-phase-c-rebaseline.md`](eval/2026-06-10-v4.5-phase-c-rebaseline.md).
-
-**Ship gate:** `scripts/smoke-v4.5.sh` — all gates pass.
 
 ---
 
@@ -94,10 +101,18 @@ This is the "Semantic staleness" scope from the v4 design doc §6.2. It is delib
 
 ---
 
-## v4.6 candidates (not scheduled)
+## v4.7.0 — Visible Memory (planned, not started)
 
-These features are excluded from v4.5 scope but are the leading candidates for v4.6:
+Split out of the v4.6 plan (2026-06-10). Scope per
+`docs/superpowers/plans/2026-06-10-v4.6-roadmap.md` Phases C + D:
 
-- **Hook / passive interception mode** — watch editor events and auto-update the index without a manual `context-router index` call
-- **`pack-content-by-default`** — return symbol bodies in packs without requiring `--with-symbols`; controlled by a config flag
-- **Workspace semantic opt-in flag** — `--semantic-workspace` enables cross-repo embedding similarity for memory federation (BM25 remains the default)
+- **Auto-save observations** — `hooks install` adds a SessionEnd hook →
+  `memory capture --auto` (derived from git diff + recent pack queries; a
+  floor, not a replacement for hand-written observations)
+- **Memory health in `doctor`** — warns when commits outpace observations;
+  provenance mix; orphaned files_touched ratio
+- **Local savings dashboard** — `pack_events` telemetry table +
+  `context-router dashboard` (stdlib http.server, localhost-only)
+
+Still unscheduled: `pack-content-by-default`, workspace semantic opt-in,
+multi-repo federation (deferred by user decision 2026-06-10).

@@ -89,6 +89,60 @@ extra installed the flag degrades loudly and correctly (see below).
    (duplicate payload); MCP emits only `selected_items`. Pick one and
    document it.
 
+## v4.6 re-validation (2026-06-11, develop post-Phase A)
+
+Re-indexed the same clone (`a20c0ee`) with the Phase A build (edge dedup
++ UNIQUE constraint, scope-qualified symbol identity, honest counts,
+iter_all paging) and re-ran the full-issue-body pack.
+
+**Findings 1–3 above are confirmed fixed:**
+
+- **No `get_all` cap WARN** during `index` on the 15,623-symbol repo
+  (finding 1). The only WARN was the intentional, loud
+  `0017_symbol_qualified_name` pack-cache discard.
+- **0% duplicate edge rows** (was 37.56% redundant). The 161 identical
+  `Model → extends → BaseModel` rows from `tests/test_types.py` are now
+  161 *distinct* edges from 161 scope-qualified `Model` symbols
+  (finding 2).
+- **Reported == stored:** `Indexed 561 files — 15,623 symbols, 17,425
+  edges`; DB holds exactly 17,425 edge rows and 15,623 non-`<external>`
+  symbols (finding 3).
+
+**Pack result (same protocol: full issue body, implement mode):**
+
+| Metric | v4.5.0 | v4.6 (post-Phase A) |
+|---|---:|---:|
+| Items | 37 | 37 |
+| Pack tokens | 4,811 | 4,803 |
+| GT file rank (`_internal/_generics.py`) | **3** | **6** |
+| GT function pointer | `create_generic_submodel` 105–149 | `create_generic_submodel` 105–149 (unchanged, exact) |
+
+**The `rank <= 3` ship-gate claim does NOT hold post-fix: rank is 6/37**
+(stable across repeated runs). The function-level pointer is still
+exact and the file is still in the top 16% of the pack. Ranks 4–5 are
+`get_name` symbols from `pydantic-core/src/**/*.rs` at confidence
+0.821 vs the ground truth's 0.819 — a 0.002 gap. Root cause verified:
+NOT degree inflation (the `.rs` `get_name` symbols have zero inbound
+edges) and NOT vendor pollution (`pydantic-core/` is git-tracked in
+the pydantic repo at this commit — it's a monorepo, so the Rust
+sources are legitimately own-code). The Rust items rank on
+content/contract relevance despite the query being a plainly Python
+issue (a `.py` traceback). The honest v4.5 comparison: rank 3 sat
+partly on duplicate-edge degree inflation that A1/A2 removed.
+
+**Adjudication (owner-approved 2026-06-11, v4.6.0 release):**
+re-baseline the gate to "GT file in top 6 of 37 with exact function
+pointer" — met (rank 6, `create_generic_submodel` lines 105–149 exact,
+4,803 tokens). **Cross-language query affinity** (down-weight files
+whose language cannot match a language-explicit query) is filed for
+v4.7 alongside the resolution-quality work — measured against the full
+holdout eval, not this single task, to avoid overfitting the benchmark.
+
+Secondary note: a debug-mode pack with the same query (no error file)
+returns 7 items / 1,304 tokens without the GT file — debug mode keys on
+runtime signals that this query lacks; it was not the gated metric in
+v4.5 and is recorded here only for completeness.
+
 ## Verdict
 
 **PASS — safe to tag v4.5.0.** On a real, unseen repo and a real issue,

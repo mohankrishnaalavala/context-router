@@ -19,12 +19,14 @@ from cli.commands.eval_cmd import evaluation_app
 from cli.commands.explain import explain_app
 from cli.commands.feedback import feedback_app
 from cli.commands.graph import graph_app
+from cli.commands.hooks import hooks_app
 from cli.commands.index import index_app
 from cli.commands.init import init_app
 from cli.commands.mcp import mcp_app
 from cli.commands.memory import memory_app
 from cli.commands.pack import pack_app
 from cli.commands.setup import setup_app
+from cli.commands.update_index import update_index_app
 from cli.commands.watch import watch_app
 from cli.commands.workspace import workspace_app
 
@@ -84,6 +86,7 @@ def _root(
 
 app.add_typer(init_app, name="init")
 app.add_typer(index_app, name="index")
+app.add_typer(update_index_app, name="update-index")
 app.add_typer(watch_app, name="watch")
 app.add_typer(embed_app, name="embed")
 app.add_typer(evaluation_app, name="eval")
@@ -96,6 +99,7 @@ app.add_typer(benchmark_app, name="benchmark")
 app.add_typer(workspace_app, name="workspace")
 app.add_typer(setup_app, name="setup")
 app.add_typer(mcp_app, name="mcp")
+app.add_typer(hooks_app, name="hooks")
 app.add_typer(graph_app, name="graph")
 app.add_typer(audit_app, name="audit")
 app.add_typer(doctor_app, name="doctor")

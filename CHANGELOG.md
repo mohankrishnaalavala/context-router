@@ -7,6 +7,63 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [4.6.0] — 2026-06-11 — "Hands-Free Context"
+
+### Fixed
+- **Edge dedup with weight semantics (P0).** The `edges` table now enforces
+  `UNIQUE (repo, from_symbol_id, to_symbol_id, edge_type)` (migration 0016);
+  repeated occurrences collapse into a single row whose `weight` carries the
+  multiplicity, and degree-based ranking (hub scores, wiki inbound degrees)
+  reads `SUM(weight)` instead of row counts. Before: 37.6% of pydantic's and
+  24.3% of this repo's edge rows were duplicates (worst case 161 identical
+  `extends → BaseModel` rows). After: 0% in both.
+- **Scope-qualified symbol identity (P0).** Same-named symbols defined at
+  different scopes in one file (e.g. hundreds of `class Model(BaseModel)`
+  in one test file) are distinct symbols with distinct edges
+  (`Symbol.qualified_name`, migration 0017). Short-name retrieval is
+  unchanged. Stale pack caches are discarded with a named warning.
+  Graph-level effect on pydantic: distinct `extends` edges +84%.
+- **Honest edge counts.** The summary printed by `index` now equals the
+  stored row count, on first runs, re-runs, and the per-file incremental
+  path (was: 24,718 reported / 27,915 on re-run / 24,253 stored).
+- **Full-set ranking past the 10k cap (P0).** New
+  `SymbolRepository.iter_all()` (keyset paging, no cap) feeds every internal
+  consumer — candidate assembly, community boost, call chains, grounding,
+  debug flows, community detection, test linking. On a 15.6k-symbol repo,
+  `index` and `pack` no longer warn about a partial slice; `get_all` keeps
+  its cap + loud WARN for external callers.
+
+### Added
+- **Pack-time staleness self-heal (P0).** Every pack (CLI, MCP, workspace)
+  compares per-file fingerprints recorded at index time (migration 0018)
+  against disk: up to `staleness.max_inline_reindex` (default 25) changed
+  files are re-indexed inline (`info: re-indexed N stale files`); larger
+  drift warns loudly and proceeds; missing fingerprints (pre-4.6 index) and
+  `staleness.check: false` are named, never silent. New files still require
+  a full `index` run (documented limitation).
+- **`context-router hooks install|uninstall|status`.** One command installs
+  a Claude Code `PostToolUse` hook that keeps the index fresh on every
+  Edit/Write. Idempotent (second run byte-identical), merges with existing
+  user hooks, uninstall removes only context-router entries, `--global`
+  targets `~/.claude/settings.json`.
+- **`context-router update-index --file <path>`.** Single-file incremental
+  index update for editor hooks: always exits 0 with a named stderr reason
+  on every skip path (outside root, non-indexable extension, missing DB) so
+  it can never break an editing session.
+- **Graph ground-truth accuracy audit.** Hand-verified 31-symbol baseline +
+  post-fix eval (`docs/eval/2026-06-10-v4.6-graph-accuracy.md`): calls
+  P 0.83 / R 0.35; import-edge attribution and bare-name resolution defects
+  documented and deferred to v4.7 with rationale.
+- **Ship-gate smoke** `scripts/smoke-v4.6.sh` (7 gates, all green).
+
+### Changed
+- Pydantic #13215 real-world re-validation: pack tokens 4,803 (was 4,811),
+  ground-truth function pointer still exact; ground-truth file rank moved
+  3 → 6 of 37 — honest dedup removed duplicate-inflated degree signal
+  (confidence gap to ranks 4–5: 0.002). Adjudication proposal recorded in
+  `benchmarks/realworld-pydantic-13215.md`; cross-language query affinity
+  filed for v4.7.
+
 ## [4.5.0] — 2026-06-10 — "Trustworthy Context"
 
 ### Fixed

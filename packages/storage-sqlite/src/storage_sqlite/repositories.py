@@ -10,6 +10,7 @@ import json
 import re
 import sqlite3
 import sys
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -367,8 +368,8 @@ class SymbolRepository:
             """
             INSERT INTO symbols
                 (repo, file_path, name, kind, line_start, line_end,
-                 language, signature, docstring)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 language, signature, docstring, qualified_name)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 repo,
@@ -380,26 +381,33 @@ class SymbolRepository:
                 sym.language,
                 sym.signature,
                 sym.docstring,
+                sym.qualified_name or sym.name,
             ),
         )
         self._conn.commit()
         return cursor.lastrowid  # type: ignore[return-value]
 
-    def add_bulk(self, syms: list[Symbol], repo: str) -> None:
+    def add_bulk(self, syms: list[Symbol], repo: str) -> list[int]:
         """Insert multiple symbols in a single transaction.
 
         Args:
             syms: List of Symbol objects to insert.
             repo: Logical repository name.
+
+        Returns:
+            The inserted rowids, in the same order as *syms* — the writer
+            needs per-occurrence ids so same-named symbols at different
+            definition sites stay distinct identities (v4.6 A2).
         """
-        self._conn.executemany(
-            """
-            INSERT INTO symbols
-                (repo, file_path, name, kind, line_start, line_end,
-                 language, signature, docstring)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            [
+        ids: list[int] = []
+        for s in syms:
+            cursor = self._conn.execute(
+                """
+                INSERT INTO symbols
+                    (repo, file_path, name, kind, line_start, line_end,
+                     language, signature, docstring, qualified_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (
                     repo,
                     str(s.file),
@@ -410,11 +418,12 @@ class SymbolRepository:
                     s.language,
                     s.signature,
                     s.docstring,
-                )
-                for s in syms
-            ],
-        )
+                    s.qualified_name or s.name,
+                ),
+            )
+            ids.append(cursor.lastrowid)  # type: ignore[arg-type]
         self._conn.commit()
+        return ids
 
     def delete_by_file(self, repo: str, file_path: str) -> None:
         """Delete all symbols for a given file (used before incremental re-index).
@@ -442,7 +451,8 @@ class SymbolRepository:
         rows = self._conn.execute(
             """
             SELECT id, name, kind, file_path, line_start, line_end,
-                   language, signature, docstring, community_id
+                   language, signature, docstring, community_id,
+                   COALESCE(qualified_name, name) AS qualified_name
             FROM symbols
             WHERE repo = ? AND file_path = ?
             """,
@@ -460,6 +470,7 @@ class SymbolRepository:
                 docstring=r["docstring"] or "",
                 community_id=r["community_id"],
                 id=r["id"],
+                qualified_name=r["qualified_name"] or r["name"],
             )
             for r in rows
         ]
@@ -535,13 +546,35 @@ class SymbolRepository:
         ).fetchone()
         return row["id"] if row else None
 
+    @staticmethod
+    def _symbol_from_row(r: sqlite3.Row) -> Symbol:
+        """Hydrate a Symbol from a full symbols-table row.
+
+        Shared by :meth:`get_all` and :meth:`iter_all` so both APIs return
+        the exact same Symbol shape (including ``qualified_name``,
+        migration 0017).
+        """
+        return Symbol(
+            name=r["name"],
+            kind=r["kind"],
+            file=Path(r["file_path"]),
+            line_start=r["line_start"] or 0,
+            line_end=r["line_end"] or 0,
+            language=r["language"] or "",
+            signature=r["signature"] or "",
+            docstring=r["docstring"] or "",
+            community_id=r["community_id"],
+            id=r["id"],
+            qualified_name=r["qualified_name"] or r["name"],
+        )
+
     def get_all(self, repo: str, limit: int = 10_000) -> list[Symbol]:
         """Return all symbols for a repository, up to *limit* rows.
 
         Rows are returned in deterministic insertion order (``ORDER BY id``).
         If exactly *limit* rows come back, the result is assumed truncated and
         a warning is emitted to stderr — callers needing the full set must
-        page or raise the limit.
+        use :meth:`iter_all`, which pages without a cap.
 
         Args:
             repo: Logical repository name.
@@ -553,7 +586,8 @@ class SymbolRepository:
         rows = self._conn.execute(
             """
             SELECT id, name, kind, file_path, line_start, line_end,
-                   language, signature, docstring, community_id
+                   language, signature, docstring, community_id,
+                   COALESCE(qualified_name, name) AS qualified_name
             FROM symbols
             WHERE repo = ?
             ORDER BY id
@@ -565,24 +599,52 @@ class SymbolRepository:
             print(
                 f"WARN: get_all hit the {limit}-row cap for repo '{repo}'; "
                 "results are a partial slice. Callers needing the full set "
-                "must page or raise the limit.",
+                "should use iter_all(), which pages without a cap.",
                 file=sys.stderr,
             )
-        return [
-            Symbol(
-                name=r["name"],
-                kind=r["kind"],
-                file=Path(r["file_path"]),
-                line_start=r["line_start"] or 0,
-                line_end=r["line_end"] or 0,
-                language=r["language"] or "",
-                signature=r["signature"] or "",
-                docstring=r["docstring"] or "",
-                community_id=r["community_id"],
-                id=r["id"],
-            )
-            for r in rows
-        ]
+        return [self._symbol_from_row(r) for r in rows]
+
+    def iter_all(self, repo: str, batch_size: int = 5000) -> Iterator[Symbol]:
+        """Yield every symbol for a repository in id order — no row cap.
+
+        Internal-pipeline API (v4.6 A4, DoD ``v4.6-getall-paging``): the
+        orchestrator's candidate assembly, community boost, flow annotation,
+        and grounding paths consume this instead of :meth:`get_all` so
+        ranking covers the full symbol set on >10k-symbol repos without
+        tripping the cap WARN.
+
+        Uses keyset pagination (``WHERE id > last_id ORDER BY id LIMIT
+        batch_size``) — never OFFSET, which degrades to O(n^2) over the
+        full scan. Returns the same Symbol shape as :meth:`get_all`.
+
+        Args:
+            repo: Logical repository name.
+            batch_size: Rows fetched per keyset page (default 5000).
+
+        Yields:
+            Symbol dataclass instances, ordered by id.
+        """
+        last_id = 0
+        while True:
+            rows = self._conn.execute(
+                """
+                SELECT id, name, kind, file_path, line_start, line_end,
+                       language, signature, docstring, community_id,
+                       COALESCE(qualified_name, name) AS qualified_name
+                FROM symbols
+                WHERE repo = ? AND id > ?
+                ORDER BY id
+                LIMIT ?
+                """,
+                (repo, last_id, batch_size),
+            ).fetchall()
+            if not rows:
+                return
+            for r in rows:
+                yield self._symbol_from_row(r)
+            last_id = rows[-1]["id"]
+            if len(rows) < batch_size:
+                return
 
     def get_for_files(self, repo: str, file_paths: list[str] | set[str]) -> list[Symbol]:
         """Return all symbols belonging to *file_paths*, bypassing the get_all cap.
@@ -600,7 +662,8 @@ class SymbolRepository:
         rows = self._conn.execute(
             f"""
             SELECT id, name, kind, file_path, line_start, line_end,
-                   language, signature, docstring, community_id
+                   language, signature, docstring, community_id,
+                   COALESCE(qualified_name, name) AS qualified_name
             FROM symbols
             WHERE repo = ? AND file_path IN ({placeholders})
             """,
@@ -618,6 +681,7 @@ class SymbolRepository:
                 docstring=r["docstring"] or "",
                 community_id=r["community_id"],
                 id=r["id"],
+                qualified_name=r["qualified_name"] or r["name"],
             )
             for r in rows
         ]
@@ -659,7 +723,8 @@ class SymbolRepository:
 
         sql = """
             SELECT s.id, s.name, s.kind, s.file_path, s.line_start, s.line_end,
-                   s.language, s.signature, s.docstring, s.community_id
+                   s.language, s.signature, s.docstring, s.community_id,
+                   COALESCE(s.qualified_name, s.name) AS qualified_name
             FROM symbols_fts AS f
             JOIN symbols AS s ON s.id = f.rowid
             WHERE f.symbols_fts MATCH ?
@@ -690,6 +755,7 @@ class SymbolRepository:
                 docstring=r["docstring"] or "",
                 community_id=r["community_id"],
                 id=r["id"],
+                qualified_name=r["qualified_name"] or r["name"],
             )
             for r in rows
         ]
@@ -839,7 +905,12 @@ class SymbolRepository:
         rows = self._conn.execute(
             """
             WITH hot AS (
-                SELECT to_symbol_id AS sid, COUNT(*) AS inbound
+                -- v4.6 A1: degree = SUM(weight), not COUNT(*). Since
+                -- migration 0016 duplicate occurrences are collapsed into
+                -- one row carrying their summed weight, so counting rows
+                -- would flatten the repeat-reference signal.
+                SELECT to_symbol_id AS sid,
+                       CAST(SUM(weight) AS INTEGER) AS inbound
                 FROM edges
                 WHERE repo = ? AND edge_type IN ('calls', 'imports')
                 GROUP BY to_symbol_id
@@ -903,7 +974,12 @@ class EdgeRepository:
         from_id: int,
         to_id: int,
     ) -> int:
-        """Insert an edge row and return its rowid.
+        """Insert or replace an edge row and return its rowid.
+
+        Edges are unique per (repo, from_symbol_id, to_symbol_id,
+        edge_type) since migration 0016. A conflicting insert REPLACES the
+        stored weight (it does not accumulate) so the delete-then-insert
+        re-index path stays idempotent: same input twice = same DB state.
 
         Args:
             edge: The DependencyEdge to persist.
@@ -912,40 +988,69 @@ class EdgeRepository:
             to_id: Rowid of the target symbol.
 
         Returns:
-            The integer rowid of the inserted row.
+            The integer rowid of the inserted/updated row.
         """
-        cursor = self._conn.execute(
+        self._conn.execute(
             """
             INSERT INTO edges (repo, from_symbol_id, to_symbol_id, edge_type, weight)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo, from_symbol_id, to_symbol_id, edge_type)
+            DO UPDATE SET weight = excluded.weight
             """,
             (repo, from_id, to_id, edge.edge_type, edge.weight),
         )
         self._conn.commit()
-        return cursor.lastrowid  # type: ignore[return-value]
+        row = self._conn.execute(
+            "SELECT id FROM edges WHERE repo = ? AND from_symbol_id = ?"
+            " AND to_symbol_id = ? AND edge_type = ?",
+            (repo, from_id, to_id, edge.edge_type),
+        ).fetchone()
+        return row["id"]
 
     def add_bulk(
         self,
         edges_with_ids: list[tuple[DependencyEdge, int, int]],
         repo: str,
-    ) -> None:
-        """Insert multiple edges in a single transaction.
+    ) -> int:
+        """Insert multiple edges in a single transaction, deduplicated.
+
+        v4.6 A1 (DoD v4.6-edge-dedup): occurrences of the same logical edge
+        within the batch are pre-aggregated into a single row whose weight
+        is the SUM of the collapsed occurrences' weights — a file calling
+        the same function 10 times yields ONE row with weight 10, so the
+        repeat-reference signal survives as weight, not row multiplicity.
+
+        Conflicts with rows from earlier batches REPLACE the stored weight
+        (``DO UPDATE SET weight = excluded.weight``): the writer's
+        delete-then-insert re-index path means a conflict is a re-emission
+        of the same logical edge, and accumulating would break re-index
+        idempotency (same input twice must equal the same DB state).
 
         Args:
             edges_with_ids: List of (DependencyEdge, from_id, to_id) tuples.
             repo: Logical repository name.
+
+        Returns:
+            Number of unique edge rows written (post-aggregation).
         """
+        aggregated: dict[tuple[int, int, str], float] = {}
+        for edge, from_id, to_id in edges_with_ids:
+            key = (from_id, to_id, edge.edge_type)
+            aggregated[key] = aggregated.get(key, 0.0) + edge.weight
         self._conn.executemany(
             """
             INSERT INTO edges (repo, from_symbol_id, to_symbol_id, edge_type, weight)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(repo, from_symbol_id, to_symbol_id, edge_type)
+            DO UPDATE SET weight = excluded.weight
             """,
             [
-                (repo, from_id, to_id, edge.edge_type, edge.weight)
-                for edge, from_id, to_id in edges_with_ids
+                (repo, from_id, to_id, edge_type, weight)
+                for (from_id, to_id, edge_type), weight in aggregated.items()
             ],
         )
         self._conn.commit()
+        return len(aggregated)
 
     def delete_by_file(self, repo: str, file_path: str) -> None:
         """Delete all edges originating from symbols in a given file.
@@ -1143,6 +1248,35 @@ class EdgeRepository:
         """Return the total number of edges for a repository."""
         row = self._conn.execute(
             "SELECT COUNT(*) FROM edges WHERE repo = ?", (repo,)
+        ).fetchone()
+        return row[0]
+
+    def count_for_file(self, repo: str, file_path: str) -> int:
+        """Return the stored edge rows anchored on *file_path*'s symbols.
+
+        v4.6 A3 (DoD v4.6-edge-count-consistency): the per-file count an
+        incremental index reports must be the rows the database actually
+        stores for that file — same anchoring rule as
+        :meth:`delete_by_file` (``from_symbol_id`` in the file), so
+        "reported delta" and "rows replaced on re-index" describe the
+        same set.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Path string matching the symbols.file_path column.
+
+        Returns:
+            Integer row count.
+        """
+        row = self._conn.execute(
+            """
+            SELECT COUNT(*) FROM edges
+            WHERE repo = ?
+              AND from_symbol_id IN (
+                  SELECT id FROM symbols WHERE repo = ? AND file_path = ?
+              )
+            """,
+            (repo, repo, file_path),
         ).fetchone()
         return row[0]
 
@@ -1879,4 +2013,86 @@ class EmbeddingRepository:
                 "SELECT COUNT(*) FROM embeddings WHERE repo = ? AND model = ?",
                 (repo, model),
             ).fetchone()
+        return int(row[0]) if row else 0
+
+
+class FileFingerprintRepository:
+    """Typed access to the ``file_fingerprints`` table (migration 0018).
+
+    v4.6 B1 (DoD ``v4.6-pack-staleness-selfheal``): the indexer stores one
+    ``(mtime_ns, size)`` row per successfully indexed file so the
+    orchestrator can detect stale files at pack time with a single batched
+    read plus one ``os.stat`` per file. Content is never re-hashed on the
+    fresh path — mtime/size equality is the freshness contract.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        """Initialize with an open SQLite connection."""
+        self._conn = conn
+
+    def upsert(self, repo: str, file_path: str, mtime_ns: int, size: int) -> None:
+        """Insert or replace the fingerprint for one file.
+
+        Args:
+            repo: Logical repository name.
+            file_path: Absolute path of the indexed file (string form).
+            mtime_ns: ``os.stat().st_mtime_ns`` captured before analysis.
+            size: ``os.stat().st_size`` captured before analysis.
+        """
+        self._conn.execute(
+            "INSERT OR REPLACE INTO file_fingerprints"
+            " (repo, file_path, mtime_ns, size) VALUES (?, ?, ?, ?)",
+            (repo, file_path, mtime_ns, size),
+        )
+        self._conn.commit()
+
+    def replace_all(
+        self, repo: str, fingerprints: dict[str, tuple[int, int]]
+    ) -> None:
+        """Atomically replace every fingerprint row for *repo*.
+
+        Used by full index runs: the recorded set is exactly the files the
+        run indexed, so rows for pruned/ignored/deleted files disappear in
+        the same transaction.
+
+        Args:
+            repo: Logical repository name.
+            fingerprints: ``{file_path: (mtime_ns, size)}`` for every file
+                successfully indexed by this run.
+        """
+        self._conn.execute(
+            "DELETE FROM file_fingerprints WHERE repo = ?", (repo,)
+        )
+        self._conn.executemany(
+            "INSERT OR REPLACE INTO file_fingerprints"
+            " (repo, file_path, mtime_ns, size) VALUES (?, ?, ?, ?)",
+            [
+                (repo, path, mtime_ns, size)
+                for path, (mtime_ns, size) in fingerprints.items()
+            ],
+        )
+        self._conn.commit()
+
+    def get_all(self, repo: str) -> dict[str, tuple[int, int]]:
+        """Return ``{file_path: (mtime_ns, size)}`` for every row in *repo*."""
+        rows = self._conn.execute(
+            "SELECT file_path, mtime_ns, size FROM file_fingerprints"
+            " WHERE repo = ?",
+            (repo,),
+        ).fetchall()
+        return {row[0]: (int(row[1]), int(row[2])) for row in rows}
+
+    def delete(self, repo: str, file_path: str) -> None:
+        """Delete the fingerprint row for one file (deleted-on-disk path)."""
+        self._conn.execute(
+            "DELETE FROM file_fingerprints WHERE repo = ? AND file_path = ?",
+            (repo, file_path),
+        )
+        self._conn.commit()
+
+    def count(self, repo: str) -> int:
+        """Return the number of fingerprint rows stored for *repo*."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM file_fingerprints WHERE repo = ?", (repo,)
+        ).fetchone()
         return int(row[0]) if row else 0

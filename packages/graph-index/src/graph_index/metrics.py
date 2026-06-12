@@ -62,9 +62,13 @@ def compute_hub_scores(
         _debug("hub: db_connection is None; returning {}")
         return {}
 
+    # v4.6 A1 (DoD v4.6-edge-dedup): inbound degree = SUM(weight), not
+    # COUNT(*). Migration 0016 collapses duplicate occurrences into one
+    # row carrying their summed weight; counting rows would flatten the
+    # repeat-reference ranking signal.
     placeholders = ",".join("?" for _ in _HUB_EDGE_KINDS)
     query = (
-        "SELECT to_symbol_id, COUNT(*) "
+        "SELECT to_symbol_id, SUM(weight) "
         "FROM edges "
         f"WHERE repo = ? AND edge_type IN ({placeholders}) "
         "  AND to_symbol_id IS NOT NULL "
@@ -83,7 +87,8 @@ def compute_hub_scores(
         return {}
 
     # sqlite3.Row / tuple both index-accessible with [0] and [1].
-    degrees: list[tuple[int, int]] = [(int(r[0]), int(r[1])) for r in rows]
+    # Weighted degree is a REAL (SUM of edge weights), so keep it float.
+    degrees: list[tuple[int, float]] = [(int(r[0]), float(r[1])) for r in rows]
     max_deg = max(d for _, d in degrees)
     if max_deg <= 0:
         return {}

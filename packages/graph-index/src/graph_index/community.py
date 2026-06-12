@@ -68,11 +68,8 @@ def compute_communities(
     Returns:
         Number of distinct communities found.
     """
-    all_symbols = sym_repo.get_all(repo)
-    if not all_symbols:
-        return 0
-
-    sym_ids = [sym.id for sym in all_symbols if sym.id is not None]
+    # iter_all pages without a cap; get_all silently truncates at 10k rows.
+    sym_ids = [sym.id for sym in sym_repo.iter_all(repo) if sym.id is not None]
     if not sym_ids:
         return 0
 

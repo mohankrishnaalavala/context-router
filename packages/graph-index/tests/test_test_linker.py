@@ -92,3 +92,43 @@ def test_link_tests_multiple_matches(repos):
 
     count = link_tests(repo, sym_repo, edge_repo)
     assert count == 2
+
+
+def test_getall_paging_link_tests_cover_full_symbol_set(
+    repos, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """v4.6 A4 follow-up: test linking pages past the get_all cap.
+
+    24 decoys are inserted first so both ``process`` and ``test_process``
+    land beyond a 10-row get_all cap. iter_all (forced to page with
+    batch_size=7) must still see them and emit the tested_by edge.
+    """
+    sym_repo, edge_repo = repos
+    repo = "big-repo"
+    cap = 10
+    for i in range(24):
+        sym_repo.add(_make_symbol(f"decoy_{i}", "function", f"/src/decoy_{i}.py"), repo)
+    sym_repo.add(_make_symbol("process", "function", "/src/app.py"), repo)
+    sym_repo.add(_make_symbol("test_process", "function", "/tests/test_app.py"), repo)
+
+    orig_get_all = SymbolRepository.get_all
+    orig_iter_all = SymbolRepository.iter_all
+
+    def capped_get_all(self, repo, limit=cap):
+        return orig_get_all(self, repo, limit)
+
+    def small_batch_iter_all(self, repo, batch_size=7):
+        return orig_iter_all(self, repo, batch_size=batch_size)
+
+    monkeypatch.setattr(SymbolRepository, "get_all", capped_get_all)
+    monkeypatch.setattr(SymbolRepository, "iter_all", small_batch_iter_all)
+
+    count = link_tests(repo, sym_repo, edge_repo)
+
+    captured = capsys.readouterr()
+    assert "WARN: get_all" not in captured.err, (
+        f"test linking still consumed capped get_all: {captured.err!r}"
+    )
+    assert count == 1  # process ↔ test_process matched beyond the cap
+    edges = edge_repo.get_all_edges(repo)
+    assert len(edges) == 1

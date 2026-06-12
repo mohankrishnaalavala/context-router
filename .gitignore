@@ -233,6 +233,10 @@ internal_docs/*
 !.context-router/memory/
 .context-router/memory/*
 !.context-router/memory/observations/
+# Nested .context-router dirs (test fixtures, eval clones) are generated
+# state with no tracked observations — ignore them wholesale. The root
+# rules above are anchored by their inner slash and don't cover these.
+*/**/.context-router/
 
 # Local agent-machine state — generated per-clone, never tracked.
 # Tracked exceptions are listed via "!" so they survive (docs-agent.md, ship-check

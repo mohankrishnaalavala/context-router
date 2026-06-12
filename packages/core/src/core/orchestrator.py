@@ -852,6 +852,158 @@ class Orchestrator:
             )
 
     # ------------------------------------------------------------------
+    # Pack-time staleness self-heal (v4.6 B1)
+    # ------------------------------------------------------------------
+
+    def _self_heal_staleness(
+        self,
+        config: ContextRouterConfig,
+        db_path: Path,
+        repo_name: str = "default",
+    ) -> None:
+        """Detect and heal index drift before a pack is assembled.
+
+        Compares stored per-file fingerprints (``mtime_ns`` + ``size``,
+        recorded at index time — migration 0018) against disk:
+
+        * 0 stale files: return silently — the common case costs one
+          batched DB read plus an ``os.stat`` per indexed file.
+        * 1..``staleness.max_inline_reindex`` stale files: re-index
+          exactly those files inline (the watcher's per-file machinery:
+          delete old rows + re-analyze; deleted files just lose their
+          rows), drop the now-invalid pack caches, and emit
+          ``info: re-indexed K stale files`` to stderr.
+        * more than ``staleness.max_inline_reindex``: emit a WARN naming
+          the count and suggesting ``context-router index``; proceed with
+          the stale index — never silently.
+        * no fingerprints stored (index built pre-v4.6): WARN naming the
+          missing-fingerprint reason; behavior otherwise matches v4.5.
+        * ``staleness.check: false``: named stderr notice, no check.
+
+        New files never indexed are NOT discovered here — only a full
+        ``context-router index`` run picks those up (documented limitation).
+
+        Args:
+            config: Loaded project configuration (``config.staleness``).
+            db_path: Path to the index database (exists — checked by caller).
+            repo_name: Logical repo name; the orchestrator's single-repo
+                paths always use ``"default"``.
+        """
+        if not config.staleness.check:
+            print(
+                "notice: pack staleness check disabled "
+                "(config staleness.check=false); the pack may be built "
+                "from a stale index.",
+                file=sys.stderr,
+            )
+            return
+
+        import sqlite3
+
+        try:
+            with sqlite3.connect(db_path) as conn:
+                try:
+                    rows = conn.execute(
+                        "SELECT file_path, mtime_ns, size"
+                        " FROM file_fingerprints WHERE repo = ?",
+                        (repo_name,),
+                    ).fetchall()
+                except sqlite3.OperationalError:
+                    # Table missing: DB predates migration 0018 and has not
+                    # been opened through Database.initialize() yet.
+                    rows = []
+                has_symbols = (
+                    conn.execute(
+                        "SELECT 1 FROM symbols WHERE repo = ? LIMIT 1",
+                        (repo_name,),
+                    ).fetchone()
+                    is not None
+                )
+        except Exception as exc:  # noqa: BLE001 — check is best-effort
+            print(
+                "WARN: pack staleness check skipped — could not read "
+                f"freshness fingerprints ({exc}).",
+                file=sys.stderr,
+            )
+            return
+
+        if not rows:
+            if has_symbols:
+                print(
+                    "WARN: index has no freshness fingerprints — re-run "
+                    "'context-router index' to enable staleness self-heal.",
+                    file=sys.stderr,
+                )
+            # Empty index: nothing to be stale against; pack path warns
+            # about the missing/empty index on its own.
+            return
+
+        stale: list[Path] = []
+        for file_path, mtime_ns, size in rows:
+            try:
+                st = os.stat(file_path)
+            except OSError:
+                # Deleted (or unreadable) on disk — stale: its rows must go.
+                stale.append(Path(file_path))
+                continue
+            if st.st_mtime_ns != int(mtime_ns) or st.st_size != int(size):
+                stale.append(Path(file_path))
+
+        if not stale:
+            return
+
+        max_inline = config.staleness.max_inline_reindex
+        if len(stale) > max_inline:
+            print(
+                f"WARN: index is stale ({len(stale)} files changed) — "
+                "run 'context-router index'.",
+                file=sys.stderr,
+            )
+            return
+
+        # Inline re-index of exactly the stale files via the watcher's
+        # per-file machinery. Lazy import: graph_index depends on core, so
+        # a module-level import here would be circular at package init.
+        try:
+            from core.plugin_loader import PluginLoader
+            from graph_index.indexer import Indexer
+        except ImportError as exc:  # pragma: no cover — broken install
+            print(
+                f"WARN: index is stale ({len(stale)} files changed) but "
+                f"inline re-index is unavailable ({exc}) — run "
+                "'context-router index'.",
+                file=sys.stderr,
+            )
+            return
+
+        try:
+            with Database(db_path) as db:
+                loader = PluginLoader()
+                loader.discover()
+                indexer = Indexer(db, loader, config, repo_name)
+                result = indexer.run_incremental(stale)
+        except Exception as exc:  # noqa: BLE001 — never fail the pack
+            print(
+                f"WARN: inline re-index of {len(stale)} stale files failed "
+                f"({exc}) — run 'context-router index'; proceeding with "
+                "the stale index.",
+                file=sys.stderr,
+            )
+            return
+
+        for err in result.errors:
+            print(f"WARN: stale-file re-index error: {err}", file=sys.stderr)
+        # The healed rows invalidate every cached pack: the repo_id cache
+        # key usually rotates with the symbols-table shape, but a
+        # same-shape rewrite (e.g. one function edited in place) would
+        # collide with the pre-edit key — drop caches explicitly.
+        self.invalidate_cache(reason="staleness self-heal")
+        print(
+            f"info: re-indexed {len(stale)} stale files",
+            file=sys.stderr,
+        )
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -973,6 +1125,11 @@ class Orchestrator:
                 f"Index database not found at {db_path}. "
                 "Run 'context-router index' first."
             )
+
+        # v4.6 B1 (DoD v4.6-pack-staleness-selfheal): detect index drift
+        # BEFORE any cache lookup so a stale pack is never served. Small
+        # drift is healed inline; large drift warns loudly and proceeds.
+        self._self_heal_staleness(config, db_path)
 
         # Resolve the effective caller-level token budget. `None` means "use
         # config default" for backward compatibility. v4.4 precision-first:
@@ -1657,15 +1814,16 @@ class Orchestrator:
         repo_name: str,
         ensure_paths: set[str],
     ) -> list[Any]:
-        """Return ``sym_repo.get_all`` plus any symbols for *ensure_paths*.
+        """Return the full symbol set plus any symbols for *ensure_paths*.
 
-        ``get_all`` caps at 10k symbols silently, so on large repos
-        (django: 43k) files outside the cap are invisible to the candidate
-        builder — including ``changed_files``. This helper unions the
-        cap-bounded result with a targeted lookup for paths the caller
-        cares about, deduping by symbol identity.
+        v4.6 A4 (DoD ``v4.6-getall-paging``): consumes ``iter_all`` (keyset
+        paging, no cap) so large repos (django: 43k) are fully visible to
+        the candidate builder — including ``changed_files``. The
+        ``ensure_paths`` union is kept as a safety net: if the scan misses
+        a path the caller cares about, a targeted lookup fills it in,
+        deduping by file identity.
         """
-        all_symbols = sym_repo.get_all(repo_name)
+        all_symbols = list(sym_repo.iter_all(repo_name))
         if not ensure_paths:
             return all_symbols
         seen_files = {str(s.file) for s in all_symbols}
@@ -1693,7 +1851,7 @@ class Orchestrator:
             return items
         file_to_community: dict[str, int] = {}
         try:
-            for sym in sym_repo.get_all(repo_name):
+            for sym in sym_repo.iter_all(repo_name):
                 if sym.community_id is None:
                     continue
                 key = str(sym.file)
@@ -2312,7 +2470,7 @@ class Orchestrator:
         # Build a (file_path, symbol_name) -> symbol_id lookup so we can map
         # items back to symbols without a per-item SQL roundtrip.
         try:
-            all_symbols = sym_repo.get_all(repo_name)
+            all_symbols = list(sym_repo.iter_all(repo_name))
         except Exception as exc:  # noqa: BLE001 — silent-failure contract
             print(
                 f"warning: debug flow annotation skipped "
@@ -2725,30 +2883,34 @@ class Orchestrator:
 
         v4.4.4 Phase 4 — FTS5-anchored retrieval: when ``query`` is provided
         and there is no diff anchor, the orchestrator unions the BM25 top-N
-        symbols matching the query (via ``SymbolRepository.search_fts``) with
-        the existing ``get_all`` 10K slice. Without this, ``get_all`` silently
-        truncates large repos (k8s: 197K symbols) so the GT file is never a
-        candidate. Both halves of the union get the v4.4.3 source/test
-        asymmetry multiplier so tests don't outrank production sources at
-        equal base score.
+        symbols matching the query (via ``SymbolRepository.search_fts``)
+        with the full symbol set. v4.6 A4 replaced the capped ``get_all``
+        10K slice with ``iter_all`` keyset paging, so even large repos
+        (k8s: 197K symbols) contribute every symbol to the pool. Both
+        halves of the union get the v4.4.3 source/test asymmetry multiplier
+        so tests don't outrank production sources at equal base score.
         """
         # Pull FTS-matched symbols first so we can prefer them on dedupe (the
         # FTS match implies the symbol is more relevant to the user's intent
-        # than an arbitrary row from the truncated 10K slice).
+        # than an arbitrary row from the full scan).
         fts_symbols: list[Any] = []
         query_stripped = query.strip() if query else ""
         if query_stripped:
             fts_symbols = sym_repo.search_fts(query_stripped, repo=repo_name, limit=200)
 
-        all_symbols = sym_repo.get_all(repo_name)
+        # v4.6 A4: iter_all pages without a cap, so the pool always covers
+        # the full symbol set — no partial-slice blind spot, no cap WARN.
+        all_symbols = list(sym_repo.iter_all(repo_name))
 
-        # CLAUDE.md: no silent failures — when the FTS path was exercised but
-        # returned nothing AND get_all hit its 10K cap (so the GT row may
-        # well be invisible), name the reason on stderr. We do NOT warn on
-        # small repos where get_all already covers everything: there the
-        # FTS miss has no observable effect, so warning would just be noise
-        # (and would break callers like the typer CliRunner that capture
-        # stderr into stdout).
+        # CLAUDE.md: no silent failures — when the FTS path was exercised
+        # but returned nothing on a large (>=10K-symbol) repo, name the
+        # reason on stderr: the query terms matched no indexed symbol, so
+        # ranking degrades to heuristic classification over the full set
+        # instead of a BM25-anchored pool (v4.4.4 honesty contract). We do
+        # NOT warn on small repos: there the heuristic scan is exhaustive
+        # and cheap, so the FTS miss has no observable effect and warning
+        # would just be noise (and would break callers like the typer
+        # CliRunner that capture stderr into stdout).
         if (
             query_stripped
             and not fts_symbols
@@ -2756,9 +2918,10 @@ class Orchestrator:
         ):
             print(
                 "context-router: FTS5 implement-mode anchor returned 0 "
-                f"matches for query: {query_stripped!r} — falling back "
-                "to get_all() 10K slice only, which may not contain the "
-                "target symbol on a >10K-symbol repo",
+                f"matches for query: {query_stripped!r} — query terms "
+                "matched no indexed symbol; ranking falls back to "
+                f"heuristic classification over all {len(all_symbols)} "
+                "symbols without a BM25 anchor",
                 file=sys.stderr,
             )
 
