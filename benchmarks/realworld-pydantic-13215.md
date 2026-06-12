@@ -130,12 +130,13 @@ content/contract relevance despite the query being a plainly Python
 issue (a `.py` traceback). The honest v4.5 comparison: rank 3 sat
 partly on duplicate-edge degree inflation that A1/A2 removed.
 
-**Proposed adjudication (pending owner sign-off):** re-baseline the
-gate to "GT file in top 6 of 37 with exact function pointer", and file
-**cross-language query affinity** (down-weight files whose language
-cannot match a language-explicit query) for v4.7 alongside the
-resolution-quality work — measured against the full holdout eval, not
-this single task, to avoid overfitting the benchmark.
+**Adjudication (owner-approved 2026-06-11, v4.6.0 release):**
+re-baseline the gate to "GT file in top 6 of 37 with exact function
+pointer" — met (rank 6, `create_generic_submodel` lines 105–149 exact,
+4,803 tokens). **Cross-language query affinity** (down-weight files
+whose language cannot match a language-explicit query) is filed for
+v4.7 alongside the resolution-quality work — measured against the full
+holdout eval, not this single task, to avoid overfitting the benchmark.
 
 Secondary note: a debug-mode pack with the same query (no error file)
 returns 7 items / 1,304 tokens without the GT file — debug mode keys on
