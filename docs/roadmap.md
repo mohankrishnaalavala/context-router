@@ -1,9 +1,9 @@
 # context-router Roadmap
-<!-- Last updated: 2026-06-10 · v4.5.0 shipped · v4.6.0 in progress -->
+<!-- Last updated: 2026-06-12 · v4.6.0 shipped · v4.7.0 next -->
 
 ---
 
-## In progress: v4.6.0 — Hands-Free Context
+## Shipped: v4.6.0 — Hands-Free Context (2026-06-12)
 
 **Design spec:** [`docs/design/v4.6-hands-free-context.md`](design/v4.6-hands-free-context.md) · **DoD:** `docs/release/v4-outcomes.yaml` ids `v4.6-*`
 
