@@ -5,6 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-green)](LICENSE)
 [![MCP compatible](https://img.shields.io/badge/MCP-compatible-purple)](https://modelcontextprotocol.io)
 [![Tests](https://github.com/mohankrishnaalavala/context-router/actions/workflows/ci.yml/badge.svg)](https://github.com/mohankrishnaalavala/context-router/actions)
+[![SafeSkill 93/100](https://img.shields.io/badge/SafeSkill-93%2F100_Verified%20Safe-brightgreen)](https://safeskill.dev/scan/mohankrishnaalavala-context-router)
 
 > **Memory-aware context engine for AI coding agents.**
 > Persistent project memory · multi-repo workspaces · **96% fewer end-to-end tokens** than comparable tooling (21 tasks, 7 OSS projects, 21/21 rank-1) · MCP-native, local-first.
